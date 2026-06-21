@@ -790,7 +790,6 @@ function pianoOn(ctx, f, vol, dest, tOffset) {
   const t = ctx.currentTime + tOffset,
     D = dest != null ? dest : ctx.destination;
   const G = ctx.createGain();
-  let outNode = D;
   if (ctx.createStereoPanner) {
     const pan = ctx.createStereoPanner();
     pan.pan.value = Math.max(-.55, Math.min(.55, (f - 440) / 700));
@@ -799,12 +798,12 @@ function pianoOn(ctx, f, vol, dest, tOffset) {
   } else {
     G.connect(D);
   }
-  // 兩段式衰減：快速初始衰減 + 較慢延音尾巴（真實鋼琴的特徵，取代單一指數衰減）
+  // 基頻包絡：兩段式衰減，且第二段沉得更深、更慢，避免和弦疊加時殘響堆積成風琴感
   const peak = vol * .8;
   G.gain.setValueAtTime(0, t);
   G.gain.linearRampToValueAtTime(peak, t + .006);
-  G.gain.setTargetAtTime(peak * .42, t + .006, .22);
-  G.gain.setTargetAtTime(peak * .1, t + .85, 1.4);
+  G.gain.setTargetAtTime(peak * .35, t + .006, .3);
+  G.gain.setTargetAtTime(peak * .05, t + 1, 2);
   const oscs = [];
   // 同音齊弦：2條微走音的基頻疊加，製造真實鋼琴的「呼吸感」（單條弦會偏死板/電子味）
   [0, .0026].forEach((d, i) => {
@@ -818,28 +817,37 @@ function pianoOn(ctx, f, vol, dest, tOffset) {
     o.start(t);
     oscs.push(o);
   });
-  // 泛音堆疊：取代原本單一2倍頻，疊加2/3/4倍頻接近真實鋼琴頻譜分布
+  // 泛音堆疊：每個泛音有自己獨立、遠快於基頻的衰減包絡——
+  // 真實鋼琴會隨時間變暗（高泛音先消失），這是跟風琴（音色固定不變）最關鍵的差異
   [{
     m: 2.0,
-    a: .22
+    a: .32,
+    tc: .15
   }, {
     m: 3.0,
-    a: .1
+    a: .16,
+    tc: .09
   }, {
     m: 4.01,
-    a: .045
+    a: .07,
+    tc: .06
   }].forEach(h => {
     const o = ctx.createOscillator();
     o.type = "sine";
     o.frequency.value = f * h.m;
-    const og = ctx.createGain();
-    og.gain.value = h.a;
-    o.connect(og);
-    og.connect(G);
+    const hg = ctx.createGain();
+    hg.gain.setValueAtTime(0, t);
+    hg.gain.linearRampToValueAtTime(vol * h.a, t + .005);
+    hg.gain.setTargetAtTime(.0001, t + .005, h.tc);
+    o.connect(hg);
+    hg.connect(G);
     o.start(t);
     oscs.push(o);
   });
-  // 槌擊噪音：起音瞬間極短噪音，模擬琴槌敲弦的顆粒感（取代過於乾淨的純電子起音）
+  // 槌擊噪音：起音瞬間極短噪音，模擬琴槌敲弦的顆粒感
+  // 音量與濾波頻率隨音高調整——真實鋼琴低音槌頭較軟較大，高頻顆粒感天生較少；
+  // 固定高頻噪音疊在低音基頻上會跟基頻脫節，聽起來像鼓棰敲擊而非鋼琴
+  const bassAtten = Math.max(.2, Math.min(1, (f - 80) / 250));
   const hLen = Math.max(2, Math.floor(ctx.sampleRate * .006));
   const hBuf = ctx.createBuffer(1, hLen, ctx.sampleRate);
   const hd = hBuf.getChannelData(0);
@@ -848,9 +856,9 @@ function pianoOn(ctx, f, vol, dest, tOffset) {
   hSrc.buffer = hBuf;
   const hHpf = ctx.createBiquadFilter();
   hHpf.type = "highpass";
-  hHpf.frequency.value = 1800;
+  hHpf.frequency.value = 900 + bassAtten * 1400;
   const hG = ctx.createGain();
-  hG.gain.setValueAtTime(vol * .07, t);
+  hG.gain.setValueAtTime(vol * .07 * bassAtten, t);
   hG.gain.exponentialRampToValueAtTime(.0001, t + .015);
   hSrc.connect(hHpf);
   hHpf.connect(hG);
@@ -1830,7 +1838,7 @@ function Piano() {
           zIndex: 1,
           cursor: "pointer",
           userSelect: "none",
-          touchAction: "none",
+          touchAction: "pan-x",
           transition: "background .05s,box-shadow .05s",
           display: "flex",
           alignItems: "flex-end",
@@ -1872,7 +1880,7 @@ function Piano() {
           zIndex: 3,
           cursor: "pointer",
           userSelect: "none",
-          touchAction: "none",
+          touchAction: "pan-x",
           transition: "background .05s,box-shadow .05s"
         }
       });
