@@ -1570,8 +1570,14 @@ function Piano() {
     const shiftedMidi = midi + keyOff + (timRef.current === "guitar" ? capo : 0);
     const f = mfreq(shiftedMidi),
       v = volRef.current;
-    const master = ensureMaster(ctx);
-    const dest = master ? master.master : ctx.destination;
+    let dest = ctx.destination;
+    try {
+      const master = ensureMaster(ctx);
+      if (master && master.master) dest = master.master;
+    } catch (e) {
+      // master/reverb bus 建構失敗也不能讓基本發聲掛掉，退回直接輸出
+      dest = ctx.destination;
+    }
     nodesRef.current[midi] = timRef.current === "guitar" ? guitarOn(ctx, f, v, false, dest, null, velRef.current) : pianoOn(ctx, f, v, dest);
     setActive(p => new Set([...p, midi]));
     if (!audioOk) setAudioOk(true);
