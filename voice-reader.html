@@ -278,6 +278,64 @@ function setSpeakingUI(isSpeaking){
   statusEl.textContent = isSpeaking ? '朗讀中……' : '已停止';
 }
 
+// 把文字切成一句一句：句末標點（。！？.!?；;）切大句，逗號類（，,、）切小停頓
+function splitIntoClauses(text){
+  const pieces = text.split(/([。！？.!?；;]+)/);
+  const clauses = [];
+  for (let i = 0; i < pieces.length; i += 2){
+    const body = pieces[i];
+    const punct = pieces[i + 1] || '';
+    const combined = (body + punct).trim();
+    if (!combined) continue;
+    // 句尾標點代表大停頓，否則（被逗號等切開的）算小停頓
+    const isSentenceEnd = /[。！？.!?；;]/.test(punct);
+    clauses.push({ text: combined, pause: isSentenceEnd ? 320 : 120 });
+  }
+  return clauses.length ? clauses : [{ text, pause: 0 }];
+}
+
+function jitter(value, amount){
+  // 在 value 附近做 ±amount 的隨機浮動，模擬真人說話的速度/音調不完全勻一
+  const delta = (Math.random() * 2 - 1) * amount;
+  return Math.max(0.5, Math.min(2, value + delta));
+}
+
+let queue = [];
+let queueIndex = 0;
+let playToken = 0;
+
+function speakNext(token){
+  if (token !== playToken) return; // 使用者已按停止或重新開始，這個播放序列作廢
+  if (queueIndex >= queue.length){
+    setSpeakingUI(false);
+    return;
+  }
+  const clause = queue[queueIndex];
+  const baseRate = parseFloat(rateEl.value);
+  const basePitch = parseFloat(pitchEl.value);
+
+  const utter = new SpeechSynthesisUtterance(clause.text);
+  const chosen = voices.find(v => v.name === voiceEl.value);
+  if (chosen){
+    utter.voice = chosen;
+    utter.lang = chosen.lang;
+  }
+  utter.rate = jitter(baseRate, 0.06);
+  utter.pitch = jitter(basePitch, 0.08);
+
+  utter.onstart = () => setSpeakingUI(true);
+  utter.onerror = (e) => {
+    setSpeakingUI(false);
+    statusEl.textContent = '朗讀失敗（' + (e.error || '未知錯誤') + '），請改用 Safari/Chrome 開啟此頁面';
+  };
+  utter.onend = () => {
+    queueIndex++;
+    setTimeout(() => speakNext(token), clause.pause);
+  };
+
+  synth.speak(utter);
+}
+
 speakBtn.addEventListener('click', () => {
   const text = textEl.value.trim();
   if (!text){
@@ -286,29 +344,18 @@ speakBtn.addEventListener('click', () => {
   }
   synth.cancel();
 
-  const utter = new SpeechSynthesisUtterance(text);
-  const chosen = voices.find(v => v.name === voiceEl.value);
-  if (chosen){
-    utter.voice = chosen;
-    utter.lang = chosen.lang;
-  }
-  utter.rate = parseFloat(rateEl.value);
-  utter.pitch = parseFloat(pitchEl.value);
+  queue = splitIntoClauses(text);
+  queueIndex = 0;
+  playToken++;
 
-  utter.onstart = () => setSpeakingUI(true);
-  utter.onend = () => setSpeakingUI(false);
-  utter.onerror = (e) => {
-    setSpeakingUI(false);
-    statusEl.textContent = '朗讀失敗（' + (e.error || '未知錯誤') + '），請改用 Safari/Chrome 開啟此頁面';
-  };
-
-  synth.speak(utter);
+  speakNext(playToken);
 
   // 部分行動瀏覽器在頁面閒置一段時間後會暫停語音佇列，主動喚醒一次
   setTimeout(() => { if (synth.paused) synth.resume(); }, 100);
 });
 
 stopBtn.addEventListener('click', () => {
+  playToken++; // 讓正在排程的下一句失效
   synth.cancel();
   setSpeakingUI(false);
 });
