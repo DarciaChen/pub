@@ -1086,18 +1086,18 @@ function guitarOff(ctx, n) {
 // 打版：敲擊吉他音箱的「咚」聲
 function playBodyHit(ctx, vol, dest) {
   const t = ctx.currentTime;
-  // 音箱共鳴（中空木頭感）
+  // 音箱共鳴（中空木頭感，加強低頻與持續時間讓手機喇叭更容易聽見）
   const G = ctx.createGain();
   G.connect(dest);
-  G.gain.setValueAtTime(vol * .7, t);
-  G.gain.exponentialRampToValueAtTime(.001, t + .14);
+  G.gain.setValueAtTime(vol * .9, t);
+  G.gain.exponentialRampToValueAtTime(.001, t + .22);
   const osc = ctx.createOscillator();
   osc.type = 'sine';
-  osc.frequency.setValueAtTime(220, t);
-  osc.frequency.exponentialRampToValueAtTime(75, t + .05);
+  osc.frequency.setValueAtTime(180, t);
+  osc.frequency.exponentialRampToValueAtTime(55, t + .08);
   osc.connect(G);
   osc.start(t);
-  osc.stop(t + .15);
+  osc.stop(t + .23);
   // 敲擊雜訊
   const nLen = Math.floor(ctx.sampleRate * .06);
   const nBuf = ctx.createBuffer(1, nLen, ctx.sampleRate);
@@ -1109,7 +1109,7 @@ function playBodyHit(ctx, vol, dest) {
   lpf.type = 'lowpass';
   lpf.frequency.value = 700;
   const nG = ctx.createGain();
-  nG.gain.setValueAtTime(vol * .4, t);
+  nG.gain.setValueAtTime(vol * .55, t);
   nG.gain.exponentialRampToValueAtTime(.001, t + .06);
   nSrc.connect(lpf);
   lpf.connect(nG);
@@ -1555,7 +1555,7 @@ function Piano() {
         step++;
         return;
       }
-      if (PATTERN[step % 8]) playBodyHit(ctx, drumVol * .85, ctx.destination);
+      if (PATTERN[step % 8]) playBodyHit(ctx, drumVol * 1.3, ctx.destination);
       step++;
     };
     tick();
