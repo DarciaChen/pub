@@ -1567,14 +1567,15 @@ function Piano() {
     if (!ctxRef.current) ctxRef.current = new (window.AudioContext || window.webkitAudioContext)();
     if (ctxRef.current.state === 'suspended') ctxRef.current.resume();
     const ctx = ctxRef.current;
-    const f = mfreq(midi),
+    const shiftedMidi = midi + keyOff + (timRef.current === "guitar" ? capo : 0);
+    const f = mfreq(shiftedMidi),
       v = volRef.current;
     const master = ensureMaster(ctx);
     const dest = master ? master.master : ctx.destination;
     nodesRef.current[midi] = timRef.current === "guitar" ? guitarOn(ctx, f, v, false, dest, null, velRef.current) : pianoOn(ctx, f, v, dest);
     setActive(p => new Set([...p, midi]));
     if (!audioOk) setAudioOk(true);
-  }, [audioOk, ensureMaster]);
+  }, [audioOk, ensureMaster, keyOff, capo]);
   const noteOff = useCallback(function (midi, force) {
     if (force === void 0) {
       force = false;
@@ -1879,7 +1880,7 @@ function Piano() {
       marginBottom: 10
     }
   }, /*#__PURE__*/React.createElement(CtrlBtn, {
-    label: "OCT \u2212",
+    label: "八度 \u2212",
     onClick: () => setOctave(o => Math.max(1, o - 1))
   }), /*#__PURE__*/React.createElement("span", {
     style: {
@@ -1891,18 +1892,18 @@ function Piano() {
       textAlign: "center"
     }
   }, "C", octave, "\u2013B", octave + 2), /*#__PURE__*/React.createElement(CtrlBtn, {
-    label: "OCT +",
+    label: "八度 +",
     onClick: () => setOctave(o => Math.min(5, o + 1))
   }), /*#__PURE__*/React.createElement(CtrlBtn, {
-    label: timbre === "guitar" ? "🎸 GUITAR" : "🎹 PIANO",
+    label: timbre === "guitar" ? "🎸 吉他" : "🎹 鋼琴",
     active: timbre === "guitar",
     onClick: () => setTimbre(t => t === "piano" ? "guitar" : "piano")
   }), /*#__PURE__*/React.createElement(CtrlBtn, {
-    label: sustain ? "● SUSTAIN" : "○ SUSTAIN",
+    label: sustain ? "● 延音" : "○ 延音",
     active: sustain,
     onClick: toggleSustain
   }), /*#__PURE__*/React.createElement(CtrlBtn, {
-    label: labels ? "LABELS" : "LABELS○",
+    label: labels ? "● 音名" : "○ 音名",
     active: labels,
     onClick: () => setLabels(v => !v)
   }), /*#__PURE__*/React.createElement("div", {
@@ -2048,8 +2049,8 @@ function Piano() {
     }
   }, /*#__PURE__*/React.createElement("span", {
     style: {
-      color: "#222235",
-      fontSize: 8,
+      color: "#e0a070",
+      fontSize: 9,
       fontFamily: "monospace",
       letterSpacing: 1
     }
@@ -2067,8 +2068,8 @@ function Piano() {
     }
   }), /*#__PURE__*/React.createElement("span", {
     style: {
-      color: "#704020",
-      fontSize: 8,
+      color: "#e08040",
+      fontSize: 9,
       fontFamily: "monospace"
     }
   }, Math.round(velocity * 10)))), timbre === "guitar" && /*#__PURE__*/React.createElement(GuitarStrings, {
@@ -2110,7 +2111,7 @@ function Piano() {
     style: {
       fontSize: 8.5,
       fontFamily: "monospace",
-      color: "#282840"
+      color: "#7a8ab0"
     }
   }, activeMode.desc)), /*#__PURE__*/React.createElement("div", {
     style: {
