@@ -1818,6 +1818,13 @@ function Piano() {
         key: midi,
         onPointerDown: e => {
           e.preventDefault();
+          // 釋放瀏覽器對觸控的隱性 pointer capture，否則手指滑過其他琴鍵時
+          // onPointerEnter 不會在那些鍵上觸發，滑音就會完全失效
+          if (e.target.releasePointerCapture) {
+            try {
+              e.target.releasePointerCapture(e.pointerId);
+            } catch (err) {}
+          }
           noteOn(midi);
         },
         onPointerUp: () => noteOff(midi),
