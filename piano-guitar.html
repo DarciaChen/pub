@@ -1816,6 +1816,37 @@ function Piano() {
         hi = hl.has(midi);
       return /*#__PURE__*/React.createElement("div", {
         key: midi,
+        style: {
+          position: "absolute",
+          left: wi * WW,
+          top: 0,
+          width: WW - 2,
+          height: WH,
+          background: on && hi ? "linear-gradient(180deg,#7af5e0,#30cfa8)" : on ? "linear-gradient(180deg,#f5c930,#e09600)" : hi ? "linear-gradient(180deg,#c0dcff,#90beff)" : "linear-gradient(180deg,#f8f5ea,#ede8d3)",
+          border: "1px solid #2a2a2a",
+          borderRadius: "0 0 8px 8px",
+          boxShadow: on && hi ? "inset 0 -5px 10px rgba(0,0,0,.25),0 0 20px rgba(90,230,200,.6)" : on ? "inset 0 -5px 10px rgba(0,0,0,.25),0 0 20px rgba(245,200,48,.55)" : hi ? "inset 0 -5px 8px rgba(0,0,0,.1),0 0 18px rgba(80,160,255,.5)" : "inset 0 -6px 8px rgba(0,0,0,.1)",
+          zIndex: 1,
+          userSelect: "none",
+          transition: "background .05s,box-shadow .05s",
+          display: "flex",
+          alignItems: "flex-end",
+          justifyContent: "center",
+          paddingBottom: 9
+        }
+      }, /*#__PURE__*/React.createElement("div", {
+        // 上層熱區（跟黑鍵同高的範圍）：只負責捲動，不彈奏
+        style: {
+          position: "absolute",
+          left: 0,
+          top: 0,
+          width: "100%",
+          height: BH,
+          touchAction: "pan-x",
+          cursor: "pointer"
+        }
+      }), /*#__PURE__*/React.createElement("div", {
+        // 下層熱區（黑鍵以下、永遠不會被黑鍵蓋住的範圍）：彈奏與滑音
         onPointerDown: e => {
           e.preventDefault();
           // 釋放瀏覽器對觸控的隱性 pointer capture，否則手指滑過其他琴鍵時
@@ -1835,25 +1866,14 @@ function Piano() {
         },
         style: {
           position: "absolute",
-          left: wi * WW,
-          top: 0,
-          width: WW - 2,
-          height: WH,
-          background: on && hi ? "linear-gradient(180deg,#7af5e0,#30cfa8)" : on ? "linear-gradient(180deg,#f5c930,#e09600)" : hi ? "linear-gradient(180deg,#c0dcff,#90beff)" : "linear-gradient(180deg,#f8f5ea,#ede8d3)",
-          border: "1px solid #2a2a2a",
-          borderRadius: "0 0 8px 8px",
-          boxShadow: on && hi ? "inset 0 -5px 10px rgba(0,0,0,.25),0 0 20px rgba(90,230,200,.6)" : on ? "inset 0 -5px 10px rgba(0,0,0,.25),0 0 20px rgba(245,200,48,.55)" : hi ? "inset 0 -5px 8px rgba(0,0,0,.1),0 0 18px rgba(80,160,255,.5)" : "inset 0 -6px 8px rgba(0,0,0,.1)",
-          zIndex: 1,
-          cursor: "pointer",
-          userSelect: "none",
+          left: 0,
+          top: BH,
+          width: "100%",
+          height: WH - BH,
           touchAction: "none",
-          transition: "background .05s,box-shadow .05s",
-          display: "flex",
-          alignItems: "flex-end",
-          justifyContent: "center",
-          paddingBottom: 9
+          cursor: "pointer"
         }
-      }, labels && /*#__PURE__*/React.createElement("span", {
+      }), labels && /*#__PURE__*/React.createElement("span", {
         style: {
           fontSize: 8,
           fontFamily: "monospace",
@@ -1869,6 +1889,11 @@ function Piano() {
         key: midi,
         onPointerDown: e => {
           e.preventDefault();
+          if (e.target.releasePointerCapture) {
+            try {
+              e.target.releasePointerCapture(e.pointerId);
+            } catch (err) {}
+          }
           noteOn(midi);
         },
         onPointerUp: () => noteOff(midi),
@@ -1889,7 +1914,7 @@ function Piano() {
           zIndex: 3,
           cursor: "pointer",
           userSelect: "none",
-          touchAction: "pan-x",
+          touchAction: "none",
           transition: "background .05s,box-shadow .05s"
         }
       });
