@@ -1822,6 +1822,7 @@ function Piano() {
         },
         onPointerUp: () => noteOff(midi),
         onPointerLeave: () => noteOff(midi),
+        onPointerCancel: () => noteOff(midi),
         onPointerEnter: e => {
           if (e.buttons > 0) noteOn(midi);
         },
@@ -1838,7 +1839,7 @@ function Piano() {
           zIndex: 1,
           cursor: "pointer",
           userSelect: "none",
-          touchAction: "pan-x",
+          touchAction: "none",
           transition: "background .05s,box-shadow .05s",
           display: "flex",
           alignItems: "flex-end",
@@ -1865,6 +1866,7 @@ function Piano() {
         },
         onPointerUp: () => noteOff(midi),
         onPointerLeave: () => noteOff(midi),
+        onPointerCancel: () => noteOff(midi),
         onPointerEnter: e => {
           if (e.buttons > 0) noteOn(midi);
         },
