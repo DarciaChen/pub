@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>唸給我聽 · 文字朗讀</title>
+<style>
+  :root{
+    --ink:#181620;
+    --panel:#211e29;
+    --line:#3a3645;
+    --paper:#f3ecd9;
+    --paper-dim:#b9b2a0;
+    --amber:#d6a24e;
+    --rose:#c97b84;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    min-height:100vh;
+    background:
+      radial-gradient(900px 500px at 20% -10%, rgba(201,123,132,0.10), transparent 60%),
+      radial-gradient(900px 600px at 100% 0%, rgba(214,162,78,0.08), transparent 60%),
+      var(--ink);
+    color:var(--paper);
+    font-family:-apple-system, "PingFang TC", "Microsoft JhengHei", "Noto Sans TC", sans-serif;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    padding:28px 16px;
+  }
+  .card{
+    width:100%;
+    max-width:480px;
+  }
+  .eyebrow{
+    font-size:12px;
+    letter-spacing:0.18em;
+    color:var(--amber);
+    text-transform:uppercase;
+    font-family:Georgia, "Times New Roman", serif;
+    margin:0 0 6px 2px;
+  }
+  h1{
+    font-family:Georgia, "Noto Serif TC", serif;
+    font-weight:600;
+    font-size:28px;
+    margin:0 0 18px 2px;
+    letter-spacing:0.01em;
+  }
+  .wave{
+    display:flex;
+    align-items:flex-end;
+    gap:4px;
+    height:28px;
+    margin:0 2px 16px;
+  }
+  .wave span{
+    flex:1;
+    background:linear-gradient(180deg, var(--rose), var(--amber));
+    border-radius:3px;
+    height:18%;
+    transition:height 0.15s ease;
+  }
+  .wave.speaking span{
+    animation:bounce 0.9s ease-in-out infinite;
+  }
+  .wave span:nth-child(2){animation-delay:0.08s}
+  .wave span:nth-child(3){animation-delay:0.16s}
+  .wave span:nth-child(4){animation-delay:0.24s}
+  .wave span:nth-child(5){animation-delay:0.32s}
+  .wave span:nth-child(6){animation-delay:0.4s}
+  .wave span:nth-child(7){animation-delay:0.48s}
+  .wave span:nth-child(8){animation-delay:0.56s}
+  @keyframes bounce{
+    0%, 100%{height:18%}
+    50%{height:90%}
+  }
+  textarea{
+    width:100%;
+    min-height:160px;
+    resize:vertical;
+    background:var(--panel);
+    border:1px solid var(--line);
+    border-radius:10px;
+    color:var(--paper);
+    font-size:16px;
+    line-height:1.6;
+    padding:16px;
+    font-family:inherit;
+    outline:none;
+  }
+  textarea:focus{border-color:var(--amber);}
+  textarea::placeholder{color:var(--paper-dim);}
+  .row{
+    display:flex;
+    gap:10px;
+    margin-top:14px;
+  }
+  select{
+    flex:1;
+    background:var(--panel);
+    border:1px solid var(--line);
+    color:var(--paper);
+    border-radius:8px;
+    padding:10px 12px;
+    font-size:14px;
+    font-family:inherit;
+  }
+  .sliders{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:14px;
+    margin-top:14px;
+  }
+  .slider-group label{
+    display:flex;
+    justify-content:space-between;
+    font-size:12px;
+    color:var(--paper-dim);
+    margin-bottom:6px;
+  }
+  .slider-group span{color:var(--amber);}
+  input[type=range]{
+    width:100%;
+    accent-color:var(--amber);
+  }
+  .actions{
+    display:flex;
+    gap:10px;
+    margin-top:18px;
+  }
+  button{
+    flex:1;
+    border:none;
+    border-radius:10px;
+    padding:14px;
+    font-size:16px;
+    font-weight:600;
+    cursor:pointer;
+    font-family:inherit;
+    transition:transform 0.08s ease, opacity 0.2s ease;
+  }
+  button:active{transform:scale(0.98);}
+  #speak{
+    background:linear-gradient(135deg, var(--amber), var(--rose));
+    color:#211524;
+  }
+  #stop{
+    background:transparent;
+    border:1px solid var(--line);
+    color:var(--paper-dim);
+  }
+  button:disabled{opacity:0.4; cursor:not-allowed;}
+  .status{
+    margin-top:12px;
+    font-size:12px;
+    color:var(--paper-dim);
+    min-height:16px;
+    text-align:center;
+  }
+  :focus-visible{outline:2px solid var(--amber); outline-offset:2px;}
+  @media (prefers-reduced-motion: reduce){
+    .wave.speaking span{animation:none; height:50%;}
+  }
+</style>
+</head>
+<body>
+
+<div class="card">
+  <p class="eyebrow">Text → Voice</p>
+  <h1>唸給我聽</h1>
+
+  <div class="wave" id="wave">
+    <span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span>
+  </div>
+
+  <textarea id="text" placeholder="貼上或輸入想要朗讀的文字……"></textarea>
+
+  <div class="row">
+    <select id="voice"></select>
+  </div>
+
+  <div class="sliders">
+    <div class="slider-group">
+      <label>速度 <span id="rateVal">1.0</span></label>
+      <input type="range" id="rate" min="0.5" max="1.8" step="0.1" value="1.0">
+    </div>
+    <div class="slider-group">
+      <label>音調 <span id="pitchVal">1.0</span></label>
+      <input type="range" id="pitch" min="0.5" max="1.8" step="0.1" value="1.0">
+    </div>
+  </div>
+
+  <div class="actions">
+    <button id="speak">▶ 開始朗讀</button>
+    <button id="stop" disabled>■ 停止</button>
+  </div>
+
+  <p class="status" id="status">正在載入可用的語音……</p>
+</div>
+
+<script>
+const synth = window.speechSynthesis;
+const textEl = document.getElementById('text');
+const voiceEl = document.getElementById('voice');
+const rateEl = document.getElementById('rate');
+const pitchEl = document.getElementById('pitch');
+const rateVal = document.getElementById('rateVal');
+const pitchVal = document.getElementById('pitchVal');
+const speakBtn = document.getElementById('speak');
+const stopBtn = document.getElementById('stop');
+const statusEl = document.getElementById('status');
+const waveEl = document.getElementById('wave');
+
+let voices = [];
+let pollTries = 0;
+
+// 常見女聲關鍵字（中文與英文系統皆涵蓋），用來把最可能的女聲排到清單最前面
+const femaleHints = [
+  'female','women','girl','samantha','victoria','susan','karen','moira','tessa',
+  'ting-ting','tingting','mei-jia','meijia','yating','ya-ting','sin-ji','hanhan',
+  'han han','xiaoxiao','xiaoyi','婷婷','美佳','雅婷','曉曉','曉伊','慧'
+];
+
+function scoreVoice(v){
+  const n = v.name.toLowerCase();
+  return femaleHints.some(h => n.includes(h)) ? 0 : 1;
+}
+
+if (!('speechSynthesis' in window)){
+  statusEl.textContent = '此瀏覽器不支援語音朗讀功能，請換成 Safari 或 Chrome 開啟';
+  speakBtn.disabled = true;
+}
+
+function populateVoices(){
+  voices = synth.getVoices();
+  if (!voices.length){
+    // 部分瀏覽器（尤其手機）載入語音清單較慢，輪詢重試最多 5 秒
+    if (pollTries < 10){
+      pollTries++;
+      setTimeout(populateVoices, 500);
+    } else {
+      statusEl.textContent = '找不到可用語音，請確認瀏覽器設定或換瀏覽器再試';
+    }
+    return;
+  }
+
+  // 中文優先，其餘語言排後面；同語言內，可能的女聲排前面
+  const sorted = [...voices].sort((a, b) => {
+    const aZh = a.lang.toLowerCase().startsWith('zh') ? 0 : 1;
+    const bZh = b.lang.toLowerCase().startsWith('zh') ? 0 : 1;
+    if (aZh !== bZh) return aZh - bZh;
+    return scoreVoice(a) - scoreVoice(b);
+  });
+
+  voiceEl.innerHTML = '';
+  sorted.forEach((v) => {
+    const opt = document.createElement('option');
+    opt.value = v.name;
+    opt.textContent = `${v.name} (${v.lang})`;
+    voiceEl.appendChild(opt);
+  });
+
+  statusEl.textContent = `已載入 ${voices.length} 個語音，預設選用最接近的中文女聲`;
+}
+
+synth.onvoiceschanged = populateVoices;
+populateVoices();
+
+rateEl.addEventListener('input', () => rateVal.textContent = rateEl.value);
+pitchEl.addEventListener('input', () => pitchVal.textContent = pitchEl.value);
+
+function setSpeakingUI(isSpeaking){
+  speakBtn.disabled = isSpeaking;
+  stopBtn.disabled = !isSpeaking;
+  waveEl.classList.toggle('speaking', isSpeaking);
+  statusEl.textContent = isSpeaking ? '朗讀中……' : '已停止';
+}
+
+speakBtn.addEventListener('click', () => {
+  const text = textEl.value.trim();
+  if (!text){
+    statusEl.textContent = '請先輸入文字';
+    return;
+  }
+  synth.cancel();
+
+  const utter = new SpeechSynthesisUtterance(text);
+  const chosen = voices.find(v => v.name === voiceEl.value);
+  if (chosen){
+    utter.voice = chosen;
+    utter.lang = chosen.lang;
+  }
+  utter.rate = parseFloat(rateEl.value);
+  utter.pitch = parseFloat(pitchEl.value);
+
+  utter.onstart = () => setSpeakingUI(true);
+  utter.onend = () => setSpeakingUI(false);
+  utter.onerror = (e) => {
+    setSpeakingUI(false);
+    statusEl.textContent = '朗讀失敗（' + (e.error || '未知錯誤') + '），請改用 Safari/Chrome 開啟此頁面';
+  };
+
+  synth.speak(utter);
+
+  // 部分行動瀏覽器在頁面閒置一段時間後會暫停語音佇列，主動喚醒一次
+  setTimeout(() => { if (synth.paused) synth.resume(); }, 100);
+});
+
+stopBtn.addEventListener('click', () => {
+  synth.cancel();
+  setSpeakingUI(false);
+});
+</script>
+
+</body>
+</html>
