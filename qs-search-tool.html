@@ -1,0 +1,493 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="琦勝查找">
+<meta name="theme-color" content="#0e1117">
+<title>琦勝查找工具</title>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0e1117;--surface:#161b27;--surface2:#1e2535;--surface3:#232d42;
+  --border:#2a3347;--amber:#f5a623;--amber-dim:#b8761a;--amber-bg:#f5a62314;
+  --green:#3ecf8e;--blue:#5b9cf6;--text:#e2e8f0;--muted:#8896b3;
+}
+html,body{height:100%;background:#0e1117;color:#e2e8f0;font-family:-apple-system,BlinkMacSystemFont,'Noto Sans TC',sans-serif;-webkit-tap-highlight-color:transparent}
+.hidden{display:none!important}
+.app-header{background:#161b27;border-bottom:1px solid #2a3347;padding:12px 16px;display:flex;align-items:center;gap:10px;position:sticky;top:0;z-index:10}
+.brand-mark{width:32px;height:32px;background:#f5a623;border-radius:6px;display:flex;align-items:center;justify-content:center;font-weight:700;color:#000;font-size:12px;font-family:monospace;flex-shrink:0}
+.brand-name{font-size:15px;font-weight:700}
+.brand-sub{font-size:11px;color:#8896b3;font-family:monospace}
+.tab-bar{display:flex;background:#161b27;border-bottom:1px solid #2a3347;position:sticky;top:57px;z-index:9}
+.tab-btn{flex:1;padding:10px 4px;background:none;border:none;border-bottom:2px solid transparent;color:#8896b3;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:2px;font-size:12px;font-family:inherit;transition:color .15s}
+.tab-btn.active{color:#f5a623;border-bottom-color:#f5a623}
+.tab-content{padding:14px;max-width:600px;margin:0 auto}
+.search-bar{display:flex;align-items:center;background:#1e2535;border:1px solid #2a3347;border-radius:8px;padding:10px 12px;gap:8px;margin-bottom:10px}
+.search-icon{font-size:18px;color:#8896b3}
+#search-input{flex:1;background:none;border:none;outline:none;color:#e2e8f0;font-size:14px;font-family:monospace;min-width:0}
+#search-input::placeholder{color:#8896b3}
+#clear-btn{background:none;border:none;color:#8896b3;cursor:pointer;font-size:15px;padding:0 2px}
+.result-meta{display:flex;justify-content:space-between;margin-bottom:8px}
+#result-count{font-size:11px;color:#8896b3;font-family:monospace}
+.result-hint{font-size:11px;color:#b8761a}
+#product-list{display:flex;flex-direction:column;gap:3px}
+.product-row{background:#161b27;border:1px solid #2a3347;border-radius:6px;padding:11px 14px;display:flex;align-items:center;cursor:pointer;gap:10px}
+.product-row.selected{border-color:#b8761a;border-bottom-left-radius:0;border-bottom-right-radius:0}
+.product-model{flex:1;font-family:monospace;font-size:13px;letter-spacing:.03em}
+.product-model mark{background:#f5a62330;color:#f5a623;border-radius:2px;padding:0 1px}
+.product-price{font-family:monospace;font-size:13px;color:#3ecf8e;font-weight:600;white-space:nowrap}
+.chevron{color:#8896b3;font-size:20px;transition:transform .2s;display:inline-block}
+.chevron.open{transform:rotate(90deg);color:#f5a623}
+.price-panel{background:#232d42;border:1px solid #b8761a;border-top:none;border-bottom-left-radius:6px;border-bottom-right-radius:6px;padding:14px}
+.pp-header{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:12px}
+.pp-model-lbl{font-family:monospace;font-size:11px;color:#8896b3}
+.pp-list-price{font-family:monospace;font-size:13px}
+.pp-input-row{display:flex;gap:10px;margin-bottom:12px}
+.pp-field{display:flex;flex-direction:column;gap:4px;flex:1}
+.pp-field-rate{max-width:120px}
+.pp-label{font-size:10px;color:#8896b3;font-family:monospace;text-transform:uppercase;letter-spacing:.08em}
+.pp-input{background:#161b27;border:1px solid #2a3347;border-radius:5px;padding:8px 10px;color:#e2e8f0;font-family:monospace;font-size:14px;outline:none;width:100%;-webkit-appearance:none}
+.pp-input:focus{border-color:#f5a623}
+.pp-results{background:#161b27;border:1px solid #2a3347;border-radius:6px;overflow:hidden}
+.pp-row{padding:10px 14px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #2a3347;font-size:13px}
+.pp-row:last-child{border-bottom:none}
+.pp-row.main{background:#f5a62314}
+.val{font-family:monospace;font-weight:600;font-size:15px}
+.val.amber{color:#f5a623;font-size:22px}
+.val.blue{color:#5b9cf6}
+.pp-hint{text-align:center;color:#8896b3;font-size:12px;padding:8px 0 2px}
+.field-group{margin-bottom:14px}
+.field-label{display:block;font-size:11px;color:#8896b3;text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px;font-family:monospace}
+.hint-span{color:#b8761a;text-transform:none}
+.num-input{width:100%;background:#1e2535;border:1px solid #2a3347;border-radius:8px;padding:14px;color:#e2e8f0;font-family:monospace;font-size:24px;outline:none;-webkit-appearance:none}
+.num-input:focus{border-color:#f5a623}
+.toggle-row{display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap}
+.toggle-group{display:flex;background:#1e2535;border:1px solid #2a3347;border-radius:6px;overflow:hidden}
+.toggle-btn{padding:8px 16px;background:none;border:none;color:#8896b3;cursor:pointer;font-size:13px;font-family:inherit}
+.toggle-btn.active{background:#f5a623;color:#000;font-weight:700}
+.actual-amp{background:linear-gradient(135deg,#1e2535,#161b27);border:1px solid #2a3347;border-radius:8px;padding:16px;margin-bottom:14px;text-align:center}
+.amp-label{font-size:11px;color:#8896b3;text-transform:uppercase;letter-spacing:.1em;font-family:monospace;margin-bottom:4px}
+.amp-value{font-family:monospace;font-size:42px;font-weight:600;color:#f5a623;line-height:1.1}
+.amp-sub{font-size:12px;color:#8896b3;font-family:monospace;margin-top:4px}
+.load-table{background:#161b27;border:1px solid #2a3347;border-radius:8px;overflow:hidden;margin-bottom:8px}
+.lt-header{display:grid;grid-template-columns:62px 88px 1fr;padding:8px 12px;background:#1e2535;font-size:10px;color:#8896b3;text-transform:uppercase;letter-spacing:.08em;font-family:monospace}
+.lt-tap{text-transform:none;color:#b8761a}
+.lt-row{display:grid;grid-template-columns:62px 88px 1fr;padding:10px 12px;border-bottom:1px solid #2a3347;align-items:center}
+.lt-row:last-child{border-bottom:none}
+.lt-row.recommended{background:#f5a62314}
+.lt-factor{font-family:monospace;font-size:13px;color:#f5a623}
+.lt-amp{font-family:monospace;font-size:13px;font-weight:600}
+.lt-rec{display:flex}
+.muted-span{color:#8896b3;font-family:monospace}
+.rec-btn{background:#1e2535;border:1px solid #2a3347;border-radius:5px;padding:5px 8px;cursor:pointer;display:flex;align-items:center;gap:6px}
+.rec-model{font-family:monospace;font-size:11px;font-weight:600;color:#e2e8f0}
+.rec-price{font-family:monospace;font-size:10px;color:#8896b3}
+.rec-arr{font-size:11px;color:#f5a623}
+.load-note{font-size:11px;color:#8896b3;text-align:center;padding:4px}
+</style>
+</head>
+<body>
+
+<div id="lock-screen" style="position:fixed;inset:0;background:#0e1117;z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px;">
+  <div style="max-width:300px;width:100%;text-align:center;">
+    <div class="brand-mark" style="margin:0 auto 16px;">QS</div>
+    <div style="font-size:16px;font-weight:700;margin-bottom:4px;">琦勝查找工具</div>
+    <div style="font-size:12px;color:#8896b3;margin-bottom:22px;">已鎖定，請輸入密碼解鎖</div>
+    <input id="lock-pw" type="password" class="pp-input" style="text-align:center;font-size:18px;margin-bottom:8px;" placeholder="密碼" autocomplete="off" autocorrect="off" autocapitalize="off">
+    <div id="lock-err" style="color:#ff6b6b;font-size:12px;height:16px;margin-bottom:8px;"></div>
+    <button id="lock-btn" style="width:100%;background:#f5a623;color:#000;font-weight:700;border:none;border-radius:8px;padding:13px;font-size:15px;cursor:pointer;">解鎖</button>
+  </div>
+</div>
+
+<div id="app-root" class="hidden">
+
+<div class="app-header">
+  <div class="brand-mark">QS</div>
+  <div>
+    <div class="brand-name">琦勝查找工具</div>
+    <div class="brand-sub">SCR · 電力調整器</div>
+  </div>
+</div>
+
+<div class="tab-bar">
+  <button class="tab-btn active" id="tab-btn-search" onclick="switchTab('search')">
+    <span>⌕</span><span>查價計算</span>
+  </button>
+  <button class="tab-btn" id="tab-btn-load" onclick="switchTab('load')">
+    <span>⚡</span><span>負載選型</span>
+  </button>
+</div>
+
+<div id="search-tab" class="tab-content">
+  <div class="search-bar">
+    <span class="search-icon">⌕</span>
+    <input id="search-input" placeholder="輸入部分型號，如 CR3-D4 或 150…"
+      oninput="onSearch(this.value)"
+      autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
+    <button id="clear-btn" class="hidden" onclick="clearSearch()">✕</button>
+  </div>
+  <div class="result-meta">
+    <span id="result-count"></span>
+    <span class="result-hint">點選型號展開折扣計算</span>
+  </div>
+  <div id="product-list"></div>
+</div>
+
+<div id="load-tab" class="tab-content hidden">
+  <div class="field-group">
+    <label class="field-label">負載功率 <span class="hint-span">kW</span></label>
+    <input class="num-input" type="number" id="kw-input"
+      placeholder="例：120" min="0" step="0.1"
+      inputmode="decimal" oninput="updateLoad()">
+  </div>
+  <div class="toggle-row">
+    <div class="toggle-group">
+      <button class="toggle-btn" id="phase-1" onclick="setPhase('1')">單相</button>
+      <button class="toggle-btn active" id="phase-3" onclick="setPhase('3')">三相</button>
+    </div>
+    <div class="toggle-group">
+      <button class="toggle-btn" id="volt-220" onclick="setVolt('220')">220V</button>
+      <button class="toggle-btn active" id="volt-380" onclick="setVolt('380')">380V</button>
+    </div>
+    <div class="toggle-group">
+      <button class="toggle-btn active" id="type-D" onclick="setType('D')">標準型</button>
+      <button class="toggle-btn" id="type-A" onclick="setType('A')">通訊型</button>
+    </div>
+  </div>
+  <div id="load-result" class="hidden">
+    <div class="actual-amp">
+      <div class="amp-label">實際電流</div>
+      <div class="amp-value" id="amp-value">—</div>
+      <div class="amp-sub" id="amp-sub"></div>
+    </div>
+    <div class="load-table">
+      <div class="lt-header">
+        <span>負載率</span>
+        <span>建議額定</span>
+        <span>推薦型號 <span class="lt-tap">點選查價 →</span></span>
+      </div>
+      <div id="load-rows"></div>
+    </div>
+    <div class="load-note" id="load-note"></div>
+  </div>
+</div>
+
+</div>
+
+<script>
+// ===== 密碼鎖定設定 =====
+// 在此修改密碼（建議定期更換）
+var LOCK_PASSWORD="8888";
+// 是否在同一次瀏覽器分頁工作階段中記住解鎖狀態（關閉分頁/瀏覽器後會重新要求密碼）
+var LOCK_REMEMBER_SESSION=true;
+
+function unlockApp(){
+  document.getElementById('lock-screen').className='hidden';
+  document.getElementById('app-root').className='';
+}
+function tryUnlock(){
+  var input=document.getElementById('lock-pw');
+  if(input.value===LOCK_PASSWORD){
+    if(LOCK_REMEMBER_SESSION){
+      try{sessionStorage.setItem('qs_tool_unlocked','1');}catch(e){}
+    }
+    unlockApp();
+  }else{
+    document.getElementById('lock-err').textContent='密碼錯誤，請再試一次';
+    input.value='';
+    input.focus();
+  }
+}
+document.getElementById('lock-btn').onclick=tryUnlock;
+document.getElementById('lock-pw').addEventListener('keydown',function(e){
+  if(e.key==='Enter')tryUnlock();
+});
+(function(){
+  var alreadyUnlocked=false;
+  if(LOCK_REMEMBER_SESSION){
+    try{alreadyUnlocked=sessionStorage.getItem('qs_tool_unlocked')==='1';}catch(e){}
+  }
+  if(alreadyUnlocked){
+    unlockApp();
+  }else{
+    setTimeout(function(){document.getElementById('lock-pw').focus();},150);
+  }
+})();
+
+var PRODUCTS=[
+  {model:"BRL-4030",price:2600},{model:"BRL-4060",price:3300},
+  {model:"BRD-4030",price:3200},{model:"BRD-4060",price:3900},
+  {model:"BRA-4030",price:5400},{model:"BRA-4060",price:6100},
+  {model:"CR1-D2075W",price:7200},{model:"CR1-D2100W",price:8200},
+  {model:"CR1-D2125W",price:9200},{model:"CR1-D2150W",price:10100},
+  {model:"CR1-D2180W",price:12800},{model:"CR1-D2225W",price:14000},
+  {model:"CR1-D2300",price:21000},{model:"CR1-D2380",price:24000},
+  {model:"CR1-D4075W",price:7400},{model:"CR1-D4100W",price:8400},
+  {model:"CR1-D4125W",price:9400},{model:"CR1-D4150W",price:10400},
+  {model:"CR1-D4180W",price:13100},{model:"CR1-D4225W",price:14300},
+  {model:"CR1-D4300",price:21500},{model:"CR1-D4380",price:24300},
+  {model:"CR1-A2075W",price:9800},{model:"CR1-A2100W",price:10800},
+  {model:"CR1-A2125W",price:11800},{model:"CR1-A2150W",price:12800},
+  {model:"CR1-A2180W",price:15800},{model:"CR1-A2225W",price:17000},
+  {model:"CR1-A2300",price:24000},{model:"CR1-A2380",price:26800},
+  {model:"CR1-A4075W",price:10000},{model:"CR1-A4100W",price:11000},
+  {model:"CR1-A4125W",price:12000},{model:"CR1-A4150W",price:13000},
+  {model:"CR1-A4180W",price:16100},{model:"CR1-A4225W",price:17300},
+  {model:"CR1-A4300",price:24500},{model:"CR1-A4380",price:27300},
+  {model:"CR2-D2035W",price:6500},{model:"CR2-D2050W",price:8100},
+  {model:"CR2-D2075W",price:10800},{model:"CR2-D2100",price:13300},
+  {model:"CR2-D2125",price:13900},{model:"CR2-D2150",price:15700},
+  {model:"CR2-D2180",price:22800},{model:"CR2-D2225",price:24800},
+  {model:"CR2-D2300",price:42200},{model:"CR2-D2380",price:44800},
+  {model:"CR2-D4035W",price:6900},{model:"CR2-D4050W",price:8500},
+  {model:"CR2-D4075W",price:11300},{model:"CR2-D4100",price:13800},
+  {model:"CR2-D4125",price:14400},{model:"CR2-D4150",price:16300},
+  {model:"CR2-D4180",price:23400},{model:"CR2-D4225",price:25800},
+  {model:"CR2-D4300",price:43200},{model:"CR2-D4380",price:45800},
+  {model:"CR2-A2035W",price:9800},{model:"CR2-A2050W",price:10400},
+  {model:"CR2-A2075W",price:14100},{model:"CR2-A2100",price:16600},
+  {model:"CR2-A2125",price:17200},{model:"CR2-A2150",price:19000},
+  {model:"CR2-A2180",price:26600},{model:"CR2-A2225",price:28600},
+  {model:"CR2-A2300",price:46000},{model:"CR2-A2380",price:48600},
+  {model:"CR2-A4035W",price:10200},{model:"CR2-A4050W",price:10800},
+  {model:"CR2-A4075W",price:14600},{model:"CR2-A4100",price:17100},
+  {model:"CR2-A4125",price:17700},{model:"CR2-A4150",price:19600},
+  {model:"CR2-A4180",price:27200},{model:"CR2-A4225",price:29600},
+  {model:"CR2-A4300",price:47000},{model:"CR2-A4380",price:49600},
+  {model:"CR3-D2035",price:6700},{model:"CR3-D2050",price:8200},
+  {model:"CR3-D2075",price:11400},{model:"CR3-D2100",price:14600},
+  {model:"CR3-D2125",price:17400},{model:"CR3-D2150",price:20400},
+  {model:"CR3-D2180",price:29500},{model:"CR3-D2225",price:34200},
+  {model:"CR3-D2300",price:54800},{model:"CR3-D2380",price:61800},
+  {model:"CR3-D2450",price:68500},{model:"CR3-D4035",price:7200},
+  {model:"CR3-D4050",price:9000},{model:"CR3-D4075",price:11800},
+  {model:"CR3-D4100",price:15600},{model:"CR3-D4125",price:18800},
+  {model:"CR3-D4150",price:21800},{model:"CR3-D4180",price:30500},
+  {model:"CR3-D4225",price:35700},{model:"CR3-D4300",price:57200},
+  {model:"CR3-D4380",price:63300},{model:"CR3-D4450",price:70000},
+  {model:"CR3-A2035",price:10300},{model:"CR3-A2050",price:11800},
+  {model:"CR3-A2075",price:15000},{model:"CR3-A2100",price:18200},
+  {model:"CR3-A2125",price:21000},{model:"CR3-A2150",price:24000},
+  {model:"CR3-A2180",price:33500},{model:"CR3-A2225",price:38400},
+  {model:"CR3-A2300",price:59100},{model:"CR3-A2380",price:66000},
+  {model:"CR3-A4035",price:10800},{model:"CR3-A4050",price:12600},
+  {model:"CR3-A4075",price:15400},{model:"CR3-A4100",price:19200},
+  {model:"CR3-A4125",price:22400},{model:"CR3-A4150",price:25400},
+  {model:"CR3-A4180",price:34500},{model:"CR3-A4225",price:39900},
+  {model:"CR3-A4300",price:61400},{model:"CR3-A4380",price:67500},
+  {model:"TRL-4025P",price:4500},{model:"TRL-4035P",price:5100},
+  {model:"TRL-4050P",price:6400},{model:"TRL-4060P",price:7700}
+];
+
+function fmt(n){return Math.round(n).toLocaleString('zh-TW');}
+function fmtAmp(n){return n.toFixed(1)+' A';}
+
+var S={tab:'search',query:'',selected:null,rate:4.45,phase:'3',volt:'380',type:'D'};
+
+function highlight(text,query){
+  if(!query) return text;
+  var q=query.toUpperCase().replace(/\s/g,'');
+  var norm=text.toUpperCase().replace(/\s/g,'');
+  var idx=norm.indexOf(q);
+  if(idx<0) return text;
+  var count=0,start=-1,end=-1;
+  for(var i=0;i<text.length;i++){
+    if(text[i]!==' '){
+      if(count===idx) start=i;
+      count++;
+      if(count===idx+q.length){end=i+1;break;}
+    }
+  }
+  if(start<0) return text;
+  return text.slice(0,start)+'<mark>'+text.slice(start,end)+'</mark>'+text.slice(end);
+}
+
+function switchTab(tab){
+  S.tab=tab;
+  document.getElementById('tab-btn-search').className='tab-btn'+(tab==='search'?' active':'');
+  document.getElementById('tab-btn-load').className='tab-btn'+(tab==='load'?' active':'');
+  document.getElementById('search-tab').className='tab-content'+(tab!=='search'?' hidden':'');
+  document.getElementById('load-tab').className='tab-content'+(tab!=='load'?' hidden':'');
+}
+
+function getResults(){
+  var q=S.query.trim().toUpperCase().replace(/\s/g,'');
+  if(!q) return PRODUCTS;
+  return PRODUCTS.filter(function(p){return p.model.toUpperCase().replace(/\s/g,'').indexOf(q)>=0;});
+}
+
+function renderProductList(scrollToModel){
+  var results=getResults();
+  document.getElementById('result-count').textContent=
+    results.length===PRODUCTS.length?'全部 '+PRODUCTS.length+' 筆':'找到 '+results.length+' 筆';
+  var list=document.getElementById('product-list');
+  list.innerHTML='';
+  for(var i=0;i<results.length;i++){
+    (function(p){
+      var isSel=S.selected===p.model;
+      var wrap=document.createElement('div');
+      var row=document.createElement('div');
+      row.className='product-row'+(isSel?' selected':'');
+      row.innerHTML=
+        '<div class="product-model">'+highlight(p.model,S.query.trim())+'</div>'+
+        '<div class="product-price">NT$ '+fmt(p.price)+'</div>'+
+        '<span class="chevron'+(isSel?' open':'')+'">&#8250;</span>';
+      row.onclick=function(){
+        S.selected=isSel?null:p.model;
+        renderProductList();
+      };
+      wrap.appendChild(row);
+      if(isSel) wrap.appendChild(buildPricePanel(p));
+      list.appendChild(wrap);
+      if(scrollToModel&&p.model===scrollToModel){
+        setTimeout(function(){wrap.scrollIntoView({behavior:'smooth',block:'nearest'});},120);
+      }
+    })(results[i]);
+  }
+}
+
+function buildPricePanel(product){
+  var panel=document.createElement('div');
+  panel.className='price-panel';
+  panel.innerHTML=
+    '<div class="pp-header">'+
+      '<span class="pp-model-lbl">'+product.model+'</span>'+
+      '<span class="pp-list-price">定價　NT$ '+fmt(product.price)+'</span>'+
+    '</div>'+
+    '<div class="pp-input-row">'+
+      '<div class="pp-field">'+
+        '<span class="pp-label">折數</span>'+
+        '<input class="pp-input disc-in" type="number" placeholder="0.64 或 64" min="0" max="100" step="0.01" inputmode="decimal">'+
+      '</div>'+
+      '<div class="pp-field pp-field-rate">'+
+        '<span class="pp-label">匯率 TWD/RMB</span>'+
+        '<input class="pp-input rate-in" type="number" step="0.01" value="'+S.rate+'" inputmode="decimal">'+
+      '</div>'+
+    '</div>'+
+    '<div class="pp-results hidden">'+
+      '<div class="pp-row main"><span>折後價</span><span class="val amber disc-price"></span></div>'+
+      '<div class="pp-row"><span>折數確認</span><span class="val disc-pct"></span></div>'+
+      '<div class="pp-row"><span>人民幣換算</span><span class="val blue rmb-price"></span></div>'+
+    '</div>'+
+    '<div class="pp-hint">輸入折數以計算折後價</div>';
+  var calc=function(){
+    var d=parseFloat(panel.querySelector('.disc-in').value);
+    S.rate=parseFloat(panel.querySelector('.rate-in').value)||4.45;
+    var frac=(!d||d<=0)?null:(d>1?d/100:d);
+    var discPrice=frac?product.price*frac:null;
+    var show=discPrice!==null;
+    panel.querySelector('.pp-results').className='pp-results'+(show?'':' hidden');
+    panel.querySelector('.pp-hint').className='pp-hint'+(show?' hidden':'');
+    if(show){
+      panel.querySelector('.disc-price').textContent='NT$ '+fmt(discPrice);
+      panel.querySelector('.disc-pct').textContent=(frac*100).toFixed(1)+'%';
+      panel.querySelector('.rmb-price').textContent='¥ '+fmt(discPrice/S.rate);
+    }
+  };
+  panel.querySelector('.disc-in').oninput=calc;
+  panel.querySelector('.rate-in').oninput=calc;
+  setTimeout(function(){panel.querySelector('.disc-in').focus();},80);
+  return panel;
+}
+
+function onSearch(val){
+  S.query=val;S.selected=null;
+  document.getElementById('clear-btn').className=val?'':'hidden';
+  renderProductList();
+}
+function clearSearch(){
+  S.query='';S.selected=null;
+  document.getElementById('search-input').value='';
+  document.getElementById('clear-btn').className='hidden';
+  renderProductList();
+}
+function jumpToModel(model){
+  S.query=model;S.selected=model;
+  document.getElementById('search-input').value=model;
+  document.getElementById('clear-btn').className='';
+  switchTab('search');
+  renderProductList(model);
+}
+
+function setPhase(p){
+  S.phase=p;
+  document.getElementById('phase-1').className='toggle-btn'+(p==='1'?' active':'');
+  document.getElementById('phase-3').className='toggle-btn'+(p==='3'?' active':'');
+  setVolt(p==='1'?'220':'380');
+}
+function setVolt(v){
+  S.volt=v;
+  document.getElementById('volt-220').className='toggle-btn'+(v==='220'?' active':'');
+  document.getElementById('volt-380').className='toggle-btn'+(v==='380'?' active':'');
+  updateLoad();
+}
+function setType(t){
+  S.type=t;
+  document.getElementById('type-D').className='toggle-btn'+(t==='D'?' active':'');
+  document.getElementById('type-A').className='toggle-btn'+(t==='A'?' active':'');
+  updateLoad();
+}
+
+function ampFromModel(m){
+  // 型號格式：CR3-D4035 → 電壓碼4後取3位 → 035 → 35A
+  // 不能直接抓末尾數字，否則會把電壓碼4當成安培數的一部分
+  var match=m.replace(/W$/,'').match(/-[DA][24](\d{3})/);
+  return match?parseInt(match[1]):0;
+}
+function getRecommended(needed){
+  var prefix=S.phase==='1'?'CR1':'CR3';
+  var seriesKey='-'+S.type+(S.volt==='220'?'2':'4');
+  var candidates=PRODUCTS.filter(function(p){
+    return p.model.indexOf(prefix)===0&&p.model.indexOf(seriesKey)>=0;
+  });
+  var withAmp=candidates.map(function(p){return {model:p.model,price:p.price,amp:ampFromModel(p.model)};});
+  var filtered=withAmp.filter(function(p){return p.amp>=needed;});
+  filtered.sort(function(a,b){return a.amp-b.amp;});
+  return filtered[0]||null;
+}
+
+function updateLoad(){
+  var kw=parseFloat(document.getElementById('kw-input').value);
+  var v=parseFloat(S.volt);
+  var resultEl=document.getElementById('load-result');
+  if(!kw||kw<=0){resultEl.className='hidden';return;}
+  var actualAmp=S.phase==='1'?(kw*1000)/v:(kw*1000)/(Math.sqrt(3)*v);
+  resultEl.className='';
+  document.getElementById('amp-value').textContent=fmtAmp(actualAmp);
+  document.getElementById('amp-sub').textContent=kw+' kW @ '+S.volt+'V '+(S.phase==='1'?'單相':'三相');
+  var rowsEl=document.getElementById('load-rows');
+  rowsEl.innerHTML='';
+  var factors=[70,75,80,85,90];
+  for(var i=0;i<factors.length;i++){
+    (function(lf){
+      var needed=actualAmp/(lf/100);
+      var rec=getRecommended(needed);
+      var row=document.createElement('div');
+      row.className='lt-row'+(lf===80?' recommended':'');
+      var recHtml=rec?
+        '<button class="rec-btn" onclick="jumpToModel(\''+rec.model+'\')">'+
+          '<span class="rec-model">'+rec.model+'</span>'+
+          '<span class="rec-price">NT$'+fmt(rec.price)+'</span>'+
+          '<span class="rec-arr">&#8594;</span>'+
+        '</button>':
+        '<span class="muted-span">—</span>';
+      row.innerHTML=
+        '<span class="lt-factor">'+lf+'%'+(lf===80?' ★':'')+'</span>'+
+        '<span class="lt-amp">'+fmtAmp(needed)+'</span>'+
+        '<span class="lt-rec">'+recHtml+'</span>';
+      rowsEl.appendChild(row);
+    })(factors[i]);
+  }
+  var crLabel=S.phase==='1'?'CR1':'CR3';
+  var vcode=S.volt==='220'?'2':'4';
+  var typeLabel=S.type==='D'?'標準型':'通訊型';
+  document.getElementById('load-note').textContent=
+    '★ 建議以 80% 負載率選型　｜　'+crLabel+'-'+S.type+vcode+'xxx（'+typeLabel+' '+S.volt+'V）';
+}
+
+renderProductList();
+</script>
+</body>
+</html>
