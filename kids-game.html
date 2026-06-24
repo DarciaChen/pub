@@ -263,7 +263,6 @@
 </style>
 </head>
 <body>
-<div id="debug-panel" style="position:fixed;top:0;left:0;right:0;background:rgba(0,0,0,0.88);color:#7CFC9A;font-size:12px;line-height:1.5;padding:8px 10px;z-index:99999;font-family:monospace;white-space:pre-wrap;word-break:break-all;">（診斷面板：點我測試最簡單的英文語音）</div>
 <div id="app">
 
   <!-- 首頁：選模式 -->
@@ -432,24 +431,16 @@
   // iOS 18 Safari：speechSynthesis.speak() 不認 pointerdown 為有效使用者手勢，
   // 但只要頁面曾經有過一次 click 並成功呼叫過 speak()，之後任何事件觸發的 speak() 都會正常——
   // 在第一次點擊時用一個極短、靜音的呼叫解鎖整頁，不需要改動既有的 pointerdown 互動邏輯
-  document.addEventListener("pointerdown", function logPointerdown(e){
-    debugLogEarly("👇全域pointerdown target="+(e.target.tagName+"."+e.target.className));
-  }, {once:true});
-
-  document.addEventListener("click", function unlockSpeech(e){
+  // iOS 18 Safari：speechSynthesis.speak() 不認 pointerdown 為有效使用者手勢，
+  // 但只要頁面曾經有過一次 click 並成功呼叫過 speak()，之後任何事件觸發的 speak() 都會正常——
+  // 在第一次點擊時用一個極短、靜音的呼叫解鎖整頁，不需要改動既有的 pointerdown 互動邏輯
+  document.addEventListener("click", function unlockSpeech(){
     try{
       const u = new SpeechSynthesisUtterance(" ");
       u.volume = 0;
       window.speechSynthesis.speak(u);
-      if(document.getElementById("debug-panel")) debugLogEarly("🔓解鎖click觸發 target="+(e.target.tagName+"."+e.target.className));
-    }catch(err){
-      if(document.getElementById("debug-panel")) debugLogEarly("🔓解鎖例外:"+err.message);
-    }
+    }catch(e){}
   }, {once:true});
-  function debugLogEarly(msg){
-    const el = document.getElementById("debug-panel");
-    if(el) el.textContent = "[" + new Date().toLocaleTimeString() + "] " + msg + "\n" + el.textContent;
-  }
   function loadVoices(){
     voices = window.speechSynthesis ? window.speechSynthesis.getVoices() : [];
   }
@@ -458,15 +449,8 @@
     window.speechSynthesis.onvoiceschanged = loadVoices;
   }
   let currentUtterance = null; // 持久參照，避免 iOS Safari 在語音播完前就把物件回收
-  function debugLog(msg){
-    const el = document.getElementById("debug-panel");
-    if(el) el.textContent = "[" + new Date().toLocaleTimeString() + "] " + msg + "\n" + el.textContent;
-  }
   function speak(text){
-    if(!window.speechSynthesis){
-      debugLog("❌ speechSynthesis 不存在於此瀏覽器");
-      return;
-    }
+    if(!window.speechSynthesis) return;
     try{
       // 注意：不可用 setTimeout 包裝，也不可呼叫 cancel()——
       // Safari/Chrome 都要求 speak() 必須在使用者手勢的同步呼叫鏈內，
@@ -480,18 +464,10 @@
              || voices.find(v=>v.lang && v.lang.toLowerCase()==="zh-tw")
              || voices.find(v=>v.lang && v.lang.toLowerCase().startsWith("zh") && isChineseName(v.name))
              || voices.find(v=>v.lang && v.lang.toLowerCase().startsWith("zh"));
-      const zhList = voices.filter(v=>v.lang && (v.lang.toLowerCase().includes("zh") || v.lang.toLowerCase().includes("cmn"))).map(v=>v.name+"("+v.lang+")").join(", ");
       if(v) u.voice = v;
       currentUtterance = u;
-      u.onstart = ()=> debugLog(`✅開始講「${text}」| voices=${voices.length} | 聲音=${v?v.name:"(無zh,用預設)"}`);
-      u.onerror = (e)=> debugLog(`❌錯誤:${e.error} | text=${text} | voices=${voices.length}`);
-      u.onend = ()=> debugLog(`✔️講完「${text}」`);
-      window.speechSynthesis.resume(); // 防禦性喚醒：若引擎卡在 paused 狀態，這能解除
       window.speechSynthesis.speak(u);
-      debugLog(`📤送出「${text}」|voices=${voices.length}|找到中文=${v?v.name+"/"+v.lang:"無"}|paused=${window.speechSynthesis.paused}|中文清單=[${zhList||"無"}]`);
-    }catch(e){
-      debugLog(`❌例外:${e.message}`);
-    }
+    }catch(e){}
   }
 
   /* =========================================================
@@ -800,23 +776,6 @@
   });
 
   /* 防止平板上的雙指縮放/捲動干擾遊戲 */
-  /* 臨時診斷：點診斷面板跑最簡化的英文語音測試 */
-  document.getElementById("debug-panel").addEventListener("click", ()=>{
-    debugLog("🧪測試中...");
-    try{
-      const t = new SpeechSynthesisUtterance("hello");
-      t.onstart = ()=> debugLog("✅英文測試:開始講了！代表API本身能動");
-      t.onerror = (e)=> debugLog("❌英文測試錯誤:" + e.error);
-      t.onend = ()=> debugLog("✔️英文測試:講完了");
-      window.speechSynthesis.speak(t);
-      setTimeout(()=>{
-        debugLog(`🧪送出後3秒狀態 | speaking=${window.speechSynthesis.speaking} | pending=${window.speechSynthesis.pending} | paused=${window.speechSynthesis.paused}`);
-      }, 3000);
-    }catch(e){
-      debugLog("❌英文測試例外:" + e.message);
-    }
-  });
-
   document.addEventListener("gesturestart", e=>e.preventDefault());
   document.addEventListener("touchmove", e=>{ if(e.scale && e.scale!==1) e.preventDefault(); }, {passive:false});
 
