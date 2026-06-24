@@ -438,21 +438,17 @@
   function speak(text){
     if(!window.speechSynthesis) return;
     try{
-      window.speechSynthesis.cancel();
-      // iOS Safari 已知問題：cancel() 後立刻 speak() 會把新語音一併清掉，
-      // 插入極短延遲讓 cancel 真正生效後才排入新語音
-      setTimeout(()=>{
-        try{
-          const u = new SpeechSynthesisUtterance(text);
-          u.lang = "zh-TW";
-          u.rate = 0.85;
-          u.pitch = 1.15;
-          const v = voices.find(v=>v.lang && v.lang.toLowerCase().startsWith("zh"));
-          if(v) u.voice = v;
-          currentUtterance = u;
-          window.speechSynthesis.speak(u);
-        }catch(e){}
-      }, 50);
+      // 注意：不可用 setTimeout 包裝，也不可呼叫 cancel()——
+      // Safari/Chrome 都要求 speak() 必須在使用者手勢的同步呼叫鏈內，
+      // 否則會被靜默拒絕；改為讓語音自然排隊，不打斷前一句
+      const u = new SpeechSynthesisUtterance(text);
+      u.lang = "zh-TW";
+      u.rate = 0.85;
+      u.pitch = 1.15;
+      const v = voices.find(v=>v.lang && v.lang.toLowerCase().startsWith("zh"));
+      if(v) u.voice = v;
+      currentUtterance = u;
+      window.speechSynthesis.speak(u);
     }catch(e){}
   }
 
