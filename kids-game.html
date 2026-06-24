@@ -96,6 +96,7 @@
   .mode-card.read{ background: linear-gradient(180deg,#FFF0CF,#FFE4A3); }
   .mode-card.match{ background: linear-gradient(180deg,#D9F0DA,#BFE6C2); }
   .mode-card.memory{ background: linear-gradient(180deg,#E3D9F5,#CDB8EC); }
+  .mode-card.puzzle{ background: linear-gradient(180deg,#FFD9D2,#FFB0A3); }
 
   /* ---------- 分類選擇 ---------- */
   .category-grid{
@@ -269,6 +270,70 @@
     75%{ transform: translateX(6px); }
   }
 
+  /* ---------- 拼圖 ---------- */
+  .puzzle-wrap{
+    width:100%; height:100%;
+    display:flex; flex-direction:column;
+    align-items:center;
+    justify-content:space-between;
+    padding: 8vh 0 3vh;
+    gap: 2vh;
+  }
+  .puzzle-preview{
+    width: clamp(60px, 14vw, 110px);
+    height: clamp(60px, 14vw, 110px);
+    border-radius: 18px;
+    background:#fff;
+    box-shadow: var(--card-shadow);
+    display:flex; align-items:center; justify-content:center;
+    font-size: clamp(34px, 8vw, 64px);
+    opacity:.85;
+    flex: 0 0 auto;
+  }
+  .puzzle-board{
+    display:grid;
+    gap: 0;
+    border-radius: 24px;
+    overflow:hidden;
+    box-shadow: var(--card-shadow);
+    flex: 0 0 auto;
+  }
+  .puzzle-slot{
+    border: 2px dashed #C9BFAE;
+    background: rgba(255,255,255,0.5);
+    position:relative;
+    transition: background .2s, border-color .2s;
+  }
+  .puzzle-slot.glow{
+    border-color: var(--leaf);
+    background: rgba(123,198,126,0.18);
+  }
+  .puzzle-slot.filled{
+    border-style:solid;
+    border-color: var(--leaf);
+  }
+  .puzzle-piece{
+    border-radius: 14px;
+    background:#fff;
+    box-shadow: var(--card-shadow);
+    overflow:hidden;
+    position:relative;
+    touch-action:none;
+    z-index:10;
+  }
+  .puzzle-piece.dragging{
+    box-shadow: 0 18px 30px rgba(0,0,0,0.18);
+    z-index:100;
+  }
+  .puzzle-piece.placed{ visibility:hidden; }
+  .puzzle-piece.snap-back{
+    transition: transform .35s cubic-bezier(.34,1.56,.64,1);
+  }
+  .puzzle-piece .piece-art{
+    position:absolute;
+    display:flex; align-items:center; justify-content:center;
+  }
+
   /* ---------- 慶祝畫面 ---------- */
   #celebrate{
     position:absolute; inset:0;
@@ -331,12 +396,16 @@
         <div class="label">點讀認識</div>
       </button>
       <button class="mode-card match" data-mode="match">
-        <div class="emoji">🧩</div>
+        <div class="emoji">🔗</div>
         <div class="label">配對遊戲</div>
       </button>
       <button class="mode-card memory" data-mode="memory">
         <div class="emoji">🎴</div>
         <div class="label">翻翻樂</div>
+      </button>
+      <button class="mode-card puzzle" data-mode="puzzle">
+        <div class="emoji">🧩</div>
+        <div class="label">拼圖</div>
       </button>
     </div>
   </div>
@@ -367,6 +436,16 @@
   <div class="screen" id="screen-memory">
     <button class="home-btn" data-action="go-category">⬅️</button>
     <div class="memory-grid" id="memory-grid"></div>
+  </div>
+
+  <!-- 拼圖 -->
+  <div class="screen" id="screen-puzzle">
+    <button class="home-btn" data-action="go-category">⬅️</button>
+    <div class="puzzle-wrap">
+      <div class="puzzle-preview" id="puzzle-preview"></div>
+      <div class="puzzle-board" id="puzzle-board"></div>
+      <div class="tray" id="puzzle-tray"></div>
+    </div>
   </div>
 
   <!-- 慶祝畫面 -->
@@ -545,6 +624,7 @@
     read: document.getElementById("screen-read"),
     match: document.getElementById("screen-match"),
     memory: document.getElementById("screen-memory"),
+    puzzle: document.getElementById("screen-puzzle"),
   };
   function showScreen(name){
     Object.values(screens).forEach(s=>s.classList.remove("active"));
@@ -566,7 +646,7 @@
       currentMode = btn.dataset.mode;
       buildCategoryGrid();
       const titleEl = document.getElementById("category-title");
-      titleEl.textContent = currentMode === "read" ? "選一個主題來認識" : currentMode === "memory" ? "選一個主題來翻翻樂" : "選一個主題來配對";
+      titleEl.textContent = currentMode === "read" ? "選一個主題來認識" : currentMode === "memory" ? "選一個主題來翻翻樂" : currentMode === "puzzle" ? "選一個主題來拼圖" : "選一個主題來配對";
       goCategory();
     });
   });
@@ -594,6 +674,9 @@
         } else if(currentMode === "memory"){
           buildMemoryScreen(key);
           showScreen("memory");
+        } else if(currentMode === "puzzle"){
+          buildPuzzleScreen(key);
+          showScreen("puzzle");
         } else {
           buildMatchScreen(key);
           showScreen("match");
@@ -817,6 +900,188 @@
   }
 
   /* =========================================================
+     拼圖：隨機抽1個項目，切成 2x2 共4塊
+     ========================================================= */
+  let puzzleState = null;
+  const PUZZLE_COLS = 2, PUZZLE_ROWS = 2;
+  const PUZZLE_BOARD_SIZE = Math.min(320, 280); // px，棋盤總邊長
+
+  function buildPuzzleScreen(key){
+    const cat = CATEGORIES[key];
+    const item = shuffle(cat.items)[0]; // 隨機抽 1 個項目當拼圖內容
+    const cols = PUZZLE_COLS, rows = PUZZLE_ROWS;
+    const total = cols * rows;
+    const cellSize = PUZZLE_BOARD_SIZE / cols;
+
+    puzzleState = { item, cat, filledCount: 0, total };
+
+    // 預覽小圖
+    const preview = document.getElementById("puzzle-preview");
+    preview.innerHTML = "";
+    if(cat.isColor){
+      preview.style.background = item.color;
+    } else {
+      preview.style.background = "#fff";
+      preview.textContent = item.emoji;
+    }
+
+    // 棋盤格子（正確位置）
+    const board = document.getElementById("puzzle-board");
+    board.innerHTML = "";
+    board.style.gridTemplateColumns = `repeat(${cols}, ${cellSize}px)`;
+    board.style.gridTemplateRows = `repeat(${rows}, ${cellSize}px)`;
+    for(let i=0;i<total;i++){
+      const slot = document.createElement("div");
+      slot.className = "puzzle-slot";
+      slot.style.width = cellSize + "px";
+      slot.style.height = cellSize + "px";
+      slot.dataset.slotIndex = i;
+      board.appendChild(slot);
+    }
+
+    // 拼圖塊（打散放入托盤）
+    const tray = document.getElementById("puzzle-tray");
+    tray.innerHTML = "";
+    const order = shuffle(Array.from({length: total}, (_, i)=>i));
+    order.forEach(slotIndex=>{
+      const row = Math.floor(slotIndex / cols);
+      const col = slotIndex % cols;
+      const piece = document.createElement("div");
+      piece.className = "puzzle-piece";
+      piece.style.width = cellSize + "px";
+      piece.style.height = cellSize + "px";
+      piece.dataset.correctIndex = slotIndex;
+
+      const art = document.createElement("div");
+      art.className = "piece-art";
+      art.style.width = PUZZLE_BOARD_SIZE + "px";
+      art.style.height = PUZZLE_BOARD_SIZE + "px";
+      art.style.left = (-col * cellSize) + "px";
+      art.style.top = (-row * cellSize) + "px";
+      if(cat.isColor){
+        art.style.background = item.color;
+      } else {
+        art.style.fontSize = (PUZZLE_BOARD_SIZE * 0.75) + "px";
+        art.textContent = item.emoji;
+      }
+      piece.appendChild(art);
+
+      tray.appendChild(piece);
+      attachPuzzleDragHandlers(piece, slotIndex, item, cat);
+    });
+  }
+
+  function attachPuzzleDragHandlers(piece, correctIndex, item, cat){
+    let startX=0, startY=0, originX=0, originY=0, dragging=false;
+
+    piece.addEventListener("pointerdown", (e)=>{
+      ensureAudio();
+      if(piece.classList.contains("placed")) return;
+      dragging = true;
+      piece.classList.remove("snap-back");
+      piece.classList.add("dragging");
+      piece.setPointerCapture(e.pointerId);
+      const rect = piece.getBoundingClientRect();
+      startX = e.clientX; startY = e.clientY;
+      originX = rect.left; originY = rect.top;
+      piece.style.position = "fixed";
+      piece.style.left = originX + "px";
+      piece.style.top = originY + "px";
+      piece.style.margin = "0";
+    });
+
+    piece.addEventListener("pointermove", (e)=>{
+      if(!dragging) return;
+      const dx = e.clientX - startX;
+      const dy = e.clientY - startY;
+      piece.style.left = (originX+dx) + "px";
+      piece.style.top = (originY+dy) + "px";
+      highlightNearestPuzzleSlot(piece);
+    });
+
+    piece.addEventListener("pointerup", ()=>{
+      if(!dragging) return;
+      dragging = false;
+      piece.classList.remove("dragging");
+      const result = tryDropPuzzlePiece(piece, correctIndex, item);
+      if(!result){
+        snapBackPuzzlePiece(piece);
+      }
+      clearPuzzleSlotGlow();
+    });
+
+    piece.addEventListener("pointercancel", ()=>{
+      dragging = false;
+      piece.classList.remove("dragging");
+      snapBackPuzzlePiece(piece);
+      clearPuzzleSlotGlow();
+    });
+  }
+
+  function findNearestPuzzleSlot(piece){
+    const r0 = piece.getBoundingClientRect();
+    const center = {x: r0.left + r0.width/2, y: r0.top + r0.height/2};
+    const slots = Array.from(document.querySelectorAll("#puzzle-board .puzzle-slot"));
+    let best=null, bestDist=Infinity;
+    slots.forEach(s=>{
+      const r = s.getBoundingClientRect();
+      const sx = r.left+r.width/2, sy=r.top+r.height/2;
+      const dist = Math.hypot(center.x-sx, center.y-sy);
+      const threshold = Math.max(r.width, r.height) * 0.85;
+      if(dist < threshold && dist < bestDist){
+        best = s; bestDist = dist;
+      }
+    });
+    return best;
+  }
+
+  function highlightNearestPuzzleSlot(piece){
+    clearPuzzleSlotGlow();
+    const s = findNearestPuzzleSlot(piece);
+    if(s && !s.classList.contains("filled")){
+      s.classList.add("glow");
+    }
+  }
+  function clearPuzzleSlotGlow(){
+    document.querySelectorAll("#puzzle-board .puzzle-slot.glow").forEach(s=>s.classList.remove("glow"));
+  }
+
+  function tryDropPuzzlePiece(piece, correctIndex, item){
+    const s = findNearestPuzzleSlot(piece);
+    if(!s) return false;
+    if(s.classList.contains("filled")) return false;
+
+    if(Number(s.dataset.slotIndex) === correctIndex){
+      const r = s.getBoundingClientRect();
+      piece.classList.add("snap-back");
+      piece.style.left = (r.left) + "px";
+      piece.style.top = (r.top) + "px";
+      setTimeout(()=>{ piece.classList.add("placed"); }, 220);
+      s.classList.add("filled");
+      chimeSuccess();
+      puzzleState.filledCount++;
+      if(puzzleState.filledCount >= puzzleState.total){
+        speak(item.label + "，拼圖完成");
+        setTimeout(showCelebration, 500);
+      }
+      return true;
+    } else {
+      chimeGentle();
+      return false;
+    }
+  }
+
+  function snapBackPuzzlePiece(piece){
+    piece.classList.add("snap-back");
+    requestAnimationFrame(()=>{
+      piece.style.position = "";
+      piece.style.left = "";
+      piece.style.top = "";
+      piece.style.margin = "";
+    });
+  }
+
+  /* =========================================================
      翻翻樂：4對8張卡的記憶配對遊戲
      ========================================================= */
   let memoryState = null;
@@ -941,6 +1206,8 @@
     document.getElementById("celebrate").classList.remove("show");
     if(currentMode === "memory"){
       buildMemoryScreen(currentCategoryKey);
+    } else if(currentMode === "puzzle"){
+      buildPuzzleScreen(currentCategoryKey);
     } else {
       buildMatchScreen(currentCategoryKey);
     }
