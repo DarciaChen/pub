@@ -1,0 +1,758 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>寶寶探索樂園</title>
+<style>
+  :root{
+    --cream:#FFF8EE;
+    --sun:#FFC857;
+    --coral:#FF8C70;
+    --leaf:#7BC67E;
+    --sky:#6FB8D9;
+    --grape:#B98FD1;
+    --ink:#4A3F35;
+    --card-shadow: 0 10px 0 rgba(74,63,53,0.12);
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color: transparent; user-select:none; -webkit-user-select:none;}
+  html,body{
+    margin:0; padding:0; width:100%; height:100%;
+    overflow:hidden;
+    font-family: "Baloo 2","Helvetica Rounded","Arial Rounded MT Bold","PingFang TC","Heiti TC",sans-serif;
+    background: var(--cream);
+    touch-action: none;
+  }
+  #app{
+    position:fixed; inset:0;
+    display:flex; flex-direction:column;
+    background: radial-gradient(circle at 20% 15%, #FFFDF7 0%, var(--cream) 55%);
+  }
+
+  /* ---------- 通用 ---------- */
+  .screen{
+    position:absolute; inset:0;
+    display:flex; flex-direction:column;
+    align-items:center; justify-content:center;
+    opacity:0; pointer-events:none;
+    transition: opacity .35s ease;
+    padding: 2vh 3vw;
+  }
+  .screen.active{ opacity:1; pointer-events:auto; }
+
+  .home-btn{
+    position:absolute; top:2.2vh; left:2.2vw;
+    width:9vh; height:9vh; min-width:64px; min-height:64px;
+    border-radius:50%;
+    background: #fff;
+    box-shadow: var(--card-shadow);
+    display:flex; align-items:center; justify-content:center;
+    font-size:4.2vh;
+    border:none;
+    cursor:pointer;
+    z-index:50;
+    transition: transform .12s ease;
+  }
+  .home-btn:active{ transform: scale(0.88); }
+
+  .title{
+    font-size: clamp(28px, 5.2vh, 64px);
+    color: var(--ink);
+    font-weight:800;
+    text-align:center;
+    margin: 0 0 3vh 0;
+    letter-spacing: 1px;
+  }
+  .subtitle{
+    font-size: clamp(16px, 2.4vh, 28px);
+    color: var(--ink);
+    opacity:.65;
+    margin-top: -2vh;
+    margin-bottom: 3vh;
+    text-align:center;
+  }
+
+  /* ---------- 首頁：模式選擇 ---------- */
+  #screen-home .mode-row{
+    display:flex; gap: 4vw; flex-wrap:wrap;
+    justify-content:center; align-items:stretch;
+  }
+  .mode-card{
+    width: min(38vw, 380px);
+    min-width:260px;
+    aspect-ratio: 1/0.95;
+    border-radius: 36px;
+    border:none;
+    box-shadow: var(--card-shadow);
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    gap: 1.5vh;
+    cursor:pointer;
+    transition: transform .15s ease;
+    font-family:inherit;
+  }
+  .mode-card:active{ transform: scale(0.94) translateY(4px); box-shadow:0 4px 0 rgba(74,63,53,0.12); }
+  .mode-card .emoji{ font-size: clamp(48px, 9vh, 110px); }
+  .mode-card .label{ font-size: clamp(20px, 3.2vh, 34px); font-weight:800; color: var(--ink); }
+  .mode-card.read{ background: linear-gradient(180deg,#FFF0CF,#FFE4A3); }
+  .mode-card.match{ background: linear-gradient(180deg,#D9F0DA,#BFE6C2); }
+
+  /* ---------- 分類選擇 ---------- */
+  .category-grid{
+    display:grid;
+    grid-template-columns: repeat(3, minmax(140px, 22vw));
+    gap: 3vh 3vw;
+    justify-content:center;
+  }
+  .cat-card{
+    aspect-ratio: 1/0.9;
+    border-radius: 28px;
+    border:none;
+    box-shadow: var(--card-shadow);
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    gap:1vh;
+    cursor:pointer;
+    transition: transform .15s ease;
+    font-family:inherit;
+  }
+  .cat-card:active{ transform: scale(0.92); box-shadow:0 4px 0 rgba(74,63,53,0.12); }
+  .cat-card .emoji{ font-size: clamp(40px, 6.4vh, 72px); }
+  .cat-card .label{ font-size: clamp(15px, 2.1vh, 22px); font-weight:700; color: var(--ink); }
+
+  /* ---------- 點讀模式 ---------- */
+  #screen-read .grid{
+    display:grid;
+    gap: 3vh 3vw;
+    justify-content:center;
+    align-content:center;
+  }
+  .tile{
+    border-radius: 30px;
+    border:none;
+    display:flex; align-items:center; justify-content:center;
+    box-shadow: var(--card-shadow);
+    cursor:pointer;
+    font-size: clamp(54px, 11vh, 140px);
+    position:relative;
+    transition: transform .18s cubic-bezier(.34,1.56,.64,1);
+    background:#fff;
+  }
+  .tile .tile-label{
+    position:absolute; bottom:1.2vh; left:0; right:0;
+    text-align:center;
+    font-size: clamp(14px, 1.9vh, 20px);
+    font-weight:700;
+    color: var(--ink);
+    opacity:.55;
+  }
+  .tile.bounce{ transform: scale(1.18) rotate(-3deg); }
+  .color-tile{ border-radius: 50%; }
+
+  /* ---------- 配對模式 ---------- */
+  #screen-match{
+    justify-content:flex-start;
+    padding-top: 10vh;
+  }
+  .match-wrap{
+    width:100%; height:100%;
+    display:flex; flex-direction:column;
+    align-items:center;
+    justify-content:space-between;
+    padding-bottom: 3vh;
+  }
+  .targets-row{
+    display:flex; gap: 4vw; justify-content:center; align-items:center;
+    flex:0 0 auto;
+  }
+  .target{
+    width: clamp(110px, 18vw, 200px);
+    height: clamp(110px, 18vw, 200px);
+    border-radius: 28px;
+    border: 5px dashed #C9BFAE;
+    background: rgba(255,255,255,0.5);
+    display:flex; align-items:center; justify-content:center;
+    font-size: clamp(40px, 7vh, 90px);
+    position:relative;
+    transition: background .2s, border-color .2s, transform .2s;
+  }
+  .target.glow{
+    border-color: var(--leaf);
+    background: rgba(123,198,126,0.18);
+    transform: scale(1.06);
+  }
+  .target.filled{
+    border-style: solid;
+    border-color: var(--leaf);
+    background: rgba(123,198,126,0.18);
+  }
+  .target.filled .target-ghost{ opacity:0; }
+  .target-ghost{ opacity:.3; }
+
+  .tray{
+    flex: 0 0 auto;
+    display:flex; gap: 5vw; justify-content:center; align-items:center;
+    min-height: clamp(110px, 18vw, 200px);
+  }
+  .draggable{
+    width: clamp(100px, 16vw, 180px);
+    height: clamp(100px, 16vw, 180px);
+    border-radius: 26px;
+    background:#fff;
+    box-shadow: var(--card-shadow);
+    display:flex; align-items:center; justify-content:center;
+    font-size: clamp(38px, 6.6vh, 84px);
+    touch-action:none;
+    z-index: 10;
+  }
+  .draggable.dragging{
+    box-shadow: 0 18px 30px rgba(0,0,0,0.18);
+    z-index: 100;
+  }
+  .draggable.placed{ visibility:hidden; }
+  .draggable.snap-back{
+    transition: transform .35s cubic-bezier(.34,1.56,.64,1);
+  }
+
+  /* ---------- 慶祝畫面 ---------- */
+  #celebrate{
+    position:absolute; inset:0;
+    display:none;
+    align-items:center; justify-content:center;
+    flex-direction:column;
+    background: rgba(255,248,238,0.97);
+    z-index: 200;
+    text-align:center;
+  }
+  #celebrate.show{ display:flex; }
+  #celebrate .big-emoji{ font-size: clamp(70px,14vh,160px); animation: pop .6s ease; }
+  #celebrate .msg{ font-size: clamp(24px,4vh,46px); font-weight:800; color:var(--ink); margin-top:2vh; }
+  .again-btn{
+    margin-top: 4vh;
+    padding: 1.6vh 4vw;
+    font-size: clamp(18px,2.6vh,28px);
+    font-weight:800;
+    color:#fff;
+    background: var(--leaf);
+    border:none;
+    border-radius: 50px;
+    box-shadow: 0 8px 0 rgba(0,0,0,0.1);
+    cursor:pointer;
+  }
+  .again-btn:active{ transform: translateY(4px); box-shadow:0 4px 0 rgba(0,0,0,0.1); }
+
+  @keyframes pop{
+    0%{ transform: scale(0.3) rotate(-10deg); opacity:0; }
+    60%{ transform: scale(1.15) rotate(5deg); opacity:1; }
+    100%{ transform: scale(1) rotate(0); }
+  }
+
+  .confetti{
+    position:absolute; top:-5vh;
+    width: 14px; height:14px; border-radius:3px;
+    animation: fall linear forwards;
+  }
+  @keyframes fall{
+    to{ transform: translateY(110vh) rotate(360deg); opacity: 0.9; }
+  }
+
+  .sound-hint{
+    position:fixed; bottom:2vh; left:50%; transform:translateX(-50%);
+    font-size: 14px; color: var(--ink); opacity:.4;
+    pointer-events:none;
+  }
+</style>
+</head>
+<body>
+<div id="app">
+
+  <!-- 首頁：選模式 -->
+  <div class="screen active" id="screen-home">
+    <div class="title">🌈 寶寶探索樂園</div>
+    <div class="subtitle">點一下開始玩</div>
+    <div class="mode-row">
+      <button class="mode-card read" data-mode="read">
+        <div class="emoji">👆🔊</div>
+        <div class="label">點讀認識</div>
+      </button>
+      <button class="mode-card match" data-mode="match">
+        <div class="emoji">🧩</div>
+        <div class="label">配對遊戲</div>
+      </button>
+    </div>
+  </div>
+
+  <!-- 分類選擇 -->
+  <div class="screen" id="screen-category">
+    <button class="home-btn" data-action="go-home">🏠</button>
+    <div class="title" id="category-title">選一個主題</div>
+    <div class="category-grid" id="category-grid"></div>
+  </div>
+
+  <!-- 點讀模式 -->
+  <div class="screen" id="screen-read">
+    <button class="home-btn" data-action="go-category">⬅️</button>
+    <div class="grid" id="read-grid"></div>
+  </div>
+
+  <!-- 配對模式 -->
+  <div class="screen" id="screen-match">
+    <button class="home-btn" data-action="go-category">⬅️</button>
+    <div class="match-wrap">
+      <div class="targets-row" id="targets-row"></div>
+      <div class="tray" id="tray-row"></div>
+    </div>
+  </div>
+
+  <!-- 慶祝畫面 -->
+  <div id="celebrate">
+    <div class="big-emoji">🎉</div>
+    <div class="msg">好棒！都配對成功了！</div>
+    <button class="again-btn" data-action="play-again">再玩一次</button>
+  </div>
+
+</div>
+
+<script>
+(function(){
+  "use strict";
+
+  /* =========================================================
+     資料：六大主題，每個主題提供 emoji + 名稱
+     ========================================================= */
+  const CATEGORIES = {
+    color: {
+      name: "顏色", emoji: "🎨",
+      items: [
+        {id:"red", label:"紅色", color:"#FF6B6B"},
+        {id:"yellow", label:"黃色", color:"#FFD93D"},
+        {id:"blue", label:"藍色", color:"#6FB8D9"},
+        {id:"green", label:"綠色", color:"#7BC67E"},
+        {id:"orange", label:"橘色", color:"#FF9F45"},
+        {id:"purple", label:"紫色", color:"#B98FD1"},
+      ],
+      isColor: true
+    },
+    shape: {
+      name: "形狀", emoji: "🔺",
+      items: [
+        {id:"circle", label:"圓形", emoji:"⚪"},
+        {id:"square", label:"正方形", emoji:"🟧"},
+        {id:"triangle", label:"三角形", emoji:"🔺"},
+        {id:"star", label:"星形", emoji:"⭐"},
+        {id:"heart", label:"愛心", emoji:"❤️"},
+        {id:"diamond", label:"菱形", emoji:"🔷"},
+      ]
+    },
+    fruit: {
+      name: "水果", emoji: "🍎",
+      items: [
+        {id:"apple", label:"蘋果", emoji:"🍎"},
+        {id:"banana", label:"香蕉", emoji:"🍌"},
+        {id:"grape", label:"葡萄", emoji:"🍇"},
+        {id:"watermelon", label:"西瓜", emoji:"🍉"},
+        {id:"strawberry", label:"草莓", emoji:"🍓"},
+        {id:"orange", label:"橘子", emoji:"🍊"},
+      ]
+    },
+    object: {
+      name: "生活器物", emoji: "🥣",
+      items: [
+        {id:"cup", label:"杯子", emoji:"🥤"},
+        {id:"shoe", label:"鞋子", emoji:"👟"},
+        {id:"spoon", label:"湯匙", emoji:"🥄"},
+        {id:"clock", label:"時鐘", emoji:"⏰"},
+        {id:"umbrella", label:"雨傘", emoji:"☂️"},
+        {id:"key", label:"鑰匙", emoji:"🔑"},
+      ]
+    },
+    animal: {
+      name: "動物", emoji: "🐶",
+      items: [
+        {id:"dog", label:"小狗", emoji:"🐶"},
+        {id:"cat", label:"小貓", emoji:"🐱"},
+        {id:"duck", label:"小鴨", emoji:"🦆"},
+        {id:"cow", label:"乳牛", emoji:"🐮"},
+        {id:"rabbit", label:"兔子", emoji:"🐰"},
+        {id:"elephant", label:"大象", emoji:"🐘"},
+      ]
+    },
+    vehicle: {
+      name: "交通工具", emoji: "🚗",
+      items: [
+        {id:"car", label:"汽車", emoji:"🚗"},
+        {id:"bus", label:"公車", emoji:"🚌"},
+        {id:"train", label:"火車", emoji:"🚂"},
+        {id:"airplane", label:"飛機", emoji:"✈️"},
+        {id:"bike", label:"腳踏車", emoji:"🚲"},
+        {id:"boat", label:"船", emoji:"⛵"},
+      ]
+    }
+  };
+
+  /* =========================================================
+     音效：Web Audio 合成音 + Web Speech 語音
+     ========================================================= */
+  let audioCtx = null;
+  function ensureAudio(){
+    if(!audioCtx){
+      try{ audioCtx = new (window.AudioContext || window.webkitAudioContext)(); }catch(e){}
+    }
+    if(audioCtx && audioCtx.state === "suspended"){ audioCtx.resume(); }
+  }
+
+  function playTone(freqs, durEach, type){
+    if(!audioCtx) return;
+    type = type || "sine";
+    let t = audioCtx.currentTime;
+    freqs.forEach((f)=>{
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = type;
+      osc.frequency.setValueAtTime(f, t);
+      gain.gain.setValueAtTime(0.0001, t);
+      gain.gain.exponentialRampToValueAtTime(0.28, t+0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, t+durEach*0.95);
+      osc.connect(gain); gain.connect(audioCtx.destination);
+      osc.start(t); osc.stop(t+durEach);
+      t += durEach*0.55;
+    });
+  }
+
+  function chimeTap(){ playTone([784, 988], 0.16, "sine"); } // 點擊：愉快短音
+  function chimeSuccess(){ playTone([523,659,784,1046], 0.16, "triangle"); } // 配對成功
+  function chimeGentle(){ playTone([392, 349], 0.22, "sine"); } // 配對未中：溫和、非負面
+
+  let voices = [];
+  function loadVoices(){
+    voices = window.speechSynthesis ? window.speechSynthesis.getVoices() : [];
+  }
+  if(window.speechSynthesis){
+    loadVoices();
+    window.speechSynthesis.onvoiceschanged = loadVoices;
+  }
+  function speak(text){
+    if(!window.speechSynthesis) return;
+    try{
+      window.speechSynthesis.cancel();
+      const u = new SpeechSynthesisUtterance(text);
+      u.lang = "zh-TW";
+      u.rate = 0.85;
+      u.pitch = 1.15;
+      const v = voices.find(v=>v.lang && v.lang.toLowerCase().startsWith("zh"));
+      if(v) u.voice = v;
+      window.speechSynthesis.speak(u);
+    }catch(e){}
+  }
+
+  /* =========================================================
+     畫面切換
+     ========================================================= */
+  const screens = {
+    home: document.getElementById("screen-home"),
+    category: document.getElementById("screen-category"),
+    read: document.getElementById("screen-read"),
+    match: document.getElementById("screen-match"),
+  };
+  function showScreen(name){
+    Object.values(screens).forEach(s=>s.classList.remove("active"));
+    screens[name].classList.add("active");
+  }
+
+  let currentMode = null; // 'read' | 'match'
+  let currentCategoryKey = null;
+
+  function goHome(){ currentMode=null; currentCategoryKey=null; showScreen("home"); }
+  function goCategory(){ showScreen("category"); }
+
+  /* =========================================================
+     首頁按鈕
+     ========================================================= */
+  document.querySelectorAll(".mode-card").forEach(btn=>{
+    btn.addEventListener("pointerdown", ()=>{
+      ensureAudio(); chimeTap();
+      currentMode = btn.dataset.mode;
+      buildCategoryGrid();
+      const titleEl = document.getElementById("category-title");
+      titleEl.textContent = currentMode === "read" ? "選一個主題來認識" : "選一個主題來配對";
+      goCategory();
+    });
+  });
+
+  document.querySelectorAll('[data-action="go-home"]').forEach(b=>b.addEventListener("pointerdown", ()=>{ chimeTap(); goHome(); }));
+  document.querySelectorAll('[data-action="go-category"]').forEach(b=>b.addEventListener("pointerdown", ()=>{ chimeTap(); goCategory(); }));
+
+  /* =========================================================
+     分類選擇畫面
+     ========================================================= */
+  function buildCategoryGrid(){
+    const grid = document.getElementById("category-grid");
+    grid.innerHTML = "";
+    Object.keys(CATEGORIES).forEach(key=>{
+      const cat = CATEGORIES[key];
+      const card = document.createElement("button");
+      card.className = "cat-card";
+      card.innerHTML = `<div class="emoji">${cat.emoji}</div><div class="label">${cat.name}</div>`;
+      card.addEventListener("pointerdown", ()=>{
+        ensureAudio(); chimeTap();
+        currentCategoryKey = key;
+        if(currentMode === "read"){
+          buildReadScreen(key);
+          showScreen("read");
+        } else {
+          buildMatchScreen(key);
+          showScreen("match");
+        }
+      });
+      grid.appendChild(card);
+    });
+  }
+
+  /* =========================================================
+     點讀模式
+     ========================================================= */
+  function buildReadScreen(key){
+    const cat = CATEGORIES[key];
+    const gridEl = document.getElementById("read-grid");
+    gridEl.innerHTML = "";
+    const n = cat.items.length;
+    const cols = n <= 4 ? 2 : 3;
+    gridEl.style.gridTemplateColumns = `repeat(${cols}, minmax(120px, 26vw))`;
+
+    cat.items.forEach(item=>{
+      const tile = document.createElement("button");
+      tile.className = "tile" + (cat.isColor ? " color-tile" : "");
+      if(cat.isColor){
+        tile.style.background = item.color;
+      } else {
+        tile.innerHTML = `<span>${item.emoji}</span>`;
+      }
+      const labelEl = document.createElement("div");
+      labelEl.className = "tile-label";
+      labelEl.textContent = item.label;
+      tile.appendChild(labelEl);
+
+      tile.addEventListener("pointerdown", ()=>{
+        ensureAudio();
+        chimeTap();
+        tile.classList.add("bounce");
+        setTimeout(()=>tile.classList.remove("bounce"), 260);
+        speak(item.label);
+      });
+      gridEl.appendChild(tile);
+    });
+  }
+
+  /* =========================================================
+     配對模式：自訂拖曳（pointer events，支援觸控與滑鼠）
+     ========================================================= */
+  function shuffle(arr){
+    const a = arr.slice();
+    for(let i=a.length-1;i>0;i--){
+      const j = Math.floor(Math.random()*(i+1));
+      [a[i],a[j]]=[a[j],a[i]];
+    }
+    return a;
+  }
+
+  let matchState = null;
+
+  function buildMatchScreen(key){
+    const cat = CATEGORIES[key];
+    const picked = shuffle(cat.items).slice(0, 3); // 每輪 3 對，降低認知負擔
+    const shuffledForTray = shuffle(picked);
+
+    matchState = { matchedCount: 0, total: picked.length };
+
+    const targetsRow = document.getElementById("targets-row");
+    const trayRow = document.getElementById("tray-row");
+    targetsRow.innerHTML = "";
+    trayRow.innerHTML = "";
+
+    picked.forEach(item=>{
+      const target = document.createElement("div");
+      target.className = "target";
+      target.dataset.id = item.id;
+      const ghost = document.createElement("div");
+      ghost.className = "target-ghost";
+      ghost.textContent = cat.isColor ? "" : item.emoji;
+      if(cat.isColor){ target.style.borderColor = item.color; }
+      target.appendChild(ghost);
+      targetsRow.appendChild(target);
+    });
+
+    shuffledForTray.forEach(item=>{
+      const drag = document.createElement("div");
+      drag.className = "draggable";
+      drag.dataset.id = item.id;
+      if(cat.isColor){
+        drag.style.background = item.color;
+      } else {
+        drag.textContent = item.emoji;
+      }
+      trayRow.appendChild(drag);
+      attachDragHandlers(drag, item, cat);
+    });
+  }
+
+  function attachDragHandlers(drag, item, cat){
+    let startX=0, startY=0, originX=0, originY=0, dragging=false;
+
+    drag.addEventListener("pointerdown", (e)=>{
+      ensureAudio();
+      if(drag.classList.contains("placed")) return;
+      dragging = true;
+      drag.classList.remove("snap-back");
+      drag.classList.add("dragging");
+      drag.setPointerCapture(e.pointerId);
+      const rect = drag.getBoundingClientRect();
+      startX = e.clientX; startY = e.clientY;
+      originX = rect.left; originY = rect.top;
+      drag.style.position = "fixed";
+      drag.style.left = originX + "px";
+      drag.style.top = originY + "px";
+      drag.style.width = rect.width + "px";
+      drag.style.height = rect.height + "px";
+      drag.style.margin = "0";
+      speak(item.label);
+    });
+
+    drag.addEventListener("pointermove", (e)=>{
+      if(!dragging) return;
+      const dx = e.clientX - startX;
+      const dy = e.clientY - startY;
+      drag.style.left = (originX+dx) + "px";
+      drag.style.top = (originY+dy) + "px";
+
+      // 接近目標時高亮（寬容判定，方便幼兒操作）
+      highlightNearestTarget(drag, item.id);
+    });
+
+    drag.addEventListener("pointerup", (e)=>{
+      if(!dragging) return;
+      dragging = false;
+      drag.classList.remove("dragging");
+      const result = tryDrop(drag, item, cat);
+      if(!result){
+        snapBack(drag, item, cat);
+      }
+      clearTargetGlow();
+    });
+
+    drag.addEventListener("pointercancel", ()=>{
+      dragging = false;
+      drag.classList.remove("dragging");
+      snapBack(drag, item, cat);
+      clearTargetGlow();
+    });
+  }
+
+  function getDragCenter(drag){
+    const r = drag.getBoundingClientRect();
+    return {x: r.left + r.width/2, y: r.top + r.height/2};
+  }
+
+  function findNearestTarget(drag){
+    const center = getDragCenter(drag);
+    const targets = Array.from(document.querySelectorAll("#targets-row .target"));
+    let best=null, bestDist=Infinity;
+    targets.forEach(t=>{
+      const r = t.getBoundingClientRect();
+      const tx = r.left+r.width/2, ty=r.top+r.height/2;
+      const dist = Math.hypot(center.x-tx, center.y-ty);
+      const threshold = Math.max(r.width, r.height) * 0.85; // 寬容半徑
+      if(dist < threshold && dist < bestDist){
+        best = t; bestDist = dist;
+      }
+    });
+    return best;
+  }
+
+  function highlightNearestTarget(drag, itemId){
+    clearTargetGlow();
+    const t = findNearestTarget(drag);
+    if(t && !t.classList.contains("filled")){
+      t.classList.add("glow");
+    }
+  }
+  function clearTargetGlow(){
+    document.querySelectorAll("#targets-row .target.glow").forEach(t=>t.classList.remove("glow"));
+  }
+
+  function tryDrop(drag, item, cat){
+    const t = findNearestTarget(drag);
+    if(!t) return false;
+    if(t.classList.contains("filled")) return false;
+
+    if(t.dataset.id === item.id){
+      // 配對成功
+      const r = t.getBoundingClientRect();
+      drag.classList.add("snap-back");
+      drag.style.left = (r.left + r.width/2 - drag.offsetWidth/2) + "px";
+      drag.style.top = (r.top + r.height/2 - drag.offsetHeight/2) + "px";
+      setTimeout(()=>{ drag.classList.add("placed"); }, 220);
+      t.classList.add("filled");
+      chimeSuccess();
+      speak(item.label + "，配對成功");
+      matchState.matchedCount++;
+      if(matchState.matchedCount >= matchState.total){
+        setTimeout(showCelebration, 500);
+      }
+      return true;
+    } else {
+      // 放錯位置：溫和回饋，不算失敗，自動彈回托盤
+      chimeGentle();
+      return false;
+    }
+  }
+
+  function snapBack(drag, item, cat){
+    const tray = document.getElementById("tray-row");
+    const trayRect = tray.getBoundingClientRect();
+    drag.classList.add("snap-back");
+    // 回到托盤原始排列位置：直接交給 flow layout，移除 fixed 定位
+    requestAnimationFrame(()=>{
+      drag.style.position = "";
+      drag.style.left = "";
+      drag.style.top = "";
+      drag.style.width = "";
+      drag.style.height = "";
+      drag.style.margin = "";
+    });
+  }
+
+  /* =========================================================
+     慶祝畫面 + confetti
+     ========================================================= */
+  function showCelebration(){
+    const el = document.getElementById("celebrate");
+    el.classList.add("show");
+    spawnConfetti();
+    chimeSuccess();
+  }
+  function spawnConfetti(){
+    const colors = ["#FF8C70","#FFC857","#7BC67E","#6FB8D9","#B98FD1"];
+    const el = document.getElementById("celebrate");
+    for(let i=0;i<26;i++){
+      const c = document.createElement("div");
+      c.className = "confetti";
+      c.style.left = (Math.random()*100) + "%";
+      c.style.background = colors[Math.floor(Math.random()*colors.length)];
+      c.style.animationDuration = (1.6 + Math.random()*1.2) + "s";
+      c.style.animationDelay = (Math.random()*0.4) + "s";
+      el.appendChild(c);
+      setTimeout(()=>c.remove(), 3500);
+    }
+  }
+  document.querySelector('[data-action="play-again"]').addEventListener("pointerdown", ()=>{
+    chimeTap();
+    document.getElementById("celebrate").classList.remove("show");
+    buildMatchScreen(currentCategoryKey);
+  });
+
+  /* 防止平板上的雙指縮放/捲動干擾遊戲 */
+  document.addEventListener("gesturestart", e=>e.preventDefault());
+  document.addEventListener("touchmove", e=>{ if(e.scale && e.scale!==1) e.preventDefault(); }, {passive:false});
+
+})();
+</script>
+</body>
+</html>
