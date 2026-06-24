@@ -454,13 +454,14 @@
       u.rate = 0.85;
       u.pitch = 1.15;
       const v = voices.find(v=>v.lang && v.lang.toLowerCase().startsWith("zh"));
+      const zhList = voices.filter(v=>v.lang && (v.lang.toLowerCase().includes("zh") || v.lang.toLowerCase().includes("cmn"))).map(v=>v.name+"("+v.lang+")").join(", ");
       if(v) u.voice = v;
       currentUtterance = u;
       u.onstart = ()=> debugLog(`✅開始講「${text}」| voices=${voices.length} | 聲音=${v?v.name:"(無zh,用預設)"}`);
       u.onerror = (e)=> debugLog(`❌錯誤:${e.error} | text=${text} | voices=${voices.length}`);
       u.onend = ()=> debugLog(`✔️講完「${text}」`);
       window.speechSynthesis.speak(u);
-      debugLog(`📤已送出「${text}」| voices=${voices.length} | speaking=${window.speechSynthesis.speaking} | pending=${window.speechSynthesis.pending}`);
+      debugLog(`📤送出「${text}」|voices=${voices.length}|找到中文=${v?v.name+"/"+v.lang:"無"}|中文清單=[${zhList||"無"}]`);
     }catch(e){
       debugLog(`❌例外:${e.message}`);
     }
