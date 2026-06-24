@@ -396,7 +396,11 @@
     if(!audioCtx){
       try{ audioCtx = new (window.AudioContext || window.webkitAudioContext)(); }catch(e){}
     }
-    if(audioCtx && audioCtx.state === "suspended"){ audioCtx.resume(); }
+    // iOS Safari：speechSynthesis 啟動會讓 AudioContext 進入 "interrupted"（非 "suspended"），
+    // 兩種狀態都需要 resume() 才能恢復，否則後續 Web Audio 音效會永久失聲
+    if(audioCtx && (audioCtx.state === "suspended" || audioCtx.state === "interrupted")){
+      audioCtx.resume();
+    }
   }
 
   function playTone(freqs, durEach, type){
