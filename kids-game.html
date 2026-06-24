@@ -453,7 +453,11 @@
       u.lang = "zh-TW";
       u.rate = 0.85;
       u.pitch = 1.15;
-      const v = voices.find(v=>v.lang && v.lang.toLowerCase().startsWith("zh"));
+      const isChineseName = (name)=> /[\u4e00-\u9fff]/.test(name||"");
+      const v = voices.find(v=>v.lang && v.lang.toLowerCase()==="zh-tw" && isChineseName(v.name))
+             || voices.find(v=>v.lang && v.lang.toLowerCase()==="zh-tw")
+             || voices.find(v=>v.lang && v.lang.toLowerCase().startsWith("zh") && isChineseName(v.name))
+             || voices.find(v=>v.lang && v.lang.toLowerCase().startsWith("zh"));
       const zhList = voices.filter(v=>v.lang && (v.lang.toLowerCase().includes("zh") || v.lang.toLowerCase().includes("cmn"))).map(v=>v.name+"("+v.lang+")").join(", ");
       if(v) u.voice = v;
       currentUtterance = u;
