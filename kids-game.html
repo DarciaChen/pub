@@ -95,6 +95,7 @@
   .mode-card .label{ font-size: clamp(20px, 3.2vh, 34px); font-weight:800; color: var(--ink); }
   .mode-card.read{ background: linear-gradient(180deg,#FFF0CF,#FFE4A3); }
   .mode-card.match{ background: linear-gradient(180deg,#D9F0DA,#BFE6C2); }
+  .mode-card.memory{ background: linear-gradient(180deg,#E3D9F5,#CDB8EC); }
 
   /* ---------- 分類選擇 ---------- */
   .category-grid{
@@ -213,6 +214,61 @@
     transition: transform .35s cubic-bezier(.34,1.56,.64,1);
   }
 
+  /* ---------- 翻翻樂 ---------- */
+  .memory-grid{
+    display:grid;
+    grid-template-columns: repeat(4, minmax(70px, 20vw));
+    gap: 2.2vh 2.5vw;
+    justify-content:center;
+    align-content:center;
+  }
+  .memory-card{
+    aspect-ratio: 1/1.05;
+    border-radius: 22px;
+    border:none;
+    box-shadow: var(--card-shadow);
+    display:flex; align-items:center; justify-content:center;
+    cursor:pointer;
+    position:relative;
+    background: linear-gradient(160deg,#FFD9A0,#FFB870);
+    transition: transform .16s cubic-bezier(.34,1.56,.64,1), background .15s;
+    font-family:inherit;
+  }
+  .memory-card .back-icon{
+    font-size: clamp(28px, 5.5vh, 48px);
+    opacity:.85;
+  }
+  .memory-card .face{
+    display:none;
+    flex-direction:column;
+    align-items:center;
+    justify-content:center;
+    gap: 0.6vh;
+    width:100%; height:100%;
+  }
+  .memory-card .face .face-emoji{ font-size: clamp(34px, 6.5vh, 64px); }
+  .memory-card .face .face-color{
+    width: 50%; height: 38%;
+    border-radius: 16px;
+  }
+  .memory-card .face .face-label{
+    font-size: clamp(11px, 1.6vh, 16px);
+    font-weight:700;
+    color: var(--ink);
+    opacity:.6;
+  }
+  .memory-card.open{ background:#fff; }
+  .memory-card.open .back-icon{ display:none; }
+  .memory-card.open .face{ display:flex; }
+  .memory-card.matched{ background: linear-gradient(160deg,#D9F0DA,#BFE6C2); }
+  .memory-card.shake{ animation: memshake .35s ease; }
+  .memory-card.pop{ transform: scale(1.1); }
+  @keyframes memshake{
+    0%,100%{ transform: translateX(0); }
+    25%{ transform: translateX(-6px); }
+    75%{ transform: translateX(6px); }
+  }
+
   /* ---------- 慶祝畫面 ---------- */
   #celebrate{
     position:absolute; inset:0;
@@ -278,6 +334,10 @@
         <div class="emoji">🧩</div>
         <div class="label">配對遊戲</div>
       </button>
+      <button class="mode-card memory" data-mode="memory">
+        <div class="emoji">🎴</div>
+        <div class="label">翻翻樂</div>
+      </button>
     </div>
   </div>
 
@@ -301,6 +361,12 @@
       <div class="targets-row" id="targets-row"></div>
       <div class="tray" id="tray-row"></div>
     </div>
+  </div>
+
+  <!-- 翻翻樂 -->
+  <div class="screen" id="screen-memory">
+    <button class="home-btn" data-action="go-category">⬅️</button>
+    <div class="memory-grid" id="memory-grid"></div>
   </div>
 
   <!-- 慶祝畫面 -->
@@ -478,6 +544,7 @@
     category: document.getElementById("screen-category"),
     read: document.getElementById("screen-read"),
     match: document.getElementById("screen-match"),
+    memory: document.getElementById("screen-memory"),
   };
   function showScreen(name){
     Object.values(screens).forEach(s=>s.classList.remove("active"));
@@ -499,7 +566,7 @@
       currentMode = btn.dataset.mode;
       buildCategoryGrid();
       const titleEl = document.getElementById("category-title");
-      titleEl.textContent = currentMode === "read" ? "選一個主題來認識" : "選一個主題來配對";
+      titleEl.textContent = currentMode === "read" ? "選一個主題來認識" : currentMode === "memory" ? "選一個主題來翻翻樂" : "選一個主題來配對";
       goCategory();
     });
   });
@@ -524,6 +591,9 @@
         if(currentMode === "read"){
           buildReadScreen(key);
           showScreen("read");
+        } else if(currentMode === "memory"){
+          buildMemoryScreen(key);
+          showScreen("memory");
         } else {
           buildMatchScreen(key);
           showScreen("match");
@@ -747,6 +817,103 @@
   }
 
   /* =========================================================
+     翻翻樂：4對8張卡的記憶配對遊戲
+     ========================================================= */
+  let memoryState = null;
+
+  function buildMemoryScreen(key){
+    const cat = CATEGORIES[key];
+    const picked = shuffle(cat.items).slice(0, 4); // 每輪 4 對
+    const cards = shuffle(picked.flatMap(item => [{item}, {item}]));
+
+    memoryState = { cards, flippedIdx: [], matchedCount: 0, total: picked.length, busy: false };
+
+    const grid = document.getElementById("memory-grid");
+    grid.innerHTML = "";
+
+    cards.forEach((card, idx)=>{
+      const el = document.createElement("button");
+      el.className = "memory-card";
+
+      const back = document.createElement("div");
+      back.className = "back-icon";
+      back.textContent = "❓";
+      el.appendChild(back);
+
+      const face = document.createElement("div");
+      face.className = "face";
+      if(cat.isColor){
+        const colorBox = document.createElement("div");
+        colorBox.className = "face-color";
+        colorBox.style.background = card.item.color;
+        face.appendChild(colorBox);
+      } else {
+        const emojiEl = document.createElement("div");
+        emojiEl.className = "face-emoji";
+        emojiEl.textContent = card.item.emoji;
+        face.appendChild(emojiEl);
+      }
+      const labelEl = document.createElement("div");
+      labelEl.className = "face-label";
+      labelEl.textContent = card.item.label;
+      face.appendChild(labelEl);
+      el.appendChild(face);
+
+      card.el = el;
+      el.addEventListener("pointerdown", ()=> onMemoryCardTap(idx));
+      grid.appendChild(el);
+    });
+  }
+
+  function onMemoryCardTap(idx){
+    const st = memoryState;
+    if(!st || st.busy) return;
+    const card = st.cards[idx];
+    if(card.el.classList.contains("open") || card.el.classList.contains("matched")) return;
+
+    ensureAudio(); chimeTap();
+    card.el.classList.add("open", "pop");
+    setTimeout(()=>card.el.classList.remove("pop"), 200);
+    speak(card.item.label);
+
+    st.flippedIdx.push(idx);
+    if(st.flippedIdx.length < 2) return;
+
+    st.busy = true;
+    const [i1, i2] = st.flippedIdx;
+    const c1 = st.cards[i1], c2 = st.cards[i2];
+
+    if(c1.item.id === c2.item.id){
+      // 配對成功：短暫停留讓孩子看清楚兩張卡，再標記成功
+      setTimeout(()=>{
+        c1.el.classList.add("matched");
+        c2.el.classList.add("matched");
+        chimeSuccess();
+        speak(c1.item.label + "，配對成功");
+        st.matchedCount++;
+        st.flippedIdx = [];
+        st.busy = false;
+        if(st.matchedCount >= st.total){
+          setTimeout(showCelebration, 500);
+        }
+      }, 500);
+    } else {
+      // 配對失敗：溫和回饋，停留後蓋回去，不算「錯誤」
+      setTimeout(()=>{
+        chimeGentle();
+        c1.el.classList.add("shake");
+        c2.el.classList.add("shake");
+      }, 400);
+      setTimeout(()=>{
+        c1.el.classList.remove("open","shake");
+        c2.el.classList.remove("open","shake");
+        st.flippedIdx = [];
+        st.busy = false;
+      }, 900);
+    }
+  }
+
+  /* =========================================================
      慶祝畫面 + confetti
      ========================================================= */
   function showCelebration(){
@@ -772,7 +939,11 @@
   document.querySelector('[data-action="play-again"]').addEventListener("pointerdown", ()=>{
     chimeTap();
     document.getElementById("celebrate").classList.remove("show");
-    buildMatchScreen(currentCategoryKey);
+    if(currentMode === "memory"){
+      buildMemoryScreen(currentCategoryKey);
+    } else {
+      buildMatchScreen(currentCategoryKey);
+    }
   });
 
   /* 防止平板上的雙指縮放/捲動干擾遊戲 */
