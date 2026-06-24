@@ -432,13 +432,24 @@
   // iOS 18 Safari：speechSynthesis.speak() 不認 pointerdown 為有效使用者手勢，
   // 但只要頁面曾經有過一次 click 並成功呼叫過 speak()，之後任何事件觸發的 speak() 都會正常——
   // 在第一次點擊時用一個極短、靜音的呼叫解鎖整頁，不需要改動既有的 pointerdown 互動邏輯
-  document.addEventListener("click", function unlockSpeech(){
+  document.addEventListener("pointerdown", function logPointerdown(e){
+    debugLogEarly("👇全域pointerdown target="+(e.target.tagName+"."+e.target.className));
+  }, {once:true});
+
+  document.addEventListener("click", function unlockSpeech(e){
     try{
       const u = new SpeechSynthesisUtterance(" ");
       u.volume = 0;
       window.speechSynthesis.speak(u);
-    }catch(e){}
+      if(document.getElementById("debug-panel")) debugLogEarly("🔓解鎖click觸發 target="+(e.target.tagName+"."+e.target.className));
+    }catch(err){
+      if(document.getElementById("debug-panel")) debugLogEarly("🔓解鎖例外:"+err.message);
+    }
   }, {once:true});
+  function debugLogEarly(msg){
+    const el = document.getElementById("debug-panel");
+    if(el) el.textContent = "[" + new Date().toLocaleTimeString() + "] " + msg + "\n" + el.textContent;
+  }
   function loadVoices(){
     voices = window.speechSynthesis ? window.speechSynthesis.getVoices() : [];
   }
