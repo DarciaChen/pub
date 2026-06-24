@@ -464,8 +464,9 @@
       u.onstart = ()=> debugLog(`✅開始講「${text}」| voices=${voices.length} | 聲音=${v?v.name:"(無zh,用預設)"}`);
       u.onerror = (e)=> debugLog(`❌錯誤:${e.error} | text=${text} | voices=${voices.length}`);
       u.onend = ()=> debugLog(`✔️講完「${text}」`);
+      window.speechSynthesis.resume(); // 防禦性喚醒：若引擎卡在 paused 狀態，這能解除
       window.speechSynthesis.speak(u);
-      debugLog(`📤送出「${text}」|voices=${voices.length}|找到中文=${v?v.name+"/"+v.lang:"無"}|中文清單=[${zhList||"無"}]`);
+      debugLog(`📤送出「${text}」|voices=${voices.length}|找到中文=${v?v.name+"/"+v.lang:"無"}|paused=${window.speechSynthesis.paused}|中文清單=[${zhList||"無"}]`);
     }catch(e){
       debugLog(`❌例外:${e.message}`);
     }
