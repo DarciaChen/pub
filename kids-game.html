@@ -779,7 +779,7 @@
 
   /* 防止平板上的雙指縮放/捲動干擾遊戲 */
   /* 臨時診斷：點診斷面板跑最簡化的英文語音測試 */
-  document.getElementById("debug-panel").addEventListener("pointerdown", ()=>{
+  document.getElementById("debug-panel").addEventListener("click", ()=>{
     debugLog("🧪測試中...");
     try{
       const t = new SpeechSynthesisUtterance("hello");
