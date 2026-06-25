@@ -971,6 +971,7 @@
 
     // 拼圖塊（打散放入托盤）
     const tray = document.getElementById("puzzle-tray");
+    tray.style.minHeight = cellSize + "px"; // 鎖住高度，避免拿起最後一塊時托盤縮水、整塊拼圖板跟著位移
     tray.innerHTML = "";
     const order = shuffle(Array.from({length: total}, (_, i)=>i));
     order.forEach(slotIndex=>{
