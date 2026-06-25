@@ -1088,7 +1088,19 @@
       piece.style.top = r.top + "px";
       piece.style.width = r.width + "px";
       piece.style.height = r.height + "px";
-      setTimeout(()=>{ piece.classList.add("placed"); }, 220);
+      setTimeout(()=>{
+        // 把拼圖塊掛到格子底下，改用相對於格子的定位，
+        // 之後不管版面怎麼變動（例如托盤縮小造成整體位移），拼圖塊都會跟著格子一起移動
+        piece.classList.remove("snap-back");
+        piece.classList.add("placed");
+        piece.style.position = "absolute";
+        piece.style.left = "0";
+        piece.style.top = "0";
+        piece.style.width = "100%";
+        piece.style.height = "100%";
+        piece.style.margin = "0";
+        s.appendChild(piece);
+      }, 220);
       s.classList.add("filled");
       chimeSuccess();
       puzzleState.filledCount++;
