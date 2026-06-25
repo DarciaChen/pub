@@ -78,10 +78,9 @@
     justify-content:center; align-items:stretch;
   }
   .mode-card{
-    width: min(38vw, 380px);
-    min-width:260px;
+    width: clamp(112px, 25vw, 260px);
     aspect-ratio: 1/0.95;
-    border-radius: 36px;
+    border-radius: 32px;
     border:none;
     box-shadow: var(--card-shadow);
     display:flex; flex-direction:column; align-items:center; justify-content:center;
@@ -91,8 +90,8 @@
     font-family:inherit;
   }
   .mode-card:active{ transform: scale(0.94) translateY(4px); box-shadow:0 4px 0 rgba(74,63,53,0.12); }
-  .mode-card .emoji{ font-size: clamp(48px, 9vh, 110px); }
-  .mode-card .label{ font-size: clamp(20px, 3.2vh, 34px); font-weight:800; color: var(--ink); }
+  .mode-card .emoji{ font-size: clamp(34px, 7vh, 78px); }
+  .mode-card .label{ font-size: clamp(15px, 2.4vh, 26px); font-weight:800; color: var(--ink); }
   .mode-card.read{ background: linear-gradient(180deg,#FFF0CF,#FFE4A3); }
   .mode-card.match{ background: linear-gradient(180deg,#D9F0DA,#BFE6C2); }
   .mode-card.memory{ background: linear-gradient(180deg,#E3D9F5,#CDB8EC); }
