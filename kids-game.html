@@ -365,8 +365,12 @@
     transform: translate(-50%,-50%);
   }
   .pond-creature.caught{
-    transform: translate(-50%,-50%) scale(0.2);
-    opacity:0;
+    animation: pond-catch .55s ease-out forwards;
+  }
+  @keyframes pond-catch{
+    0%{ transform: translate(-50%,-50%) scale(1) rotate(0deg); opacity:1; }
+    35%{ transform: translate(-50%,-85%) scale(1.6) rotate(10deg); opacity:1; }
+    100%{ transform: translate(-50%,-160%) scale(0.15) rotate(25deg); opacity:0; }
   }
   @keyframes pond-bob{
     0%,100%{ margin-top: 0px; }
@@ -1218,6 +1222,14 @@
     {id:"shell", label:"貝殼", emoji:"🐚"},
     {id:"starfish", label:"海星", emoji:"⭐"},
     {id:"pearl", label:"珍珠", emoji:null}, // 用 CSS 畫的珍珠，沒有對應 emoji
+    {id:"whale", label:"鯨魚", emoji:"🐳"},
+    {id:"shark", label:"鯊魚", emoji:"🦈"},
+    {id:"blowfish", label:"河豚", emoji:"🐡"},
+    {id:"dolphin", label:"海豚", emoji:"🐬"},
+    {id:"seal", label:"海獅", emoji:"🦭"}, // emoji 官方名稱是海豹，目前唯一可用的鰭足類近似圖示
+    {id:"octopus", label:"章魚", emoji:"🐙"},
+    {id:"lobster", label:"龍蝦", emoji:"🦞"},
+    {id:"turtle", label:"海龜", emoji:"🐢"},
   ];
   const POND_TARGET_COUNT = 6;
   let netDragAttached = false;
@@ -1315,7 +1327,7 @@
     setTimeout(()=>{
       el.remove();
       spawnPondCreature(); // 補一隻新的，維持池子裡固定數量，可以一直撈
-    }, 350);
+    }, 550);
   }
 
   /* =========================================================
