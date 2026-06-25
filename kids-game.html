@@ -97,6 +97,7 @@
   .mode-card.match{ background: linear-gradient(180deg,#D9F0DA,#BFE6C2); }
   .mode-card.memory{ background: linear-gradient(180deg,#E3D9F5,#CDB8EC); }
   .mode-card.puzzle{ background: linear-gradient(180deg,#FFD9D2,#FFB0A3); }
+  .mode-card.pond{ background: linear-gradient(180deg,#BEE3F0,#7FC8DE); }
 
   /* ---------- 分類選擇 ---------- */
   .category-grid{
@@ -346,6 +347,65 @@
     display:flex; align-items:center; justify-content:center;
   }
 
+  /* ---------- 撈魚池 ---------- */
+  #screen-pond{
+    background: linear-gradient(180deg, #CDEEF8 0%, #6FC1DC 100%);
+  }
+  .pond{
+    position:relative;
+    width:100%; height:100%;
+    overflow:hidden;
+  }
+  .pond-creature{
+    position:absolute;
+    font-size: clamp(40px, 8vh, 72px);
+    line-height:1;
+    animation: pond-bob 2.4s ease-in-out infinite;
+    user-select:none;
+    transition: transform .25s ease, opacity .25s ease;
+    transform: translate(-50%,-50%);
+  }
+  .pond-creature.caught{
+    transform: translate(-50%,-50%) scale(0.2);
+    opacity:0;
+  }
+  @keyframes pond-bob{
+    0%,100%{ margin-top: 0px; }
+    50%{ margin-top: -14px; }
+  }
+  .pearl-shape{
+    width: clamp(30px, 6vh, 52px);
+    height: clamp(30px, 6vh, 52px);
+    border-radius:50%;
+    background: radial-gradient(circle at 35% 30%, #fff, #F3E9DA 55%, #DCC9AE 100%);
+    box-shadow: 0 3px 8px rgba(0,0,0,0.18);
+  }
+  .fish-net{
+    position:absolute;
+    width: clamp(72px, 14vh, 120px);
+    height: clamp(96px, 18vh, 158px);
+    touch-action:none;
+    cursor:pointer;
+    z-index:50;
+    display:flex; flex-direction:column; align-items:center;
+  }
+  .net-hoop{
+    width:100%; height:68%;
+    border-radius:50%;
+    border: 6px solid #C9A24B;
+    background: radial-gradient(circle, rgba(255,255,255,0.4) 0%, rgba(255,255,255,0.12) 70%);
+    box-shadow: inset 0 0 0 3px rgba(255,255,255,0.45), var(--card-shadow);
+    flex: 0 0 auto;
+  }
+  .net-handle{
+    width: 10%;
+    height: 32%;
+    min-width:8px;
+    background: linear-gradient(180deg,#A6753A,#7A5226);
+    border-radius: 6px;
+    flex: 0 0 auto;
+  }
+
   /* ---------- 慶祝畫面 ---------- */
   #celebrate{
     position:absolute; inset:0;
@@ -419,6 +479,10 @@
         <div class="emoji">🧩</div>
         <div class="label">拼圖</div>
       </button>
+      <button class="mode-card pond" data-mode="pond">
+        <div class="emoji">🎣</div>
+        <div class="label">撈魚池</div>
+      </button>
     </div>
   </div>
 
@@ -457,6 +521,14 @@
       <div class="puzzle-preview" id="puzzle-preview"></div>
       <div class="puzzle-board" id="puzzle-board"></div>
       <div class="tray" id="puzzle-tray"></div>
+    </div>
+  </div>
+
+  <!-- 撈魚池 -->
+  <div class="screen" id="screen-pond">
+    <button class="home-btn" data-action="go-home">🏠</button>
+    <div class="pond" id="pond">
+      <div class="fish-net" id="fish-net"><div class="net-hoop"></div><div class="net-handle"></div></div>
     </div>
   </div>
 
@@ -637,6 +709,7 @@
     match: document.getElementById("screen-match"),
     memory: document.getElementById("screen-memory"),
     puzzle: document.getElementById("screen-puzzle"),
+    pond: document.getElementById("screen-pond"),
   };
   function showScreen(name){
     Object.values(screens).forEach(s=>s.classList.remove("active"));
@@ -656,6 +729,11 @@
     btn.addEventListener("pointerdown", ()=>{
       ensureAudio(); chimeTap();
       currentMode = btn.dataset.mode;
+      if(currentMode === "pond"){
+        buildPondScreen();
+        showScreen("pond");
+        return;
+      }
       buildCategoryGrid();
       const titleEl = document.getElementById("category-title");
       titleEl.textContent = currentMode === "read" ? "選一個主題來認識" : currentMode === "memory" ? "選一個主題來翻翻樂" : currentMode === "puzzle" ? "選一個主題來拼圖" : "選一個主題來配對";
@@ -1129,6 +1207,116 @@
       piece.style.top = "";
       piece.style.margin = "";
     });
+  }
+
+  /* =========================================================
+     撈魚池：自由拖網，靠近生物就撈起來，念名稱，不計時不計數
+     ========================================================= */
+  const POND_CREATURES = [
+    {id:"fish", label:"小魚", emoji:"🐠"},
+    {id:"crab", label:"螃蟹", emoji:"🦀"},
+    {id:"shrimp", label:"蝦子", emoji:"🦐"},
+    {id:"shell", label:"貝殼", emoji:"🐚"},
+    {id:"starfish", label:"海星", emoji:"⭐"},
+    {id:"pearl", label:"珍珠", emoji:null}, // 用 CSS 畫的珍珠，沒有對應 emoji
+  ];
+  const POND_TARGET_COUNT = 6;
+  let netDragAttached = false;
+
+  function buildPondScreen(){
+    const pond = document.getElementById("pond");
+    pond.querySelectorAll(".pond-creature").forEach(el=>el.remove());
+    for(let i=0;i<POND_TARGET_COUNT;i++){
+      spawnPondCreature();
+    }
+
+    const net = document.getElementById("fish-net");
+    net.style.position = "absolute";
+    net.style.left = "50%";
+    net.style.top = "68%";
+    net.style.transform = "translate(-50%,-50%)";
+
+    if(!netDragAttached){
+      attachNetDragHandlers(net);
+      netDragAttached = true; // 只掛一次，避免重複進入畫面時疊加監聽器
+    }
+  }
+
+  function spawnPondCreature(){
+    const pond = document.getElementById("pond");
+    const creature = POND_CREATURES[Math.floor(Math.random()*POND_CREATURES.length)];
+    const el = document.createElement("div");
+    el.className = "pond-creature";
+    el.dataset.label = creature.label;
+    if(creature.emoji){
+      el.textContent = creature.emoji;
+    } else {
+      el.classList.add("pearl-shape");
+    }
+    const x = 10 + Math.random()*76; // % 範圍，避開邊緣
+    const y = 14 + Math.random()*58;
+    el.style.left = x + "%";
+    el.style.top = y + "%";
+    el.style.animationDelay = (Math.random()*2).toFixed(2) + "s";
+    pond.appendChild(el);
+  }
+
+  function attachNetDragHandlers(net){
+    let startX=0, startY=0, originX=0, originY=0, dragging=false;
+
+    net.addEventListener("pointerdown", (e)=>{
+      ensureAudio();
+      dragging = true;
+      net.setPointerCapture(e.pointerId);
+      const rect = net.getBoundingClientRect();
+      startX = e.clientX; startY = e.clientY;
+      originX = rect.left; originY = rect.top;
+      net.style.position = "fixed";
+      net.style.left = originX + "px";
+      net.style.top = originY + "px";
+      net.style.transform = "none";
+    });
+
+    net.addEventListener("pointermove", (e)=>{
+      if(!dragging) return;
+      const dx = e.clientX - startX;
+      const dy = e.clientY - startY;
+      net.style.left = (originX+dx) + "px";
+      net.style.top = (originY+dy) + "px";
+      checkNetCatch(net);
+    });
+
+    net.addEventListener("pointerup", ()=>{ dragging = false; });
+    net.addEventListener("pointercancel", ()=>{ dragging = false; });
+  }
+
+  function checkNetCatch(net){
+    const nr = net.getBoundingClientRect();
+    // 判定中心偏向網框（上半部），更貼近實際撈魚的手感
+    const ncx = nr.left + nr.width/2;
+    const ncy = nr.top + nr.height*0.34;
+    const catchRadius = nr.width * 0.45;
+
+    document.querySelectorAll(".pond-creature").forEach(el=>{
+      if(el.dataset.caught) return;
+      const r = el.getBoundingClientRect();
+      const cx = r.left + r.width/2, cy = r.top + r.height/2;
+      const dist = Math.hypot(ncx-cx, ncy-cy);
+      if(dist < catchRadius){
+        catchCreature(el);
+      }
+    });
+  }
+
+  function catchCreature(el){
+    el.dataset.caught = "1";
+    chimeSuccess();
+    speak(el.dataset.label);
+    el.classList.add("caught");
+    setTimeout(()=>{
+      el.remove();
+      spawnPondCreature(); // 補一隻新的，維持池子裡固定數量，可以一直撈
+    }, 350);
   }
 
   /* =========================================================
