@@ -302,7 +302,14 @@
     border: 2px dashed #C9BFAE;
     background: rgba(255,255,255,0.5);
     position:relative;
+    overflow:hidden;
     transition: background .2s, border-color .2s;
+  }
+  .puzzle-slot .slot-hint{
+    position:absolute;
+    display:flex; align-items:center; justify-content:center;
+    opacity:.22;
+    pointer-events:none;
   }
   .puzzle-slot.glow{
     border-color: var(--leaf);
@@ -312,6 +319,7 @@
     border-style:solid;
     border-color: var(--leaf);
   }
+  .puzzle-slot.filled .slot-hint{ opacity:0; }
   .puzzle-piece{
     border-radius: 14px;
     background:#fff;
@@ -325,7 +333,11 @@
     box-shadow: 0 18px 30px rgba(0,0,0,0.18);
     z-index:100;
   }
-  .puzzle-piece.placed{ visibility:hidden; }
+  .puzzle-piece.placed{
+    border-radius: 0;
+    box-shadow: none;
+    z-index:5;
+  }
   .puzzle-piece.snap-back{
     transition: transform .35s cubic-bezier(.34,1.56,.64,1);
   }
@@ -661,6 +673,7 @@
     const grid = document.getElementById("category-grid");
     grid.innerHTML = "";
     Object.keys(CATEGORIES).forEach(key=>{
+      if(currentMode === "puzzle" && CATEGORIES[key].isColor) return; // 顏色只是色塊，不適合拼圖
       const cat = CATEGORIES[key];
       const card = document.createElement("button");
       card.className = "cat-card";
@@ -936,6 +949,23 @@
       slot.style.width = cellSize + "px";
       slot.style.height = cellSize + "px";
       slot.dataset.slotIndex = i;
+
+      const row = Math.floor(i / cols);
+      const col = i % cols;
+      const hint = document.createElement("div");
+      hint.className = "slot-hint";
+      hint.style.width = PUZZLE_BOARD_SIZE + "px";
+      hint.style.height = PUZZLE_BOARD_SIZE + "px";
+      hint.style.left = (-col * cellSize) + "px";
+      hint.style.top = (-row * cellSize) + "px";
+      if(cat.isColor){
+        hint.style.background = item.color;
+      } else {
+        hint.style.fontSize = (PUZZLE_BOARD_SIZE * 0.75) + "px";
+        hint.textContent = item.emoji;
+      }
+      slot.appendChild(hint);
+
       board.appendChild(slot);
     }
 
