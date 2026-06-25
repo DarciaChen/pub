@@ -1084,15 +1084,17 @@
     if(Number(s.dataset.slotIndex) === correctIndex){
       const r = s.getBoundingClientRect();
       piece.classList.add("snap-back");
-      piece.style.left = (r.left) + "px";
-      piece.style.top = (r.top) + "px";
+      piece.style.left = r.left + "px";
+      piece.style.top = r.top + "px";
+      piece.style.width = r.width + "px";
+      piece.style.height = r.height + "px";
       setTimeout(()=>{ piece.classList.add("placed"); }, 220);
       s.classList.add("filled");
       chimeSuccess();
       puzzleState.filledCount++;
       if(puzzleState.filledCount >= puzzleState.total){
         speak(item.label + "，拼圖完成");
-        setTimeout(showCelebration, 500);
+        setTimeout(showCelebration, 1800); // 拉長停留時間，讓孩子能看清楚拼好的完整圖案
       }
       return true;
     } else {
