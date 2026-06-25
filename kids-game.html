@@ -917,14 +917,19 @@
      ========================================================= */
   let puzzleState = null;
   const PUZZLE_COLS = 2, PUZZLE_ROWS = 2;
-  const PUZZLE_BOARD_SIZE = Math.min(320, 280); // px，棋盤總邊長
+  function getPuzzleBoardSize(){
+    // 響應式棋盤總邊長：同時考慮寬跟高，手機跟平板（8-10吋）都要合理顯示
+    const vw = window.innerWidth, vh = window.innerHeight;
+    return Math.max(220, Math.min(vw * 0.62, vh * 0.42, 480));
+  }
 
   function buildPuzzleScreen(key){
     const cat = CATEGORIES[key];
     const item = shuffle(cat.items)[0]; // 隨機抽 1 個項目當拼圖內容
     const cols = PUZZLE_COLS, rows = PUZZLE_ROWS;
     const total = cols * rows;
-    const cellSize = PUZZLE_BOARD_SIZE / cols;
+    const boardSize = getPuzzleBoardSize();
+    const cellSize = boardSize / cols;
 
     puzzleState = { item, cat, filledCount: 0, total };
 
@@ -954,14 +959,14 @@
       const col = i % cols;
       const hint = document.createElement("div");
       hint.className = "slot-hint";
-      hint.style.width = PUZZLE_BOARD_SIZE + "px";
-      hint.style.height = PUZZLE_BOARD_SIZE + "px";
+      hint.style.width = boardSize + "px";
+      hint.style.height = boardSize + "px";
       hint.style.left = (-col * cellSize) + "px";
       hint.style.top = (-row * cellSize) + "px";
       if(cat.isColor){
         hint.style.background = item.color;
       } else {
-        hint.style.fontSize = (PUZZLE_BOARD_SIZE * 0.75) + "px";
+        hint.style.fontSize = (boardSize * 0.75) + "px";
         hint.textContent = item.emoji;
       }
       slot.appendChild(hint);
@@ -985,14 +990,14 @@
 
       const art = document.createElement("div");
       art.className = "piece-art";
-      art.style.width = PUZZLE_BOARD_SIZE + "px";
-      art.style.height = PUZZLE_BOARD_SIZE + "px";
+      art.style.width = boardSize + "px";
+      art.style.height = boardSize + "px";
       art.style.left = (-col * cellSize) + "px";
       art.style.top = (-row * cellSize) + "px";
       if(cat.isColor){
         art.style.background = item.color;
       } else {
-        art.style.fontSize = (PUZZLE_BOARD_SIZE * 0.75) + "px";
+        art.style.fontSize = (boardSize * 0.75) + "px";
         art.textContent = item.emoji;
       }
       piece.appendChild(art);
