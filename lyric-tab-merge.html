@@ -1,0 +1,387 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>歌詞 × 吉他譜 合併工具</title>
+<script src="https://cdn.jsdelivr.net/npm/kuromoji@0.1.2/build/kuromoji.js"></script>
+<style>
+  :root{
+    --bg:#0f1115;
+    --panel:#171a21;
+    --border:#2a2e38;
+    --text:#e8e9ed;
+    --muted:#8b8f9c;
+    --accent:#5fb3ff;
+    --chord:#ff9d5c;
+    --warn:#ffce5c;
+    --ok:#5ad17a;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    font-family: -apple-system, "Hiragino Sans", "Noto Sans TC", "Noto Sans JP", sans-serif;
+    background:var(--bg);
+    color:var(--text);
+    padding:16px;
+  }
+  h1{ font-size:17px; font-weight:600; margin:0 0 4px; }
+  .sub{ color:var(--muted); font-size:13px; margin:0 0 16px; line-height:1.5; }
+  .step{
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    font-size:11px;
+    color:var(--accent);
+    letter-spacing:.05em;
+    margin-bottom:6px;
+  }
+  .panel{
+    background:var(--panel);
+    border:1px solid var(--border);
+    border-radius:12px;
+    padding:14px;
+    margin-bottom:14px;
+  }
+  label{ display:block; font-size:13px; color:var(--muted); margin-bottom:6px; }
+  textarea{
+    width:100%;
+    min-height:120px;
+    background:#0c0e13;
+    color:var(--text);
+    border:1px solid var(--border);
+    border-radius:8px;
+    padding:10px;
+    font-size:15px;
+    line-height:1.7;
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    resize:vertical;
+  }
+  #tabInput, #myLyrics{ font-size:14px; }
+  .hint{ font-size:12px; color:var(--muted); margin-top:6px; line-height:1.5;}
+  .hint code{ background:#23262f; padding:1px 5px; border-radius:4px; color:var(--accent); }
+  button{
+    width:100%;
+    padding:13px;
+    border:none;
+    border-radius:10px;
+    background:var(--accent);
+    color:#0a0d12;
+    font-size:15px;
+    font-weight:600;
+    cursor:pointer;
+  }
+  button:active{ opacity:0.8; }
+  button:disabled{ opacity:0.5; cursor:wait; }
+  .controls{ display:flex; gap:8px; margin-top:10px; }
+  .controls button.secondary{ background:#23262f; color:var(--text); font-weight:500; }
+  .statusRow{ display:flex; align-items:center; gap:6px; margin-top:8px; font-size:12px; color:var(--muted); font-family: ui-monospace, monospace; }
+  .dot{ width:7px; height:7px; border-radius:50%; background:var(--warn); }
+  .dot.ready{ background:var(--ok); }
+  #output{ margin-top:18px; }
+  .block{ margin-bottom:12px; }
+  .chordRow{
+    color:var(--chord); font-weight:700;
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    white-space:pre; font-size:14px; line-height:1.4;
+  }
+  .lyricRow{ white-space:pre; font-size:16px; line-height:1.4; }
+  .label{ color:var(--accent); font-size:13px; font-weight:600; margin:10px 0 4px; }
+  .empty{ color:var(--muted); font-size:13px; text-align:center; padding:24px 0; }
+  .notice{
+    font-size:12px; color:var(--warn);
+    background:#2a2412; border:1px solid #4a3d1a;
+    border-radius:8px; padding:8px 10px; margin-top:10px;
+  }
+</style>
+</head>
+<body>
+
+<h1>歌詞 × 吉他譜 合併工具</h1>
+<p class="sub">貼上你自己創作的日文歌詞自動轉羅馬拼音，再貼上吉他譜文字檔，工具會把譜裡和弦的相對位置套到你的羅馬拼音歌詞上。原歌詞文字不會被保留或顯示。</p>
+
+<div class="panel">
+  <div class="step">STEP 1（選填）</div>
+  <label for="jpInput">原創日文歌詞 → 自動轉羅馬拼音</label>
+  <textarea id="jpInput" placeholder="貼上你自己創作的日文歌詞……"></textarea>
+  <button id="convertBtn" disabled style="margin-top:10px;">字典載入中…</button>
+  <div class="statusRow"><span class="dot" id="statusDot"></span><span id="statusText">正在載入辨識字典（約 5–10 秒）</span></div>
+  <div class="hint">轉換結果會自動填入下方「你自己的歌詞」欄位，可再手動微調。斷詞引擎：kuromoji.js，特殊讀法建議人工複核。</div>
+</div>
+
+<div class="panel">
+  <div class="step">STEP 2</div>
+  <label for="tabInput">吉他譜文字檔內容（含和弦行＋原歌詞行）</label>
+  <textarea id="tabInput" placeholder="範例（一般文字檔吉他譜格式）：
+
+C          G        Am
+これは げんの かしです
+F             C
+べつの ぎょうの かし"></textarea>
+  <div class="hint">支援常見格式：和弦行＋緊接的歌詞行交替出現。<code>[Verse]</code>、<code>[Chorus]</code> 段落標籤跟純和弦前奏/間奏會原樣保留。</div>
+</div>
+
+<div class="panel">
+  <div class="step">STEP 3</div>
+  <label for="myLyrics">你自己的歌詞（羅馬拼音，一行對應吉他譜裡的一句）</label>
+  <textarea id="myLyrics" placeholder="kimi no koto wo
+omou yo itsu mo"></textarea>
+  <div class="hint">由 STEP 1 自動填入，或自己手動貼上都可以。順序要跟吉他譜裡的歌詞行一致。</div>
+</div>
+
+<button onclick="merge()">合併產生</button>
+
+<div class="controls">
+  <button class="secondary" onclick="copyOutput()">複製文字版</button>
+  <button class="secondary" onclick="clearAll()">清空全部</button>
+</div>
+
+<div id="output"><div class="empty">完成上面步驟後按「合併產生」</div></div>
+
+<script>
+// ===================== 日文 → 羅馬拼音（取自 jp-romaji-tool） =====================
+const KANA = {
+  'ア':'a','イ':'i','ウ':'u','エ':'e','オ':'o',
+  'カ':'ka','キ':'ki','ク':'ku','ケ':'ke','コ':'ko',
+  'ガ':'ga','ギ':'gi','グ':'gu','ゲ':'ge','ゴ':'go',
+  'サ':'sa','シ':'shi','ス':'su','セ':'se','ソ':'so',
+  'ザ':'za','ジ':'ji','ズ':'zu','ゼ':'ze','ゾ':'zo',
+  'タ':'ta','チ':'chi','ツ':'tsu','テ':'te','ト':'to',
+  'ダ':'da','ヂ':'ji','ヅ':'zu','デ':'de','ド':'do',
+  'ナ':'na','ニ':'ni','ヌ':'nu','ネ':'ne','ノ':'no',
+  'ハ':'ha','ヒ':'hi','フ':'fu','ヘ':'he','ホ':'ho',
+  'バ':'ba','ビ':'bi','ブ':'bu','ベ':'be','ボ':'bo',
+  'パ':'pa','ピ':'pi','プ':'pu','ペ':'pe','ポ':'po',
+  'マ':'ma','ミ':'mi','ム':'mu','メ':'me','モ':'mo',
+  'ヤ':'ya','ユ':'yu','ヨ':'yo',
+  'ラ':'ra','リ':'ri','ル':'ru','レ':'re','ロ':'ro',
+  'ワ':'wa','ヰ':'i','ヱ':'e','ヲ':'o',
+  'ン':'n','ヴ':'vu',
+  'ァ':'a','ィ':'i','ゥ':'u','ェ':'e','ォ':'o'
+};
+const YOON = {'ャ':'a','ュ':'u','ョ':'o'};
+
+function katakanaToRomaji(reading){
+  if(!reading || reading === '*') return null;
+  let out = '';
+  const chars = Array.from(reading);
+  for(let i=0;i<chars.length;i++){
+    const c = chars[i];
+    const next = chars[i+1];
+    if(c === 'ッ'){
+      const nextRomaji = (next && KANA[next]) ? KANA[next] : '';
+      if(nextRomaji) out += nextRomaji[0];
+      continue;
+    }
+    if(c === 'ー'){
+      const last = out.slice(-1);
+      if('aiueo'.includes(last)) out += last;
+      continue;
+    }
+    if(YOON[c]){ continue; }
+    let base = KANA[c];
+    if(base === undefined){ out += c; continue; }
+    if(next && YOON[next]){
+      const stem = base.slice(0,-1);
+      base = stem + YOON[next];
+    }
+    if(c === 'ン'){
+      const after = next ? KANA[next] : null;
+      if(after && /^[aiueoy]/.test(after)) out += "n'";
+      else out += 'n';
+      continue;
+    }
+    out += base;
+  }
+  return out;
+}
+
+let tokenizer = null;
+const convertBtn = document.getElementById('convertBtn');
+const statusText = document.getElementById('statusText');
+const statusDot = document.getElementById('statusDot');
+
+kuromoji.builder({ dicPath: "https://cdn.jsdelivr.net/npm/kuromoji@0.1.2/dict/" }).build((err, tk) => {
+  if(err){
+    statusText.textContent = '字典載入失敗，請重新整理頁面再試一次';
+    return;
+  }
+  tokenizer = tk;
+  convertBtn.disabled = false;
+  convertBtn.textContent = '自動轉換羅馬拼音 → 填入 STEP 3';
+  statusText.textContent = '字典已就緒';
+  statusDot.classList.add('ready');
+});
+
+convertBtn.addEventListener('click', () => {
+  if(!tokenizer) return;
+  const text = document.getElementById('jpInput').value;
+  if(!text.trim()) return;
+
+  const rawLines = text.split('\n');
+  const plainLines = rawLines.map(rawLine => {
+    if(!rawLine.trim()) return '';
+    const tokens = tokenizer.tokenize(rawLine);
+    const romajiParts = [];
+    tokens.forEach(t => {
+      const surface = t.surface_form;
+      let romaji = katakanaToRomaji(t.reading);
+      if(romaji === null){
+        romaji = /^[a-zA-Z0-9]+$/.test(surface) ? surface : '';
+      }
+      if(romaji) romajiParts.push(romaji);
+    });
+    return romajiParts.join(' ');
+  });
+
+  document.getElementById('myLyrics').value = plainLines.join('\n');
+});
+
+// ===================== 吉他譜和弦位置合併 =====================
+function isChordToken(tok){
+  return /^[A-G](#|b)?(maj|min|dim|aug|sus|add)?\d{0,2}(\/[A-G](#|b)?)?$/i.test(tok);
+}
+function isChordLine(line){
+  const trimmed = line.trim();
+  if(!trimmed) return false;
+  const tokens = trimmed.split(/\s+/);
+  return tokens.length > 0 && tokens.every(isChordToken);
+}
+function isSectionLabel(line){
+  return /^\s*\[[^\]]+\]\s*$/.test(line);
+}
+function extractChordPositions(line){
+  const positions = [];
+  const re = /\S+/g;
+  let m;
+  while((m = re.exec(line)) !== null){
+    positions.push({pos: m.index, chord: m[0]});
+  }
+  return positions;
+}
+
+function parseTab(text){
+  const lines = text.split('\n');
+  const blocks = [];
+  let i = 0;
+  while(i < lines.length){
+    const line = lines[i];
+    if(isSectionLabel(line)){
+      blocks.push({type:'label', text: line.trim()});
+      i++; continue;
+    }
+    if(isChordLine(line)){
+      const chordPositions = extractChordPositions(line);
+      const next = lines[i+1];
+      if(next !== undefined && next.trim() !== '' && !isChordLine(next) && !isSectionLabel(next)){
+        blocks.push({type:'lyricBlock', chordPositions, origLen: next.length});
+        i += 2;
+      } else {
+        blocks.push({type:'instrumental', chordLine: line});
+        i += 1;
+      }
+      continue;
+    }
+    if(line.trim() === ''){
+      blocks.push({type:'blank'});
+      i++; continue;
+    }
+    blocks.push({type:'blank'});
+    i++;
+  }
+  return blocks;
+}
+
+function buildChordRow(lyricLen, chordPositions){
+  const arr = new Array(lyricLen + 50).fill(' ');
+  let lastEnd = -1;
+  chordPositions.slice().sort((a,b)=>a.pos-b.pos).forEach(cp=>{
+    let start = Math.max(cp.pos, lastEnd + 1);
+    for(let k=0;k<cp.chord.length;k++){ arr[start+k] = cp.chord[k]; }
+    lastEnd = start + cp.chord.length - 1;
+  });
+  return arr.join('').replace(/\s+$/,'');
+}
+
+function merge(){
+  const tabText = document.getElementById('tabInput').value;
+  const lyricsText = document.getElementById('myLyrics').value;
+  const output = document.getElementById('output');
+  output.innerHTML = "";
+
+  if(!tabText.trim() || !lyricsText.trim()){
+    output.innerHTML = '<div class="empty">完成上面步驟後按「合併產生」</div>';
+    return;
+  }
+
+  const blocks = parseTab(tabText);
+  const lyricLines = lyricsText.split('\n').filter(l => l.trim() !== '');
+
+  let li = 0;
+  let consumed = 0;
+  blocks.forEach(b=>{ if(b.type === 'lyricBlock') consumed++; });
+
+  blocks.forEach(b=>{
+    if(b.type === 'label'){
+      const div = document.createElement('div');
+      div.className = 'label';
+      div.textContent = b.text;
+      output.appendChild(div);
+    } else if(b.type === 'instrumental'){
+      const div = document.createElement('div');
+      div.className = 'block';
+      const cr = document.createElement('div');
+      cr.className = 'chordRow';
+      cr.textContent = b.chordLine.trimEnd();
+      div.appendChild(cr);
+      output.appendChild(div);
+    } else if(b.type === 'blank'){
+      const spacer = document.createElement('div');
+      spacer.style.height = '8px';
+      output.appendChild(spacer);
+    } else if(b.type === 'lyricBlock'){
+      const userLine = li < lyricLines.length ? lyricLines[li] : '';
+      li++;
+      const scaled = b.chordPositions.map(cp=>{
+        const ratio = b.origLen > 0 ? cp.pos / b.origLen : 0;
+        return {pos: Math.round(ratio * userLine.length), chord: cp.chord};
+      });
+      const div = document.createElement('div');
+      div.className = 'block';
+      const cr = document.createElement('div');
+      cr.className = 'chordRow';
+      cr.textContent = buildChordRow(userLine.length, scaled);
+      div.appendChild(cr);
+      const lr = document.createElement('div');
+      lr.className = 'lyricRow';
+      lr.textContent = userLine || '(沒有對應的歌詞行)';
+      div.appendChild(lr);
+      output.appendChild(div);
+    }
+  });
+
+  if(lyricLines.length !== consumed){
+    const notice = document.createElement('div');
+    notice.className = 'notice';
+    notice.textContent = `提醒：譜裡偵測到 ${consumed} 句需要歌詞的位置，但你的歌詞有 ${lyricLines.length} 行，行數不一致，請檢查對應關係。`;
+    output.appendChild(notice);
+  }
+}
+
+function copyOutput(){
+  const text = document.getElementById('output').innerText;
+  navigator.clipboard.writeText(text).then(()=>{
+    alert('已複製到剪貼簿');
+  }).catch(()=>{
+    alert('複製失敗，請手動選取文字');
+  });
+}
+
+function clearAll(){
+  document.getElementById('jpInput').value = '';
+  document.getElementById('tabInput').value = '';
+  document.getElementById('myLyrics').value = '';
+  document.getElementById('output').innerHTML = '<div class="empty">完成上面步驟後按「合併產生」</div>';
+}
+</script>
+
+</body>
+</html>
