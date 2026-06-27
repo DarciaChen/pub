@@ -102,9 +102,9 @@
   <div class="step">STEP 1（選填）</div>
   <label for="jpInput">原創日文歌詞 → 自動轉羅馬拼音</label>
   <textarea id="jpInput" placeholder="貼上你自己創作的日文歌詞……"></textarea>
-  <button id="convertBtn" disabled style="margin-top:10px;">字典載入中…</button>
-  <div class="statusRow"><span class="dot" id="statusDot"></span><span id="statusText">正在載入辨識字典（約 5–10 秒）</span></div>
-  <div class="hint">轉換結果會自動填入下方「你自己的歌詞」欄位，可再手動微調。斷詞引擎：kuromoji.js，特殊讀法建議人工複核。</div>
+  <button id="convertBtn" style="margin-top:10px;">自動轉換羅馬拼音 → 填入 STEP 3</button>
+  <div class="statusRow"><span class="dot" id="statusDot"></span><span id="statusText">尚未載入字典，按上方按鈕會先載入（約 5–10 秒，過程中畫面可能短暫無反應）</span></div>
+  <div class="hint">轉換結果會自動填入下方「你自己的歌詞」欄位，可再手動微調。斷詞引擎：kuromoji.js，特殊讀法建議人工複核。STEP 2、3 不需要字典，隨時可用。</div>
 </div>
 
 <div class="panel">
@@ -195,24 +195,44 @@ function katakanaToRomaji(reading){
 }
 
 let tokenizer = null;
+let loadingStarted = false;
 const convertBtn = document.getElementById('convertBtn');
 const statusText = document.getElementById('statusText');
 const statusDot = document.getElementById('statusDot');
 
-kuromoji.builder({ dicPath: "https://cdn.jsdelivr.net/npm/kuromoji@0.1.2/dict/" }).build((err, tk) => {
-  if(err){
-    statusText.textContent = '字典載入失敗，請重新整理頁面再試一次';
-    return;
-  }
-  tokenizer = tk;
-  convertBtn.disabled = false;
-  convertBtn.textContent = '自動轉換羅馬拼音 → 填入 STEP 3';
-  statusText.textContent = '字典已就緒';
-  statusDot.classList.add('ready');
-});
+// 字典較大（含解壓縮），延遲到使用者真的要用時才載入，
+// 避免一打開頁面就卡住主執行緒。
+function loadDictIfNeeded(onReady){
+  if(tokenizer){ onReady(); return; }
+  if(loadingStarted){ return; }
+  loadingStarted = true;
+  convertBtn.disabled = true;
+  convertBtn.textContent = '字典載入中…';
+  statusText.textContent = '正在載入辨識字典（約 5–10 秒，過程中畫面可能短暫無反應）';
+  setTimeout(() => {
+    kuromoji.builder({ dicPath: "https://cdn.jsdelivr.net/npm/kuromoji@0.1.2/dict/" }).build((err, tk) => {
+      if(err){
+        statusText.textContent = '字典載入失敗，請檢查網路後重新整理頁面再試一次';
+        convertBtn.disabled = false;
+        convertBtn.textContent = '重試載入字典';
+        loadingStarted = false;
+        return;
+      }
+      tokenizer = tk;
+      convertBtn.disabled = false;
+      convertBtn.textContent = '自動轉換羅馬拼音 → 填入 STEP 3';
+      statusText.textContent = '字典已就緒';
+      statusDot.classList.add('ready');
+      onReady();
+    });
+  }, 30);
+}
 
 convertBtn.addEventListener('click', () => {
-  if(!tokenizer) return;
+  if(!tokenizer){
+    loadDictIfNeeded(() => convertBtn.click());
+    return;
+  }
   const text = document.getElementById('jpInput').value;
   if(!text.trim()) return;
 
