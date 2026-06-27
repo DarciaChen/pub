@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>日文歌詞 羅馬拼音自動標注</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Shippori+Mincho:wght@500;700&family=Noto+Sans+TC:wght@400;500;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/kuromoji@0.1.2/build/kuromoji.js"></script>
+<style>
+  :root{
+    --bg:#F6F4EF;
+    --ink:#232017;
+    --ink-soft:#5B5648;
+    --accent:#3E4D6B;
+    --accent-soft:#C9D2DE;
+    --romaji:#7A5B3E;
+    --rule:#DAD5C8;
+    --card:#FFFEFB;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    background:var(--bg);
+    color:var(--ink);
+    font-family:'Noto Sans TC', sans-serif;
+    min-height:100vh;
+  }
+  .wrap{max-width:860px;margin:0 auto;padding:32px 20px 80px;}
+  header{margin-bottom:28px;}
+  .eyebrow{
+    font-family:'JetBrains Mono',monospace;
+    font-size:12px;
+    letter-spacing:.12em;
+    color:var(--accent);
+    text-transform:uppercase;
+    margin:0 0 8px;
+  }
+  h1{
+    font-family:'Shippori Mincho', serif;
+    font-weight:700;
+    font-size:clamp(26px,5vw,34px);
+    margin:0 0 10px;
+    line-height:1.3;
+  }
+  .sub{color:var(--ink-soft);font-size:14px;line-height:1.7;margin:0;}
+
+  .card{
+    background:var(--card);
+    border:1px solid var(--rule);
+    border-radius:10px;
+    padding:20px;
+    margin-bottom:20px;
+  }
+  label.field-label{
+    display:block;
+    font-size:12px;
+    font-family:'JetBrains Mono',monospace;
+    color:var(--ink-soft);
+    letter-spacing:.04em;
+    margin-bottom:8px;
+  }
+  textarea{
+    width:100%;
+    min-height:150px;
+    resize:vertical;
+    border:1px solid var(--rule);
+    border-radius:8px;
+    padding:14px;
+    font-family:'Shippori Mincho', serif;
+    font-size:18px;
+    line-height:1.9;
+    color:var(--ink);
+    background:#FCFBF8;
+  }
+  textarea:focus{outline:2px solid var(--accent-soft);border-color:var(--accent);}
+
+  .controls{display:flex;gap:10px;align-items:center;margin-top:14px;flex-wrap:wrap;}
+  button.primary{
+    font-family:'Noto Sans TC',sans-serif;
+    font-weight:500;
+    font-size:14px;
+    background:var(--accent);
+    color:#fff;
+    border:none;
+    border-radius:7px;
+    padding:11px 22px;
+    cursor:pointer;
+    transition:opacity .15s;
+  }
+  button.primary:hover{opacity:.88;}
+  button.primary:disabled{opacity:.5;cursor:wait;}
+  button.ghost{
+    font-family:'Noto Sans TC',sans-serif;
+    font-size:13px;
+    background:transparent;
+    color:var(--ink-soft);
+    border:1px solid var(--rule);
+    border-radius:7px;
+    padding:10px 16px;
+    cursor:pointer;
+  }
+  .status{font-size:13px;color:var(--ink-soft);font-family:'JetBrains Mono',monospace;}
+  .status.ready::before{content:"● ";color:#5A8A5A;}
+  .status.loading::before{content:"● ";color:#C7A23A;}
+  .status.error::before{content:"● ";color:#B5573F;}
+
+  #output{display:none;}
+  .line{
+    margin-bottom:22px;
+    padding-bottom:16px;
+    border-bottom:1px dashed var(--rule);
+  }
+  .line:last-child{border-bottom:none;}
+  .tokrow{display:flex;flex-wrap:wrap;align-items:flex-end;gap:0;}
+  .tok{
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    margin:0 2px 6px;
+  }
+  .tok .surf{
+    font-family:'Shippori Mincho', serif;
+    font-size:19px;
+    line-height:1.4;
+    white-space:nowrap;
+  }
+  .tok .tick{width:1px;height:6px;background:var(--rule);margin:2px 0;}
+  .tok .roma{
+    font-family:'JetBrains Mono',monospace;
+    font-size:12.5px;
+    color:var(--romaji);
+    white-space:nowrap;
+  }
+
+  .toolbar2{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:8px;}
+  .toolbar2 h2{
+    font-family:'JetBrains Mono',monospace;
+    font-size:12px;
+    letter-spacing:.1em;
+    text-transform:uppercase;
+    color:var(--ink-soft);
+    margin:0;
+  }
+  .plain{
+    font-family:'JetBrains Mono',monospace;
+    font-size:13px;
+    color:var(--ink-soft);
+    background:#FCFBF8;
+    border:1px solid var(--rule);
+    border-radius:8px;
+    padding:14px;
+    line-height:1.8;
+    white-space:pre-wrap;
+    display:none;
+    margin-top:10px;
+  }
+  footer{margin-top:30px;font-size:12px;color:var(--ink-soft);line-height:1.7;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <p class="eyebrow">JP → Romaji / 自動辨識</p>
+    <h1>日文歌詞羅馬拼音標注</h1>
+    <p class="sub">貼上日文歌詞，自動斷詞並逐詞標注羅馬拼音，上下對齊方便教學。轉換為真正的形態素分析，不是手動查表。</p>
+  </header>
+
+  <div class="card">
+    <label class="field-label" for="input">輸入日文文字</label>
+    <textarea id="input" placeholder="貼上你自己創作的日文歌詞……"></textarea>
+    <div class="controls">
+      <button class="primary" id="convertBtn" disabled>字典載入中…</button>
+      <button class="ghost" id="clearBtn">清空</button>
+      <span class="status loading" id="statusText">正在載入辨識字典（約 5–10 秒）</span>
+    </div>
+  </div>
+
+  <div class="card" id="output">
+    <div class="toolbar2">
+      <h2>逐詞對齊結果</h2>
+      <button class="ghost" id="toggleView">切換成純文字羅馬拼音</button>
+    </div>
+    <div id="lines"></div>
+    <div class="plain" id="plainView"></div>
+  </div>
+
+  <footer>
+    自動斷詞引擎：kuromoji.js（IPADIC 詞典）。羅馬拼音採用 Hepburn 式簡化規則自動生成，特殊讀法或專有名詞建議人工複核。
+  </footer>
+</div>
+
+<script>
+// ---------- 片假名 → 羅馬拼音（Hepburn 簡化版） ----------
+const KANA = {
+  'ア':'a','イ':'i','ウ':'u','エ':'e','オ':'o',
+  'カ':'ka','キ':'ki','ク':'ku','ケ':'ke','コ':'ko',
+  'ガ':'ga','ギ':'gi','グ':'gu','ゲ':'ge','ゴ':'go',
+  'サ':'sa','シ':'shi','ス':'su','セ':'se','ソ':'so',
+  'ザ':'za','ジ':'ji','ズ':'zu','ゼ':'ze','ゾ':'zo',
+  'タ':'ta','チ':'chi','ツ':'tsu','テ':'te','ト':'to',
+  'ダ':'da','ヂ':'ji','ヅ':'zu','デ':'de','ド':'do',
+  'ナ':'na','ニ':'ni','ヌ':'nu','ネ':'ne','ノ':'no',
+  'ハ':'ha','ヒ':'hi','フ':'fu','ヘ':'he','ホ':'ho',
+  'バ':'ba','ビ':'bi','ブ':'bu','ベ':'be','ボ':'bo',
+  'パ':'pa','ピ':'pi','プ':'pu','ペ':'pe','ポ':'po',
+  'マ':'ma','ミ':'mi','ム':'mu','メ':'me','モ':'mo',
+  'ヤ':'ya','ユ':'yu','ヨ':'yo',
+  'ラ':'ra','リ':'ri','ル':'ru','レ':'re','ロ':'ro',
+  'ワ':'wa','ヰ':'i','ヱ':'e','ヲ':'o',
+  'ン':'n','ヴ':'vu',
+  'ァ':'a','ィ':'i','ゥ':'u','ェ':'e','ォ':'o'
+};
+const YOON = {'ャ':'a','ュ':'u','ョ':'o'};
+
+function katakanaToRomaji(reading){
+  if(!reading || reading === '*') return null;
+  let out = '';
+  const chars = Array.from(reading);
+  for(let i=0;i<chars.length;i++){
+    const c = chars[i];
+    const next = chars[i+1];
+
+    if(c === 'ッ'){ // 促音：雙寫下一個音節的首字母
+      const nextRomaji = (next && KANA[next]) ? KANA[next] : '';
+      if(nextRomaji) out += nextRomaji[0];
+      continue;
+    }
+    if(c === 'ー'){ // 長音：重複前一個母音
+      const last = out.slice(-1);
+      if('aiueo'.includes(last)) out += last;
+      continue;
+    }
+    if(YOON[c]){ continue; } // 已被前一個字元處理過，跳過
+    let base = KANA[c];
+    if(base === undefined){ out += c; continue; } // 非假名字元（標點等）原樣輸出
+
+    if(next && YOON[next]){
+      // 拗音：去掉 base 最後一個母音字母，接上 YOON 的母音
+      const stem = base.slice(0,-1);
+      base = stem + YOON[next];
+    }
+    if(c === 'ン'){
+      const after = next ? KANA[next] : null;
+      if(after && /^[aiueoy]/.test(after)) out += "n'";
+      else out += 'n';
+      continue;
+    }
+    out += base;
+  }
+  return out;
+}
+
+// ---------- kuromoji 初始化 ----------
+let tokenizer = null;
+const convertBtn = document.getElementById('convertBtn');
+const statusText = document.getElementById('statusText');
+
+kuromoji.builder({ dicPath: "https://cdn.jsdelivr.net/npm/kuromoji@0.1.2/dict/" }).build((err, tk) => {
+  if(err){
+    statusText.textContent = '字典載入失敗，請重新整理頁面再試一次';
+    statusText.className = 'status error';
+    return;
+  }
+  tokenizer = tk;
+  convertBtn.disabled = false;
+  convertBtn.textContent = '自動轉換羅馬拼音';
+  statusText.textContent = '字典已就緒';
+  statusText.className = 'status ready';
+});
+
+// ---------- 轉換與顯示 ----------
+const inputEl = document.getElementById('input');
+const outputEl = document.getElementById('output');
+const linesEl = document.getElementById('lines');
+const plainView = document.getElementById('plainView');
+const toggleBtn = document.getElementById('toggleView');
+let showingPlain = false;
+
+convertBtn.addEventListener('click', () => {
+  if(!tokenizer) return;
+  const text = inputEl.value;
+  if(!text.trim()){ return; }
+
+  const rawLines = text.split('\n');
+  linesEl.innerHTML = '';
+  let plainLines = [];
+
+  rawLines.forEach(rawLine => {
+    if(!rawLine.trim()){
+      plainLines.push('');
+      return;
+    }
+    const tokens = tokenizer.tokenize(rawLine);
+    const lineDiv = document.createElement('div');
+    lineDiv.className = 'line';
+    const row = document.createElement('div');
+    row.className = 'tokrow';
+    let romajiParts = [];
+
+    tokens.forEach(t => {
+      const surface = t.surface_form;
+      let romaji = katakanaToRomaji(t.reading);
+      if(romaji === null){
+        // 數字、英文、符號等：原樣顯示，不另外標注拼音
+        romaji = /^[a-zA-Z0-9]+$/.test(surface) ? '' : surface;
+      }
+      const tok = document.createElement('div');
+      tok.className = 'tok';
+      const surf = document.createElement('div');
+      surf.className = 'surf';
+      surf.textContent = surface;
+      const tick = document.createElement('div');
+      tick.className = 'tick';
+      const roma = document.createElement('div');
+      roma.className = 'roma';
+      roma.textContent = romaji || '·';
+      tok.appendChild(surf);
+      tok.appendChild(tick);
+      tok.appendChild(roma);
+      row.appendChild(tok);
+      if(romaji) romajiParts.push(romaji);
+    });
+
+    lineDiv.appendChild(row);
+    linesEl.appendChild(lineDiv);
+    plainLines.push(romajiParts.join(' '));
+  });
+
+  plainView.textContent = plainLines.join('\n');
+  outputEl.style.display = 'block';
+});
+
+document.getElementById('clearBtn').addEventListener('click', () => {
+  inputEl.value = '';
+  outputEl.style.display = 'none';
+});
+
+toggleBtn.addEventListener('click', () => {
+  showingPlain = !showingPlain;
+  linesEl.style.display = showingPlain ? 'none' : 'block';
+  plainView.style.display = showingPlain ? 'block' : 'none';
+  toggleBtn.textContent = showingPlain ? '切換成逐詞對齊顯示' : '切換成純文字羅馬拼音';
+});
+</script>
+</body>
+</html>
