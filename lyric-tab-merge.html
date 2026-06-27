@@ -108,6 +108,18 @@
 </div>
 
 <div class="panel">
+  <div class="step">STEP 1B（選填・進階）</div>
+  <label for="triInput">已經是「日文短句／羅馬拼音／翻譯」三層格式的來源？貼這裡自動比對行數</label>
+  <textarea id="triInput" placeholder="例如：
+日文短句
+romaji 短句
+中文翻譯
+（重複，行數可以不規則，工具會自動跟 STEP 2 的吉他譜比對行的邊界）"></textarea>
+  <button id="alignBtn" style="margin-top:10px;">比對吉他譜行數 → 填入 STEP 3</button>
+  <div class="hint" id="triNote">會自動抓出羅馬拼音、跳過日文原文和翻譯，再用「語音比對」（去空格後比較讀音）跟 STEP 2 吉他譜的每一行對齊，不管原始來源切了幾段都抓得到正確邊界。請先填好 STEP 2 再按這個按鈕。</div>
+</div>
+
+<div class="panel">
   <div class="step">STEP 2</div>
   <label for="tabInput">吉他譜文字檔內容（含和弦行＋原歌詞行）</label>
   <textarea id="tabInput" placeholder="範例（一般文字檔吉他譜格式）：
@@ -158,6 +170,23 @@ const KANA = {
   'ァ':'a','ィ':'i','ゥ':'u','ェ':'e','ォ':'o'
 };
 const YOON = {'ャ':'a','ュ':'u','ョ':'o'};
+// き/ぎ/に/ひ/び/ぴ/み/り 這幾個「子音+i」的假名遇到拗音時，
+// 舊邏輯單純去掉母音、接上新母音，會漏掉中間的 y 音（例：きゅ 會變成 ku 而不是 kyu）。
+// 改用對照表直接查，比較準確。
+const YOON_COMBO = {
+  'キャ':'kya','キュ':'kyu','キョ':'kyo',
+  'ギャ':'gya','ギュ':'gyu','ギョ':'gyo',
+  'シャ':'sha','シュ':'shu','ショ':'sho',
+  'ジャ':'ja','ジュ':'ju','ジョ':'jo',
+  'チャ':'cha','チュ':'chu','チョ':'cho',
+  'ヂャ':'ja','ヂュ':'ju','ヂョ':'jo',
+  'ニャ':'nya','ニュ':'nyu','ニョ':'nyo',
+  'ヒャ':'hya','ヒュ':'hyu','ヒョ':'hyo',
+  'ビャ':'bya','ビュ':'byu','ビョ':'byo',
+  'ピャ':'pya','ピュ':'pyu','ピョ':'pyo',
+  'ミャ':'mya','ミュ':'myu','ミョ':'myo',
+  'リャ':'rya','リュ':'ryu','リョ':'ryo'
+};
 
 function katakanaToRomaji(reading){
   if(!reading || reading === '*') return null;
@@ -177,12 +206,17 @@ function katakanaToRomaji(reading){
       continue;
     }
     if(YOON[c]){ continue; }
+    if(next && YOON[next]){
+      const combo = YOON_COMBO[c+next];
+      if(combo !== undefined){ out += combo; continue; }
+      // 查不到對照表的情況（理論上不會發生），維持舊邏輯當保底
+      let baseFallback = KANA[c];
+      if(baseFallback === undefined){ out += c; continue; }
+      out += baseFallback.slice(0,-1) + YOON[next];
+      continue;
+    }
     let base = KANA[c];
     if(base === undefined){ out += c; continue; }
-    if(next && YOON[next]){
-      const stem = base.slice(0,-1);
-      base = stem + YOON[next];
-    }
     if(c === 'ン'){
       const after = next ? KANA[next] : null;
       if(after && /^[aiueoy]/.test(after)) out += "n'";
@@ -255,27 +289,229 @@ convertBtn.addEventListener('click', () => {
   document.getElementById('myLyrics').value = plainLines.join('\n');
 });
 
+// ===================== 三層格式（日文短句／羅馬拼音／翻譯）解析與比對 =====================
+function classifyTriLine(line){
+  const t = line.replace(/\u3000+$/,'').trim();
+  if(!t) return 'blank';
+  // 純羅馬拼音：只有英文字母、撇號、空格，且含母音
+  if(/^[a-z][a-z'\s]*$/i.test(t) && /[aiueo]/i.test(t)) return 'romaji';
+  // 含假名（平假名/片假名）→ 判定為日文短句（中文翻譯不會有假名）
+  if(/[\u3040-\u30ff]/.test(t)) return 'japanese';
+  // 純漢字、無假名 → 視為翻譯或其他說明文字，忽略
+  return 'other';
+}
+
+function parseTriLayer(text){
+  const lines = text.split('\n');
+  const chunks = [];
+  let i = 0;
+  while(i < lines.length){
+    const type = classifyTriLine(lines[i]);
+    if(type === 'japanese'){
+      const nextType = (i+1 < lines.length) ? classifyTriLine(lines[i+1]) : 'blank';
+      if(nextType === 'romaji'){
+        chunks.push({ romaji: lines[i+1].replace(/\u3000+$/,'').trim() });
+        i += 2;
+        continue;
+      }
+    }
+    i += 1; // 跳過翻譯行、孤立行、空行
+  }
+  return chunks;
+}
+
+function phoneticKey(str){
+  return str.toLowerCase().replace(/[^a-z]/g, '');
+}
+
+function tabLineToRomaji(jpText){
+  const tokens = tokenizer.tokenize(jpText);
+  let out = '';
+  tokens.forEach(t => {
+    let r = katakanaToRomaji(t.reading);
+    if(r === null){
+      r = /^[a-zA-Z0-9]+$/.test(t.surface_form) ? t.surface_form : '';
+    }
+    out += (r || '');
+  });
+  return out;
+}
+
+function levenshtein(a, b){
+  const m = a.length, n = b.length;
+  if(m === 0) return n;
+  if(n === 0) return m;
+  let prev = new Array(n+1);
+  let curr = new Array(n+1);
+  for(let j=0;j<=n;j++) prev[j] = j;
+  for(let i=1;i<=m;i++){
+    curr[0] = i;
+    for(let j=1;j<=n;j++){
+      curr[j] = Math.min(
+        prev[j] + 1,
+        curr[j-1] + 1,
+        prev[j-1] + (a[i-1]===b[j-1] ? 0 : 1)
+      );
+    }
+    [prev, curr] = [curr, prev];
+  }
+  return prev[n];
+}
+
+function runAlign(){
+  const triText = document.getElementById('triInput').value;
+  const tabText = document.getElementById('tabInput').value;
+  const note = document.getElementById('triNote');
+
+  if(!triText.trim() || !tabText.trim()){
+    note.textContent = '請先填好 STEP 2 的吉他譜，再貼三層格式來源，兩邊都要有內容才能比對。';
+    return;
+  }
+
+  const blocks = parseTab(tabText);
+  const targetBlocks = blocks.filter(b => b.type === 'lyricBlock');
+  if(targetBlocks.length === 0){
+    note.textContent = 'STEP 2 裡偵測不到「和弦行＋歌詞行」的結構，請確認吉他譜格式。';
+    return;
+  }
+
+  const chunks = parseTriLayer(triText);
+  if(chunks.length === 0){
+    note.textContent = '在三層格式裡偵測不到「日文短句＋羅馬拼音」的配對，請確認格式（日文短句下一行緊接羅馬拼音）。';
+    return;
+  }
+
+  let ci = 0;
+  const resultLines = [];
+  const uncertainLines = [];
+
+  targetBlocks.forEach((block, idx) => {
+    const targetKey = phoneticKey(tabLineToRomaji(block.origText));
+    let bestN = 1, bestDist = Infinity, bestRomaji = [];
+    let acc = '';
+    const accRomajiParts = [];
+    const maxTry = Math.min(8, chunks.length - ci);
+
+    if(maxTry <= 0){
+      uncertainLines.push(idx + 1);
+      resultLines.push('');
+      return;
+    }
+
+    for(let n = 1; n <= maxTry; n++){
+      acc += phoneticKey(chunks[ci + n - 1].romaji);
+      accRomajiParts.push(chunks[ci + n - 1].romaji);
+      const dist = levenshtein(acc, targetKey);
+      if(dist < bestDist){
+        bestDist = dist;
+        bestN = n;
+        bestRomaji = accRomajiParts.slice();
+      }
+      if(acc.length > targetKey.length * 1.5) break; // 累積已遠超目標長度還沒變好，停止嘗試
+    }
+
+    ci += bestN;
+    resultLines.push(bestRomaji.join(' '));
+
+    const similarity = targetKey.length > 0 ? (1 - bestDist / targetKey.length) : 1;
+    if(similarity < 0.9) uncertainLines.push(idx + 1);
+  });
+
+  document.getElementById('myLyrics').value = resultLines.join('\n');
+
+  if(uncertainLines.length === 0){
+    note.textContent = `比對完成，共 ${targetBlocks.length} 行已自動對齊填入 STEP 3。`;
+  } else {
+    note.textContent = `已填入 STEP 3（共 ${targetBlocks.length} 行），但第 ${uncertainLines.join('、')} 行語音比對信心較低（可能用字/讀法跟譜不同），請人工檢查調整。`;
+  }
+}
+
+document.getElementById('alignBtn').addEventListener('click', () => {
+  if(!tokenizer){
+    loadDictIfNeeded(runAlign);
+    return;
+  }
+  runAlign();
+});
+
 // ===================== 吉他譜和弦位置合併 =====================
 function isChordToken(tok){
-  return /^[A-G](#|b)?(maj|min|dim|aug|sus|add)?\d{0,2}(\/[A-G](#|b)?)?$/i.test(tok);
+  // 根音 + 升降記號 + 任意和弦修飾（m, maj7, sus4, dim7, m7-5, add9, 6, 9...）+ 可選轉位 /根音
+  return /^[A-G](#|b)?[a-zA-Z0-9+\-]*(\/[A-G](#|b)?)?$/.test(tok);
 }
+
+// 去掉行尾「(回★)」這類附註後再判斷／處理，附註本身不是和弦
+function stripTrailingAnnotation(line){
+  const m = line.match(/^(.*\S)\s*([\(（][^)）]*[\)）])\s*$/);
+  return m ? m[1] : line;
+}
+
 function isChordLine(line){
-  const trimmed = line.trim();
-  if(!trimmed) return false;
-  const tokens = trimmed.split(/\s+/);
+  let t = stripTrailingAnnotation(line);
+  t = t.replace(/\|/g, ' ').trim(); // 小節線 | 只是分隔符號，不影響和弦判斷
+  if(!t) return false;
+  const tokens = t.split(/\s+/);
   return tokens.length > 0 && tokens.every(isChordToken);
 }
 function isSectionLabel(line){
   return /^\s*\[[^\]]+\]\s*$/.test(line);
 }
-function extractChordPositions(line){
+
+// 無小節線的簡單格式：和弦在行裡的字元位置，之後用比例套到使用者歌詞上
+function extractChordPositionsPlain(line){
+  const t = stripTrailingAnnotation(line);
   const positions = [];
   const re = /\S+/g;
   let m;
-  while((m = re.exec(line)) !== null){
+  while((m = re.exec(t)) !== null){
     positions.push({pos: m.index, chord: m[0]});
   }
   return positions;
+}
+
+// 有小節線 | 的格式：以「第幾小節／共幾小節」算比例位置，
+// 不直接用字元位移（因為 | 本身會佔字元空間，跟歌詞行對不齊）
+function extractMeasures(line){
+  const t = stripTrailingAnnotation(line);
+  const rawSegments = t.split('|');
+  const measures = [];
+  rawSegments.forEach(seg => {
+    if(seg === '') return; // 純粹是開頭/結尾 | 造成的空字串，不算小節
+    const chordsInSeg = [];
+    const re = /\S+/g;
+    let m;
+    while((m = re.exec(seg)) !== null){
+      chordsInSeg.push({relPos: m.index, chord: m[0]});
+    }
+    measures.push({segLen: Math.max(seg.length, 1), chords: chordsInSeg}); // 即使是休止小節也保留，維持比例正確
+  });
+  return measures;
+}
+
+function measuresToPositions(measures, totalLen){
+  const M = measures.length;
+  if(M === 0) return [];
+  const positions = [];
+  measures.forEach((measure, idx) => {
+    const slotStart = (idx / M) * totalLen;
+    const slotWidth = totalLen / M;
+    measure.chords.forEach(c => {
+      const frac = measure.segLen > 0 ? (c.relPos / measure.segLen) : 0;
+      positions.push({ pos: Math.round(slotStart + frac * slotWidth), chord: c.chord });
+    });
+  });
+  return positions;
+}
+
+// 依照這個 block 是哪種格式，算出在 targetLen 長度的歌詞上，每個和弦該放的位置
+function computePositionsForBlock(block, targetLen){
+  if(block.chordData.barStyle){
+    return measuresToPositions(block.chordData.measures, targetLen);
+  }
+  return block.chordData.chordPositions.map(cp => ({
+    pos: Math.round((block.origLen > 0 ? cp.pos / block.origLen : 0) * targetLen),
+    chord: cp.chord
+  }));
 }
 
 function parseTab(text){
@@ -283,19 +519,33 @@ function parseTab(text){
   const blocks = [];
   let i = 0;
   while(i < lines.length){
-    const line = lines[i];
+    let line = lines[i];
+
+    // 「[標籤] 和弦...」同一行：先拆出標籤，剩下的當一般和弦行繼續處理
+    const labelMatch = line.match(/^\s*(\[[^\]]+\])\s*(.*)$/);
+    if(labelMatch){
+      blocks.push({type:'label', text: labelMatch[1]});
+      if(labelMatch[2].trim() === ''){
+        i++; continue;
+      }
+      line = labelMatch[2];
+    }
+
     if(isSectionLabel(line)){
       blocks.push({type:'label', text: line.trim()});
       i++; continue;
     }
     if(isChordLine(line)){
-      const chordPositions = extractChordPositions(line);
+      const barStyle = line.includes('|');
       const next = lines[i+1];
       if(next !== undefined && next.trim() !== '' && !isChordLine(next) && !isSectionLabel(next)){
-        blocks.push({type:'lyricBlock', chordPositions, origLen: next.length});
+        const chordData = barStyle
+          ? { barStyle:true, measures: extractMeasures(line) }
+          : { barStyle:false, chordPositions: extractChordPositionsPlain(line) };
+        blocks.push({type:'lyricBlock', chordData, origLen: next.length, origText: next.trim()});
         i += 2;
       } else {
-        blocks.push({type:'instrumental', chordLine: line});
+        blocks.push({type:'instrumental', chordLine: line.trimEnd()});
         i += 1;
       }
       continue;
@@ -360,10 +610,7 @@ function merge(){
     } else if(b.type === 'lyricBlock'){
       const userLine = li < lyricLines.length ? lyricLines[li] : '';
       li++;
-      const scaled = b.chordPositions.map(cp=>{
-        const ratio = b.origLen > 0 ? cp.pos / b.origLen : 0;
-        return {pos: Math.round(ratio * userLine.length), chord: cp.chord};
-      });
+      const scaled = computePositionsForBlock(b, userLine.length);
       const div = document.createElement('div');
       div.className = 'block';
       const cr = document.createElement('div');
@@ -397,8 +644,10 @@ function copyOutput(){
 
 function clearAll(){
   document.getElementById('jpInput').value = '';
+  document.getElementById('triInput').value = '';
   document.getElementById('tabInput').value = '';
   document.getElementById('myLyrics').value = '';
+  document.getElementById('triNote').textContent = '會自動抓出羅馬拼音、跳過日文原文和翻譯，再用「語音比對」（去空格後比較讀音）跟 STEP 2 吉他譜的每一行對齊，不管原始來源切了幾段都抓得到正確邊界。請先填好 STEP 2 再按這個按鈕。';
   document.getElementById('output').innerHTML = '<div class="empty">完成上面步驟後按「合併產生」</div>';
 }
 </script>
