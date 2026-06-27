@@ -103,7 +103,7 @@
   <label for="jpInput">原創日文歌詞 → 自動轉羅馬拼音</label>
   <textarea id="jpInput" placeholder="貼上你自己創作的日文歌詞……"></textarea>
   <button id="convertBtn" style="margin-top:10px;">自動轉換羅馬拼音 → 填入 STEP 3</button>
-  <div class="statusRow"><span class="dot" id="statusDot"></span><span id="statusText">尚未載入字典，按上方按鈕會先載入（約 5–10 秒，過程中畫面可能短暫無反應）</span></div>
+  <div class="statusRow"><span class="dot" id="statusDot"></span><span id="statusText">尚未載入字典，按上方按鈕會在背景載入（約 5–10 秒，畫面不會卡住）</span></div>
   <div class="hint">轉換結果會自動填入下方「你自己的歌詞」欄位，可再手動微調。斷詞引擎：kuromoji.js，特殊讀法建議人工複核。STEP 2、3 不需要字典，隨時可用。</div>
 </div>
 
@@ -228,65 +228,182 @@ function katakanaToRomaji(reading){
   return out;
 }
 
+// ===================== Web Worker：把字典載入與斷詞運算搬到背景執行緒 =====================
+// kuromoji 字典較大，解壓縮+運算如果在主執行緒做會卡住整個畫面、無法滑動點擊。
+// 改成丟進 Worker 背景執行，UI 全程保持可互動。
+const WORKER_SRC = `
+const KANA = ${JSON.stringify(KANA)};
+const YOON = ${JSON.stringify(YOON)};
+const YOON_COMBO = ${JSON.stringify(YOON_COMBO)};
+
+function katakanaToRomaji(reading){
+  if(!reading || reading === '*') return null;
+  let out = '';
+  const chars = Array.from(reading);
+  for(let i=0;i<chars.length;i++){
+    const c = chars[i];
+    const next = chars[i+1];
+    if(c === 'ッ'){
+      const nextRomaji = (next && KANA[next]) ? KANA[next] : '';
+      if(nextRomaji) out += nextRomaji[0];
+      continue;
+    }
+    if(c === 'ー'){
+      const last = out.slice(-1);
+      if('aiueo'.includes(last)) out += last;
+      continue;
+    }
+    if(YOON[c]){ continue; }
+    if(next && YOON[next]){
+      const combo = YOON_COMBO[c+next];
+      if(combo !== undefined){ out += combo; continue; }
+      let baseFallback = KANA[c];
+      if(baseFallback === undefined){ out += c; continue; }
+      out += baseFallback.slice(0,-1) + YOON[next];
+      continue;
+    }
+    let base = KANA[c];
+    if(base === undefined){ out += c; continue; }
+    if(c === 'ン'){
+      const after = next ? KANA[next] : null;
+      if(after && /^[aiueoy]/.test(after)) out += "n'";
+      else out += 'n';
+      continue;
+    }
+    out += base;
+  }
+  return out;
+}
+
 let tokenizer = null;
-let loadingStarted = false;
+
+self.onmessage = function(e){
+  const msg = e.data;
+  if(msg.type === 'init'){
+    try{
+      importScripts('https://cdn.jsdelivr.net/npm/kuromoji@0.1.2/build/kuromoji.js');
+      kuromoji.builder({ dicPath: 'https://cdn.jsdelivr.net/npm/kuromoji@0.1.2/dict/' }).build((err, tk) => {
+        if(err){ self.postMessage({type:'error', message: String(err && err.message || err)}); return; }
+        tokenizer = tk;
+        self.postMessage({type:'ready'});
+      });
+    } catch(err){
+      self.postMessage({type:'error', message: String(err && err.message || err)});
+    }
+  } else if(msg.type === 'tokenizeBatch'){
+    if(!tokenizer){
+      self.postMessage({type:'error', requestId: msg.requestId, message:'字典尚未就緒'});
+      return;
+    }
+    try{
+      const romajiList = msg.texts.map(text => {
+        const tokens = tokenizer.tokenize(text);
+        let out = '';
+        tokens.forEach(t => {
+          let r = katakanaToRomaji(t.reading);
+          if(r === null){ r = /^[a-zA-Z0-9]+$/.test(t.surface_form) ? t.surface_form : ''; }
+          out += (r || '');
+        });
+        return out;
+      });
+      self.postMessage({type:'tokenizeBatchResult', requestId: msg.requestId, romajiList});
+    } catch(err){
+      self.postMessage({type:'error', requestId: msg.requestId, message: String(err && err.message || err)});
+    }
+  }
+};
+`;
+
+let dictWorker = null;
+let workerReady = false;
+let workerLoading = false;
+const pendingReadyCallbacks = [];
+const pendingRequests = {};
+let reqCounter = 0;
+
 const convertBtn = document.getElementById('convertBtn');
 const statusText = document.getElementById('statusText');
 const statusDot = document.getElementById('statusDot');
+const alignBtn = document.getElementById('alignBtn');
 
-// 字典較大（含解壓縮），延遲到使用者真的要用時才載入，
-// 避免一打開頁面就卡住主執行緒。
-function loadDictIfNeeded(onReady){
-  if(tokenizer){ onReady(); return; }
-  if(loadingStarted){ return; }
-  loadingStarted = true;
-  convertBtn.disabled = true;
-  convertBtn.textContent = '字典載入中…';
-  statusText.textContent = '正在載入辨識字典（約 5–10 秒，過程中畫面可能短暫無反應）';
-  setTimeout(() => {
-    kuromoji.builder({ dicPath: "https://cdn.jsdelivr.net/npm/kuromoji@0.1.2/dict/" }).build((err, tk) => {
-      if(err){
-        statusText.textContent = '字典載入失敗，請檢查網路後重新整理頁面再試一次';
-        convertBtn.disabled = false;
-        convertBtn.textContent = '重試載入字典';
-        loadingStarted = false;
-        return;
-      }
-      tokenizer = tk;
-      convertBtn.disabled = false;
-      convertBtn.textContent = '自動轉換羅馬拼音 → 填入 STEP 3';
+function getDictWorker(){
+  if(dictWorker) return dictWorker;
+  const blob = new Blob([WORKER_SRC], {type: 'application/javascript'});
+  dictWorker = new Worker(URL.createObjectURL(blob));
+  dictWorker.onmessage = (e) => {
+    const msg = e.data;
+    if(msg.type === 'ready'){
+      workerReady = true;
+      workerLoading = false;
       statusText.textContent = '字典已就緒';
       statusDot.classList.add('ready');
-      onReady();
-    });
-  }, 30);
+      pendingReadyCallbacks.forEach(cb => cb());
+      pendingReadyCallbacks.length = 0;
+    } else if(msg.type === 'error'){
+      workerLoading = false;
+      statusText.textContent = '字典載入或轉換失敗：' + msg.message + '（請檢查網路後重新整理頁面再試）';
+      if(msg.requestId && pendingRequests[msg.requestId]){
+        pendingRequests[msg.requestId].reject(new Error(msg.message));
+        delete pendingRequests[msg.requestId];
+      }
+    } else if(msg.type === 'tokenizeBatchResult'){
+      if(pendingRequests[msg.requestId]){
+        pendingRequests[msg.requestId].resolve(msg.romajiList);
+        delete pendingRequests[msg.requestId];
+      }
+    }
+  };
+  return dictWorker;
+}
+
+// 確保字典已在背景載入完成才繼續做事，全程不卡主執行緒
+function ensureWorkerReady(onReady){
+  const w = getDictWorker();
+  if(workerReady){ onReady(); return; }
+  pendingReadyCallbacks.push(onReady);
+  if(!workerLoading){
+    workerLoading = true;
+    statusText.textContent = '正在背景載入辭典（約 5–10 秒，畫面不會卡住，可以繼續操作 STEP 2/3）…';
+    w.postMessage({type:'init'});
+  }
+}
+
+// 批次把多行日文文字丟給 worker 轉羅馬拼音，回傳 Promise<string[]>
+function tokenizeBatch(texts){
+  return new Promise((resolve, reject) => {
+    const requestId = ++reqCounter;
+    pendingRequests[requestId] = {resolve, reject};
+    getDictWorker().postMessage({type:'tokenizeBatch', requestId, texts});
+  });
 }
 
 convertBtn.addEventListener('click', () => {
-  if(!tokenizer){
-    loadDictIfNeeded(() => convertBtn.click());
-    return;
-  }
   const text = document.getElementById('jpInput').value;
   if(!text.trim()) return;
 
-  const rawLines = text.split('\n');
-  const plainLines = rawLines.map(rawLine => {
-    if(!rawLine.trim()) return '';
-    const tokens = tokenizer.tokenize(rawLine);
-    const romajiParts = [];
-    tokens.forEach(t => {
-      const surface = t.surface_form;
-      let romaji = katakanaToRomaji(t.reading);
-      if(romaji === null){
-        romaji = /^[a-zA-Z0-9]+$/.test(surface) ? surface : '';
-      }
-      if(romaji) romajiParts.push(romaji);
+  ensureWorkerReady(() => {
+    const rawLines = text.split('\n');
+    const idxList = [];
+    const textsToSend = [];
+    rawLines.forEach((l, idx) => {
+      if(l.trim() !== ''){ idxList.push(idx); textsToSend.push(l); }
     });
-    return romajiParts.join(' ');
-  });
 
-  document.getElementById('myLyrics').value = plainLines.join('\n');
+    convertBtn.disabled = true;
+    const prevLabel = convertBtn.textContent;
+    convertBtn.textContent = '轉換中…';
+
+    tokenizeBatch(textsToSend).then(romajiList => {
+      const plainLines = rawLines.map(() => '');
+      idxList.forEach((idx, i) => { plainLines[idx] = romajiList[i]; });
+      document.getElementById('myLyrics').value = plainLines.join('\n');
+      convertBtn.disabled = false;
+      convertBtn.textContent = '自動轉換羅馬拼音 → 填入 STEP 3';
+    }).catch(() => {
+      convertBtn.disabled = false;
+      convertBtn.textContent = prevLabel;
+    });
+  });
 });
 
 // ===================== 三層格式（日文短句／羅馬拼音／翻譯）解析與比對 =====================
@@ -322,19 +439,6 @@ function parseTriLayer(text){
 
 function phoneticKey(str){
   return str.toLowerCase().replace(/[^a-z]/g, '');
-}
-
-function tabLineToRomaji(jpText){
-  const tokens = tokenizer.tokenize(jpText);
-  let out = '';
-  tokens.forEach(t => {
-    let r = katakanaToRomaji(t.reading);
-    if(r === null){
-      r = /^[a-zA-Z0-9]+$/.test(t.surface_form) ? t.surface_form : '';
-    }
-    out += (r || '');
-  });
-  return out;
 }
 
 function levenshtein(a, b){
@@ -381,58 +485,71 @@ function runAlign(){
     return;
   }
 
-  let ci = 0;
-  const resultLines = [];
-  const uncertainLines = [];
+  alignBtn.disabled = true;
+  const prevLabel = alignBtn.textContent;
+  alignBtn.textContent = '比對中…';
+  note.textContent = '正在比對（背景執行，畫面不會卡住）…';
 
-  targetBlocks.forEach((block, idx) => {
-    const targetKey = phoneticKey(tabLineToRomaji(block.origText));
-    let bestN = 1, bestDist = Infinity, bestRomaji = [];
-    let acc = '';
-    const accRomajiParts = [];
-    const maxTry = Math.min(8, chunks.length - ci);
+  ensureWorkerReady(() => {
+    const targetTexts = targetBlocks.map(b => b.origText);
+    tokenizeBatch(targetTexts).then(romajiList => {
+      const targetKeys = romajiList.map(r => phoneticKey(r));
 
-    if(maxTry <= 0){
-      uncertainLines.push(idx + 1);
-      resultLines.push('');
-      return;
-    }
+      let ci = 0;
+      const resultLines = [];
+      const uncertainLines = [];
 
-    for(let n = 1; n <= maxTry; n++){
-      acc += phoneticKey(chunks[ci + n - 1].romaji);
-      accRomajiParts.push(chunks[ci + n - 1].romaji);
-      const dist = levenshtein(acc, targetKey);
-      if(dist < bestDist){
-        bestDist = dist;
-        bestN = n;
-        bestRomaji = accRomajiParts.slice();
+      targetBlocks.forEach((block, idx) => {
+        const targetKey = targetKeys[idx];
+        let bestN = 1, bestDist = Infinity, bestRomaji = [];
+        let acc = '';
+        const accRomajiParts = [];
+        const maxTry = Math.min(8, chunks.length - ci);
+
+        if(maxTry <= 0){
+          uncertainLines.push(idx + 1);
+          resultLines.push('');
+          return;
+        }
+
+        for(let n = 1; n <= maxTry; n++){
+          acc += phoneticKey(chunks[ci + n - 1].romaji);
+          accRomajiParts.push(chunks[ci + n - 1].romaji);
+          const dist = levenshtein(acc, targetKey);
+          if(dist < bestDist){
+            bestDist = dist;
+            bestN = n;
+            bestRomaji = accRomajiParts.slice();
+          }
+          if(acc.length > targetKey.length * 1.5) break;
+        }
+
+        ci += bestN;
+        resultLines.push(bestRomaji.join(' '));
+
+        const similarity = targetKey.length > 0 ? (1 - bestDist / targetKey.length) : 1;
+        if(similarity < 0.9) uncertainLines.push(idx + 1);
+      });
+
+      document.getElementById('myLyrics').value = resultLines.join('\n');
+
+      if(uncertainLines.length === 0){
+        note.textContent = `比對完成，共 ${targetBlocks.length} 行已自動對齊填入 STEP 3。`;
+      } else {
+        note.textContent = `已填入 STEP 3（共 ${targetBlocks.length} 行），但第 ${uncertainLines.join('、')} 行語音比對信心較低（可能用字/讀法跟譜不同），請人工檢查調整。`;
       }
-      if(acc.length > targetKey.length * 1.5) break; // 累積已遠超目標長度還沒變好，停止嘗試
-    }
 
-    ci += bestN;
-    resultLines.push(bestRomaji.join(' '));
-
-    const similarity = targetKey.length > 0 ? (1 - bestDist / targetKey.length) : 1;
-    if(similarity < 0.9) uncertainLines.push(idx + 1);
+      alignBtn.disabled = false;
+      alignBtn.textContent = prevLabel;
+    }).catch(() => {
+      note.textContent = '比對時發生錯誤，請重新整理頁面再試一次。';
+      alignBtn.disabled = false;
+      alignBtn.textContent = prevLabel;
+    });
   });
-
-  document.getElementById('myLyrics').value = resultLines.join('\n');
-
-  if(uncertainLines.length === 0){
-    note.textContent = `比對完成，共 ${targetBlocks.length} 行已自動對齊填入 STEP 3。`;
-  } else {
-    note.textContent = `已填入 STEP 3（共 ${targetBlocks.length} 行），但第 ${uncertainLines.join('、')} 行語音比對信心較低（可能用字/讀法跟譜不同），請人工檢查調整。`;
-  }
 }
 
-document.getElementById('alignBtn').addEventListener('click', () => {
-  if(!tokenizer){
-    loadDictIfNeeded(runAlign);
-    return;
-  }
-  runAlign();
-});
+alignBtn.addEventListener('click', runAlign);
 
 // ===================== 吉他譜和弦位置合併 =====================
 function isChordToken(tok){
