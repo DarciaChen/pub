@@ -995,8 +995,10 @@ function karplusString(ctx, f, sustained, strIdx, velocity) {
     dl[i] += excComb[i] * 0.8;
   }
   // 超出一個週期的部分折回來（模擬弦從兩端反射後的疊加）
+  // 加 fade-out 窗：折疊部分隨距離衰減，避免邊界硬切產生「彈簧音」
   for (let i = N; i < excLen; i++) {
-    dl[i % N] += excComb[i] * 0.4;
+    const fadeOut = 1 - (i - N) / Math.max(1, excLen - N);
+    dl[i % N] += excComb[i] * 0.4 * fadeOut;
   }
 
   // ── 5. KS 迴路：頻率相依 loop filter
@@ -1119,25 +1121,32 @@ function guitarOff(ctx, n) {
   if (n.src) try {
     n.src.stop(now + .08);
   } catch (e) {}
-  // ── 放弦雜訊（手指離弦的微弱高頻雜音）
+  // 放弦雜訊極輕微，加完整 fade-in/out 避免突變喀聲
   try {
-    const nLen = Math.max(2, Math.floor(ctx.sampleRate * .012));
+    const nLen = Math.max(2, Math.floor(ctx.sampleRate * .018));
     const nBuf = ctx.createBuffer(1, nLen, ctx.sampleRate);
     const nd = nBuf.getChannelData(0);
-    for (let i = 0; i < nLen; i++) nd[i] = Math.random() * 2 - 1;
+    const fadeIn = Math.floor(nLen * 0.15);
+    const fadeOut = Math.floor(nLen * 0.3);
+    for (let i = 0; i < nLen; i++) {
+      const fi = i < fadeIn ? i / fadeIn : 1;
+      const fo = i > nLen - fadeOut ? (nLen - i) / fadeOut : 1;
+      nd[i] = (Math.random() * 2 - 1) * fi * fo;
+    }
     const nSrc = ctx.createBufferSource();
     nSrc.buffer = nBuf;
     const hpf = ctx.createBiquadFilter();
-    hpf.type = 'highpass';
-    hpf.frequency.value = 1200;
+    hpf.type = 'bandpass';
+    hpf.frequency.value = 800;
+    hpf.Q.value = 1.5;
     const nG = ctx.createGain();
-    nG.gain.setValueAtTime(.025, now);
-    nG.gain.exponentialRampToValueAtTime(.0001, now + .012);
+    nG.gain.setValueAtTime(.008, now);
+    nG.gain.exponentialRampToValueAtTime(.0001, now + .018);
     nSrc.connect(hpf);
     hpf.connect(nG);
     nG.connect(ctx.destination);
     nSrc.start(now);
-    nSrc.stop(now + .015);
+    nSrc.stop(now + .020);
   } catch (e) {}
 }
 // 打版：敲擊吉他音箱的「咚」聲
