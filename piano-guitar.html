@@ -335,72 +335,40 @@ const KEY_MAP = {
 
 // ─── Chord data ───────────────────────────────────────────────
 // guitar:[str6..str1] null=muted | frets:[str6..str1] fret number
-const CHORD_DATA = [{
-  name: "C",
-  piano: [60, 64, 67],
-  guitar: [null, 48, 52, 55, 60, 64],
-  frets: [null, 3, 2, 0, 1, 0]
-}, {
-  name: "Cmaj7",
-  piano: [60, 64, 67, 71],
-  guitar: [null, 48, 52, 55, 59, 64],
-  frets: [null, 3, 2, 0, 0, 0]
-}, {
-  name: "D",
-  piano: [62, 66, 69],
-  guitar: [null, null, 50, 57, 62, 66],
-  frets: [null, null, 0, 2, 3, 2]
-}, {
-  name: "D7",
-  piano: [62, 66, 69, 72],
-  guitar: [null, null, 50, 57, 60, 66],
-  frets: [null, null, 0, 2, 1, 2]
-}, {
-  name: "Dm",
-  piano: [62, 65, 69],
-  guitar: [null, null, 50, 57, 62, 65],
-  frets: [null, null, 0, 2, 3, 1]
-}, {
-  name: "E",
-  piano: [64, 68, 71],
-  guitar: [40, 47, 52, 56, 59, 64],
-  frets: [0, 2, 2, 1, 0, 0]
-}, {
-  name: "E7",
-  piano: [64, 68, 71, 74],
-  guitar: [40, 47, 50, 56, 59, 64],
-  frets: [0, 2, 0, 1, 0, 0]
-}, {
-  name: "Em",
-  piano: [64, 67, 71],
-  guitar: [40, 47, 52, 55, 59, 64],
-  frets: [0, 2, 2, 0, 0, 0]
-}, {
-  name: "F",
-  piano: [65, 69, 72],
-  guitar: [null, null, 53, 57, 60, 65],
-  frets: [null, null, 3, 2, 1, 1]
-}, {
-  name: "G",
-  piano: [67, 71, 74],
-  guitar: [43, 47, 50, 55, 59, 67],
-  frets: [3, 2, 0, 0, 0, 3]
-}, {
-  name: "G7",
-  piano: [67, 71, 74, 77],
-  guitar: [43, 47, 50, 55, 59, 65],
-  frets: [3, 2, 0, 0, 0, 1]
-}, {
-  name: "Am",
-  piano: [69, 72, 76],
-  guitar: [null, 45, 52, 57, 60, 64],
-  frets: [null, 0, 2, 2, 1, 0]
-}, {
-  name: "B7",
-  piano: [59, 63, 66, 69],
-  guitar: [null, 47, 51, 57, 59, 66],
-  frets: [null, 2, 1, 2, 0, 2]
-}];
+const CHORD_DATA = [
+  {name:"A",     piano:[57,61,64],         guitar:[null,45,52,57,61,64],      frets:[null,0,2,2,2,0]},
+  {name:"A7",    piano:[57,61,64,67],       guitar:[null,45,52,55,61,64],      frets:[null,0,2,0,2,0]},
+  {name:"Am",    piano:[57,60,64],          guitar:[null,45,52,57,60,64],      frets:[null,0,2,2,1,0]},
+  {name:"Am7",   piano:[57,60,64,67],       guitar:[null,45,52,55,60,64],      frets:[null,0,2,0,1,0]},
+  {name:"Asus2", piano:[57,59,64],          guitar:[null,45,52,57,59,64],      frets:[null,0,2,2,0,0]},
+  {name:"Asus4", piano:[57,62,64],          guitar:[null,45,52,57,62,64],      frets:[null,0,2,2,3,0]},
+  {name:"B",     piano:[59,63,66],          guitar:[null,47,54,59,63,66],      frets:[null,2,4,4,4,2]},
+  {name:"Bm",    piano:[59,62,66],          guitar:[null,47,54,59,62,66],      frets:[null,2,4,4,3,2]},
+  {name:"Bm7",   piano:[59,62,66,69],       guitar:[null,47,54,57,62,66],      frets:[null,2,4,2,3,2]},
+  {name:"B7",    piano:[59,63,66,69],       guitar:[null,47,51,57,59,66],      frets:[null,2,1,2,0,2]},
+  {name:"C",     piano:[60,64,67],          guitar:[null,48,52,55,60,64],      frets:[null,3,2,0,1,0]},
+  {name:"C/E",   piano:[60,64,67],          guitar:[40,48,52,55,60,64],        frets:[0,3,2,0,1,0]},
+  {name:"C7",    piano:[60,64,67,70],       guitar:[null,48,52,58,60,64],      frets:[null,3,2,3,1,0]},
+  {name:"Cadd9", piano:[60,64,67,74],       guitar:[null,48,52,55,62,67],      frets:[null,3,2,0,3,3]},
+  {name:"Cmaj7", piano:[60,64,67,71],       guitar:[null,48,52,55,59,64],      frets:[null,3,2,0,0,0]},
+  {name:"D",     piano:[62,66,69],          guitar:[null,null,50,57,62,66],    frets:[null,null,0,2,3,2]},
+  {name:"D7",    piano:[62,66,69,72],       guitar:[null,null,50,57,60,66],    frets:[null,null,0,2,1,2]},
+  {name:"Dm",    piano:[62,65,69],          guitar:[null,null,50,57,62,65],    frets:[null,null,0,2,3,1]},
+  {name:"Dm7",   piano:[62,65,69,72],       guitar:[null,null,50,57,60,65],    frets:[null,null,0,2,1,1]},
+  {name:"Dsus2", piano:[62,64,69],          guitar:[null,null,50,57,62,64],    frets:[null,null,0,2,3,0]},
+  {name:"Dsus4", piano:[62,67,69],          guitar:[null,null,50,57,62,67],    frets:[null,null,0,2,3,3]},
+  {name:"E",     piano:[64,68,71],          guitar:[40,47,52,56,59,64],        frets:[0,2,2,1,0,0]},
+  {name:"E7",    piano:[64,68,71,74],       guitar:[40,47,50,56,59,64],        frets:[0,2,0,1,0,0]},
+  {name:"E9",    piano:[64,68,71,74,66],    guitar:[40,47,50,56,59,66],        frets:[0,2,0,1,0,2]},
+  {name:"Em",    piano:[64,67,71],          guitar:[40,47,52,55,59,64],        frets:[0,2,2,0,0,0]},
+  {name:"Em7",   piano:[64,67,71,74],       guitar:[40,47,52,55,62,64],        frets:[0,2,2,0,3,0]},
+  {name:"Esus4", piano:[64,69,71],          guitar:[40,47,52,57,59,64],        frets:[0,2,2,2,0,0]},
+  {name:"F",     piano:[65,69,72],          guitar:[41,48,53,57,60,65],        frets:[1,3,3,2,1,1]},
+  {name:"Fmaj7", piano:[65,69,72,76],       guitar:[null,null,53,57,60,64],    frets:[null,null,3,2,1,0]},
+  {name:"G",     piano:[67,71,74],          guitar:[43,47,50,55,59,67],        frets:[3,2,0,0,0,3]},
+  {name:"G7",    piano:[67,71,74,77],       guitar:[43,47,50,55,59,65],        frets:[3,2,0,0,0,1]},
+  {name:"Gm",    piano:[67,70,74],          guitar:[43,50,55,58,62,67],        frets:[3,5,5,3,3,3]}
+];
 
 // ─── Constants ────────────────────────────────────────────────
 const PICK_MODES = [{
@@ -995,20 +963,21 @@ function karplusString(ctx, f, sustained, strIdx, velocity) {
   const raw = new Float32Array(len);
 
   // ── 2. 激勵訊號設計（Commuted Synthesis 精神）
-  //    真實撥弦 = 箱體衝擊（低中頻共鳴）+ 撥弦觸感（高頻噪聲）
-  //    這整段激勵包含了原本輸出端 peaking filter 要補充的資訊
-  const excLen = Math.min(N * 2, Math.floor(sr * 0.06)); // 激勵持續最多60ms
+  //    真實撥弦 = 箱體衝擊（低中頻共鳴）+ 撥弦觸感（中高頻噪聲）
+  const excLen = Math.min(N * 2, Math.floor(sr * 0.06));
   const exc = new Float32Array(excLen);
+  const fadeInSamples = Math.floor(sr * 0.001); // 1ms fade-in 避免突變喀聲
 
   // 箱體 Helmholtz 共鳴成分（~100Hz，木頭空腔「咚」的感覺）
-  const bodyF = 98 + strIdx * 4; // 低音弦箱體共鳴頻率略低
+  const bodyF = 98 + strIdx * 4;
   for (let i = 0; i < excLen; i++) {
     const t = i / sr;
-    exc[i] += 0.6 * Math.sin(2 * Math.PI * bodyF * t) * Math.exp(-t / 0.025);
-    // 面板衝擊（200-400Hz，短促）
-    exc[i] += 0.3 * Math.sin(2 * Math.PI * 220 * t) * Math.exp(-t / 0.010);
-    // 觸弦高頻噪聲（力度越大越亮）
-    exc[i] += (Math.random() * 2 - 1) * (0.15 + velocity * 0.25) * Math.exp(-t / 0.003);
+    const fadeIn = i < fadeInSamples ? i / fadeInSamples : 1; // 頭部平滑
+    exc[i] += 0.6 * Math.sin(2 * Math.PI * bodyF * t) * Math.exp(-t / 0.025) * fadeIn;
+    // 面板衝擊（200Hz，短促）
+    exc[i] += 0.3 * Math.sin(2 * Math.PI * 220 * t) * Math.exp(-t / 0.010) * fadeIn;
+    // 觸弦噪聲：振幅降低、衰減拉長、頭部 fade-in 避免突變喀聲
+    exc[i] += (Math.random() * 2 - 1) * (0.08 + velocity * 0.10) * Math.exp(-t / 0.006) * fadeIn;
   }
 
   // ── 3. 撥弦位置 comb filter（最關鍵的音色塑形）
