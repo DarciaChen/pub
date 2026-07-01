@@ -963,21 +963,37 @@ function karplusString(ctx, f, sustained, strIdx, velocity) {
   const raw = new Float32Array(len);
 
   // ── 2. 激勵訊號設計（Commuted Synthesis 精神）
-  //    真實撥弦 = 箱體衝擊（低中頻共鳴）+ 撥弦觸感（中高頻噪聲）
-  const excLen = Math.min(N * 2, Math.floor(sr * 0.06));
+  //    真實撥弦的起音是寬頻衝擊，不是純正弦波
+  //    用帶通濾波噪聲模擬：低頻通道（箱體感）+ 中頻通道（面板衝擊）+ 高頻通道（觸弦感）
+  const excLen = Math.min(N, Math.floor(sr * 0.03)); // 縮短至30ms，真實撥弦起音很短促
   const exc = new Float32Array(excLen);
-  const fadeInSamples = Math.floor(sr * 0.001); // 1ms fade-in 避免突變喀聲
 
-  // 箱體 Helmholtz 共鳴成分（~100Hz，木頭空腔「咚」的感覺）
-  const bodyF = 98 + strIdx * 4;
+  // 產生一段白噪聲，再用不同時間常數模擬各頻段的衰減
+  // 低頻箱體感（慢衰減）
+  const loTau = 0.020; // 20ms
+  // 中頻面板感（中速衰減）
+  const midTau = 0.008; // 8ms
+  // 高頻觸弦感（快衰減，力度越大越亮）
+  const hiTau = 0.003 + (1 - velocity) * 0.003; // 3-6ms
+
+  // 每條弦的頻率特性：低音弦（纏弦）低頻成分更重
+  const loGain  = 0.55 + (5 - strIdx) * 0.04; // str6最重，str1最輕
+  const midGain = 0.35;
+  const hiGain  = 0.10 + velocity * 0.18;
+
+  // 用連續 RC 濾波器（單極低通）對噪聲做時域整形，比直接乘以包絡更自然
+  let loState = 0, midState = 0;
+  const loAlpha  = Math.exp(-1 / (sr * loTau));
+  const midAlpha = Math.exp(-1 / (sr * midTau));
+  const fadeInS  = Math.floor(sr * 0.0005); // 0.5ms fade-in 防突變
+
   for (let i = 0; i < excLen; i++) {
-    const t = i / sr;
-    const fadeIn = i < fadeInSamples ? i / fadeInSamples : 1; // 頭部平滑
-    exc[i] += 0.6 * Math.sin(2 * Math.PI * bodyF * t) * Math.exp(-t / 0.025) * fadeIn;
-    // 面板衝擊（200Hz，短促）
-    exc[i] += 0.3 * Math.sin(2 * Math.PI * 220 * t) * Math.exp(-t / 0.010) * fadeIn;
-    // 觸弦噪聲：振幅降低、衰減拉長、頭部 fade-in 避免突變喀聲
-    exc[i] += (Math.random() * 2 - 1) * (0.08 + velocity * 0.10) * Math.exp(-t / 0.006) * fadeIn;
+    const noise = Math.random() * 2 - 1;
+    loState  = loAlpha  * loState  + (1 - loAlpha)  * noise;
+    midState = midAlpha * midState + (1 - midAlpha) * noise;
+    const hiComp = noise * Math.exp(-i / (sr * hiTau));
+    const fadeIn = i < fadeInS ? i / fadeInS : 1;
+    exc[i] = (loState * loGain + midState * midGain + hiComp * hiGain) * fadeIn;
   }
 
   // ── 3. 撥弦位置 comb filter（最關鍵的音色塑形）
@@ -1072,8 +1088,8 @@ function guitarOn(ctx, f, vol, sustained, dest, strIdx, velocity, tOffset) {
   const helm = ctx.createBiquadFilter();
   helm.type = 'peaking';
   helm.frequency.value = 100;
-  helm.gain.value = 7;
-  helm.Q.value = 6;
+  helm.gain.value = 4;
+  helm.Q.value = 4;
   helm.connect(velLpf);
 
   // ── K-S 物理模型（新版，含激勵訊號設計）
