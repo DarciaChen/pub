@@ -447,6 +447,10 @@ const PICK_MODES = [{
   id: "all121t",
   label: "全121t121",
   desc: "全弦→1→2→1→t→1→2→1"
+}, {
+  id: "t123x121",
+  label: "T123x121",
+  desc: "低音→爬升→全刷→收尾"
 }];
 const BPM_PRESETS = [{
   label: "極慢",
@@ -598,6 +602,27 @@ function buildPattern(mode, voicing, allMidi, isGtr, I) {
           strIdx: null
         }));
         return [step(0, I * .88, all), step(I, I * .88, [ns(N1)]), step(I * 2, I * .88, [ns(N2)]), step(I * 3, I * .88, [ns(N1)]), step(I * 4, I * .88, [ns(T)]), step(I * 5, I * .88, [ns(N1)]), step(I * 6, I * .88, [ns(N2)]), step(I * 7, I * .88, [ns(N1)])];
+      }
+    case "t123x121":
+      {
+        const allX = isGtr && voicing ? voicing.map((m, i) => ({
+          midi: m,
+          strIdx: i
+        })).filter(x => x.midi != null) : allMidi.map(m => ({
+          midi: m,
+          strIdx: null
+        }));
+        // T→1→2→3→全弦（x）→1→2→1
+        return [
+          step(0,     I * .88, [ns(T)]),
+          step(I,     I * .88, [ns(N1)]),
+          step(I * 2, I * .88, [ns(N2)]),
+          step(I * 3, I * .88, [ns(N3)]),
+          step(I * 4, I * .88, allX),
+          step(I * 5, I * .88, [ns(N1)]),
+          step(I * 6, I * .88, [ns(N2)]),
+          step(I * 7, I * .88, [ns(N1)])
+        ];
       }
   }
   return [];
