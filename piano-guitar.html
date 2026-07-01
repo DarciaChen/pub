@@ -963,29 +963,22 @@ function karplusString(ctx, f, sustained, strIdx, velocity) {
   const raw = new Float32Array(len);
 
   // ── 2. 激勵訊號設計
-  //    真實撥弦的初始弦位移是三角波（撥片在 pluckRatio 位置拉偏弦，釋放後形成三角形）
-  //    這是業界公認「物理正確且直觀」的初始條件，頻譜泛音缺失位置也正確
-  //    疊加少量噪聲模擬撥片材質/手指的隨機觸感，每次略有不同
+  //    三角波初始條件（物理正確的弦位移）+ 極少量噪聲（隨機觸感）
   const combDelay = Math.max(1, Math.round(N / tim.pluckRatio));
-  const excLen = N; // 激勵長度 = 一個週期（恰好填滿延遲線）
-
-  // 三角波：從 0 爬升到頂點（combDelay），再下降到 0
-  // 這代表弦從靜止被拉偏到最大位移（撥弦位置），然後釋放
+  const excLen = N;
   const exc = new Float32Array(excLen);
+
+  // 三角波：振幅縮小至 0.5，避免第一圈過衝後快速衰減的突兀感
   for (let i = 0; i < excLen; i++) {
-    if (i <= combDelay) {
-      exc[i] = i / combDelay; // 上升段
-    } else {
-      exc[i] = (excLen - i) / Math.max(1, excLen - combDelay); // 下降段
-    }
-  }
-  // 疊加噪聲：力度越大噪聲越多（亮度）；低音弦噪聲較少（纏弦觸感更柔）
-  const noiseAmt = (0.04 + velocity * 0.08) * (0.6 + strIdx * 0.08);
-  for (let i = 0; i < excLen; i++) {
-    exc[i] += (Math.random() * 2 - 1) * noiseAmt;
+    const tri = i <= combDelay
+      ? i / combDelay
+      : (excLen - i) / Math.max(1, excLen - combDelay);
+    // 噪聲極少（1-2%），只提供每次略有不同的隨機質感，不影響整體顆粒感
+    const noise = (Math.random() * 2 - 1) * (0.01 + velocity * 0.015);
+    exc[i] = tri * 0.5 + noise;
   }
 
-  // ── 3. DC 移除（噪聲成分可能引入殘餘 DC，移除後進入延遲線）
+  // ── 3. DC 移除
   {
     let dcSum = 0;
     for (let i = 0; i < excLen; i++) dcSum += exc[i];
