@@ -1000,6 +1000,21 @@ function karplusString(ctx, f, sustained, strIdx, velocity) {
     const fadeOut = 1 - (i - N) / Math.max(1, excLen - N);
     dl[i % N] += excComb[i] * 0.4 * fadeOut;
   }
+  // 對延遲線初始值做一次移動平均平滑：
+  // 激勵訊號在延遲線某些位置能量集中，每轉一圈就會脈衝一次產生「彈簧感」
+  // 平滑後能量分布更均勻，弦的泛音結構由 KS 迴路的 loop filter 自然形成
+  {
+    const smooth = new Float32Array(N);
+    const r = 3; // 平滑半徑（樣本數）
+    for (let i = 0; i < N; i++) {
+      let sum = 0;
+      for (let j = -r; j <= r; j++) {
+        sum += dl[(i + j + N) % N];
+      }
+      smooth[i] = sum / (2 * r + 1);
+    }
+    for (let i = 0; i < N; i++) dl[i] = smooth[i];
+  }
 
   // ── 5. KS 迴路：頻率相依 loop filter
   //    用兩係數加權平均取代等權半點平均：
