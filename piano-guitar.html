@@ -962,54 +962,45 @@ function karplusString(ctx, f, sustained, strIdx, velocity) {
   const len = Math.floor(sr * dur);
   const raw = new Float32Array(len);
 
-  // ── 2. 激勵訊號設計（Commuted Synthesis 精神）
-  //    真實撥弦 = 箱體衝擊（低中頻共鳴）+ 撥弦觸感（中高頻噪聲）
-  const excLen = Math.min(N * 2, Math.floor(sr * 0.06));
-  const exc = new Float32Array(excLen);
-  const fadeInSamples = Math.floor(sr * 0.001); // 1ms fade-in 避免突變喀聲
-
-  // 箱體 Helmholtz 共鳴成分（~100Hz，木頭空腔「咚」的感覺）
-  const bodyF = 98 + strIdx * 4;
-  for (let i = 0; i < excLen; i++) {
-    const t = i / sr;
-    const fadeIn = i < fadeInSamples ? i / fadeInSamples : 1; // 頭部平滑
-    exc[i] += 0.6 * Math.sin(2 * Math.PI * bodyF * t) * Math.exp(-t / 0.025) * fadeIn;
-    // 面板衝擊（200Hz，短促）
-    exc[i] += 0.3 * Math.sin(2 * Math.PI * 220 * t) * Math.exp(-t / 0.010) * fadeIn;
-    // 觸弦噪聲：振幅降低、衰減拉長、頭部 fade-in 避免突變喀聲
-    exc[i] += (Math.random() * 2 - 1) * (0.08 + velocity * 0.10) * Math.exp(-t / 0.006) * fadeIn;
-  }
-
-  // ── 3. 撥弦位置 comb filter（最關鍵的音色塑形）
+  // ── 2. 激勵訊號設計
+  //    真實撥弦的初始弦位移是三角波（撥片在 pluckRatio 位置拉偏弦，釋放後形成三角形）
+  //    這是業界公認「物理正確且直觀」的初始條件，頻譜泛音缺失位置也正確
+  //    疊加少量噪聲模擬撥片材質/手指的隨機觸感，每次略有不同
   const combDelay = Math.max(1, Math.round(N / tim.pluckRatio));
-  const excComb = new Float32Array(excLen);
+  const excLen = N; // 激勵長度 = 一個週期（恰好填滿延遲線）
+
+  // 三角波：從 0 爬升到頂點（combDelay），再下降到 0
+  // 這代表弦從靜止被拉偏到最大位移（撥弦位置），然後釋放
+  const exc = new Float32Array(excLen);
   for (let i = 0; i < excLen; i++) {
-    excComb[i] = exc[i] - (i >= combDelay ? exc[i - combDelay] : 0);
+    if (i <= combDelay) {
+      exc[i] = i / combDelay; // 上升段
+    } else {
+      exc[i] = (excLen - i) / Math.max(1, excLen - combDelay); // 下降段
+    }
   }
-  // DC 移除：激勵訊號的非整數週期殘餘會在延遲線產生 DC offset，
-  // DC 在正回饋迴路中幾乎不衰減，每轉一圈就輸出一次 → 產生週期性「彈簧音」
-  // 在進入延遲線前移除 DC，是業界標準修法（不放在回饋迴路內以免音高偏調）
+  // 疊加噪聲：力度越大噪聲越多（亮度）；低音弦噪聲較少（纏弦觸感更柔）
+  const noiseAmt = (0.04 + velocity * 0.08) * (0.6 + strIdx * 0.08);
+  for (let i = 0; i < excLen; i++) {
+    exc[i] += (Math.random() * 2 - 1) * noiseAmt;
+  }
+
+  // ── 3. DC 移除（噪聲成分可能引入殘餘 DC，移除後進入延遲線）
   {
     let dcSum = 0;
-    for (let i = 0; i < excLen; i++) dcSum += excComb[i];
+    for (let i = 0; i < excLen; i++) dcSum += exc[i];
     const dcMean = dcSum / excLen;
     if (Math.abs(dcMean) > 1e-9) {
-      for (let i = 0; i < excLen; i++) excComb[i] -= dcMean;
+      for (let i = 0; i < excLen; i++) exc[i] -= dcMean;
     }
   }
 
-  // ── 4. 填入延遲線初始值（把激勵訊號折疊到一個週期長度裡）
+  // ── 4. 填入延遲線初始值（三角波恰好填滿一個週期，直接複製）
   const dl = new Float32Array(N);
-  for (let i = 0; i < excLen && i < N; i++) {
-    dl[i] += excComb[i] * 0.8;
+  for (let i = 0; i < N; i++) {
+    dl[i] = exc[i];
   }
-  // 超出一個週期的部分折回來（模擬弦從兩端反射後的疊加）
-  // 加 fade-out 窗：折疊部分隨距離衰減，避免邊界硬切
-  for (let i = N; i < excLen; i++) {
-    const fadeOut = 1 - (i - N) / Math.max(1, excLen - N);
-    dl[i % N] += excComb[i] * 0.4 * fadeOut;
-  }
-  // 折疊後再做一次 DC 移除，消除折疊累積產生的殘餘 DC
+  // 折疊後再做一次 DC 移除，消除噪聲疊加累積的殘餘
   {
     let dlSum = 0;
     for (let i = 0; i < N; i++) dlSum += dl[i];
@@ -1017,17 +1008,6 @@ function karplusString(ctx, f, sustained, strIdx, velocity) {
     if (Math.abs(dlMean) > 1e-9) {
       for (let i = 0; i < N; i++) dl[i] -= dlMean;
     }
-  }
-  // 移動平均平滑：磨平能量分布的尖峰（補充 DC 移除，更進一步平滑）
-  {
-    const smooth = new Float32Array(N);
-    const r = 3;
-    for (let i = 0; i < N; i++) {
-      let sum = 0;
-      for (let j = -r; j <= r; j++) sum += dl[(i + j + N) % N];
-      smooth[i] = sum / (2 * r + 1);
-    }
-    for (let i = 0; i < N; i++) dl[i] = smooth[i];
   }
   //    用兩係數加權平均取代等權半點平均：
   //    a0 控制低頻保留，a1 控制高頻衰減速度
