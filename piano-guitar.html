@@ -941,148 +941,160 @@ function createGuitarBodyIR(ctx) {
   return ir;
 }
 
-// Karplus-Strong 撥弦物理模型（快取避免重複計算）
+// Karplus-Strong 撥弦物理模型（完全重寫）
+// 設計原則：
+//   1. 激勵訊號 = 合成箱體衝擊響應（commuted synthesis 精神）×撥弦位置 comb filter
+//   2. 頻率相依 loop filter：高頻泛音衰減比低頻快，符合真實弦的物理行為
+//   3. 每條弦（strIdx 0-5）有獨立的衰減特性與撥弦位置比例
 const ksCache = new Map();
-function karplusString(ctx, f, sustained) {
-  const key = `${Math.round(f * 10)}_${sustained ? 1 : 0}`;
+
+// 每條弦的物理特性
+// pluckRatio: 撥弦點距離橋頭比例（越小越靠近橋，音越亮刺；越大越靠近音孔，音越溫潤）
+// loLoss / hiLoss: loop filter 低頻/高頻的衰減係數（纏弦低音弦高頻衰減更慢）
+const STR_TIMBRE = [
+  { pluckRatio: 7.5, loLoss: 0.9995, hiLoss: 0.994, detune: 0.000 }, // str6 E2（最粗，纏弦）
+  { pluckRatio: 7.2, loLoss: 0.9993, hiLoss: 0.993, detune: 0.001 }, // str5 A2
+  { pluckRatio: 7.0, loLoss: 0.9990, hiLoss: 0.991, detune:-0.001 }, // str4 D3
+  { pluckRatio: 6.8, loLoss: 0.9988, hiLoss: 0.989, detune: 0.002 }, // str3 G3
+  { pluckRatio: 6.5, loLoss: 0.9985, hiLoss: 0.987, detune:-0.002 }, // str2 B3（素弦開始）
+  { pluckRatio: 6.2, loLoss: 0.9982, hiLoss: 0.985, detune: 0.000 }, // str1 E4（最細，高頻衰減最快）
+];
+
+function karplusString(ctx, f, sustained, strIdx, velocity) {
+  if (strIdx === void 0) strIdx = 3;
+  if (velocity === void 0) velocity = 0.7;
+
+  const key = `${Math.round(f * 10)}_${sustained ? 1 : 0}_${strIdx}_${Math.round(velocity * 10)}`;
   if (ksCache.has(key)) return ksCache.get(key);
+
   const sr = ctx.sampleRate;
-  const N = Math.max(2, Math.round(sr / f)); // 延遲線長度 = 一個週期
-  const decay = sustained ? .9992 : .998; // 衰減係數（越接近1越持久）
-  const dur = sustained ? 3.5 : 1.8;
+  const tim = STR_TIMBRE[strIdx];
+
+  // ── 1. 延遲線長度（一個基頻週期）
+  const N = Math.max(2, Math.round(sr / f));
+  const dur = sustained ? 4.0 : 2.2;
   const len = Math.floor(sr * dur);
   const raw = new Float32Array(len);
-  const dl = new Float32Array(N);
-  // 初始激勵：白噪音（模擬撥弦瞬間）
-  for (let i = 0; i < N; i++) dl[i] = Math.random() * 2 - 1;
-  // K-S 迴路：低通平均 + 衰減（每個迭代模擬弦的一個樣本）
-  for (let i = 0; i < len; i++) {
-    const di = i % N,
-      ni = (di + 1) % N;
-    raw[i] = dl[di];
-    dl[di] = .5 * (dl[di] + dl[ni]) * decay; // 半點平均低通 + 衰減
+
+  // ── 2. 激勵訊號設計（Commuted Synthesis 精神）
+  //    真實撥弦 = 箱體衝擊（低中頻共鳴）+ 撥弦觸感（高頻噪聲）
+  //    這整段激勵包含了原本輸出端 peaking filter 要補充的資訊
+  const excLen = Math.min(N * 2, Math.floor(sr * 0.06)); // 激勵持續最多60ms
+  const exc = new Float32Array(excLen);
+
+  // 箱體 Helmholtz 共鳴成分（~100Hz，木頭空腔「咚」的感覺）
+  const bodyF = 98 + strIdx * 4; // 低音弦箱體共鳴頻率略低
+  for (let i = 0; i < excLen; i++) {
+    const t = i / sr;
+    exc[i] += 0.6 * Math.sin(2 * Math.PI * bodyF * t) * Math.exp(-t / 0.025);
+    // 面板衝擊（200-400Hz，短促）
+    exc[i] += 0.3 * Math.sin(2 * Math.PI * 220 * t) * Math.exp(-t / 0.010);
+    // 觸弦高頻噪聲（力度越大越亮）
+    exc[i] += (Math.random() * 2 - 1) * (0.15 + velocity * 0.25) * Math.exp(-t / 0.003);
   }
+
+  // ── 3. 撥弦位置 comb filter（最關鍵的音色塑形）
+  //    在撥弦點距離=弦長/ratio 的地方，對應泛音被消除
+  //    靠近橋頭（小ratio）→ 高泛音保留多 → 明亮；靠近音孔（大ratio）→ 溫潤
+  const combDelay = Math.max(1, Math.round(N / tim.pluckRatio));
+  const excComb = new Float32Array(excLen);
+  for (let i = 0; i < excLen; i++) {
+    excComb[i] = exc[i] - (i >= combDelay ? exc[i - combDelay] : 0);
+  }
+
+  // ── 4. 填入延遲線初始值（把激勵訊號折疊到一個週期長度裡）
+  const dl = new Float32Array(N);
+  for (let i = 0; i < excLen && i < N; i++) {
+    dl[i] += excComb[i] * 0.8;
+  }
+  // 超出一個週期的部分折回來（模擬弦從兩端反射後的疊加）
+  for (let i = N; i < excLen; i++) {
+    dl[i % N] += excComb[i] * 0.4;
+  }
+
+  // ── 5. KS 迴路：頻率相依 loop filter
+  //    用兩係數加權平均取代等權半點平均：
+  //    a0 控制低頻保留，a1 控制高頻衰減速度
+  //    真實弦：高頻泛音消失比低頻快，這裡用 loLoss/hiLoss 逼近
+  //    實作：H(z) ≈ (a0 * x[n] + a1 * x[n-1]) * loss
+  //    其中 a0+a1=1，a0<a1 代表低頻略多保留（低通偏移）
+  const a0 = 0.45, a1 = 0.55; // 頻率相依低通係數
+  let prev = 0;
+  for (let i = 0; i < len; i++) {
+    const di = i % N;
+    raw[i] = dl[di];
+    const cur = dl[di];
+    // loLoss/hiLoss 用音高插值（高音弦用hiLoss，低音弦用loLoss）
+    const loss = tim.loLoss * a0 + tim.hiLoss * a1;
+    dl[di] = (a0 * cur + a1 * prev) * loss;
+    prev = cur;
+  }
+
+  // ── 6. 微走音（每條弦有獨立 detune，避免所有弦音色完全相同）
+  //    實作：重新取樣略微偏移頻率（展開整個 buffer，不用振盪器）
+  //    在這裡用線性插值模擬 ±0.2% 的頻率偏移
+  if (Math.abs(tim.detune) > 0.0001) {
+    const ratio = 1 + tim.detune;
+    const detuned = new Float32Array(len);
+    for (let i = 0; i < len; i++) {
+      const src = i * ratio;
+      const si = Math.floor(src);
+      const frac = src - si;
+      detuned[i] = si + 1 < len
+        ? raw[si] * (1 - frac) + raw[si + 1] * frac
+        : raw[Math.min(si, len - 1)];
+    }
+    for (let i = 0; i < len; i++) raw[i] = raw[i] * 0.7 + detuned[i] * 0.3;
+  }
+
   const buf = ctx.createBuffer(1, len, sr);
   buf.copyToChannel(raw, 0);
   ksCache.set(key, buf);
   return buf;
 }
 
-// 每條弦的音色特性（只保留存在感參數，衰減已由 K-S 自然決定）
-const STR_TIMBRE = [{
-  pFreq: 2500,
-  pGain: 3
-},
-// str6 E2
-{
-  pFreq: 2800,
-  pGain: 4
-},
-// str5 A2
-{
-  pFreq: 3000,
-  pGain: 5
-},
-// str4 D3
-{
-  pFreq: 3200,
-  pGain: 6
-},
-// str3 G3
-{
-  pFreq: 3600,
-  pGain: 7
-},
-// str2 B3
-{
-  pFreq: 4000,
-  pGain: 9
-} // str1 E4
-];
 function guitarOn(ctx, f, vol, sustained, dest, strIdx, velocity, tOffset) {
-  if (strIdx === void 0) {
-    strIdx = null;
-  }
-  if (velocity === void 0) {
-    velocity = 0.7;
-  }
-  if (tOffset === void 0) {
-    tOffset = 0;
-  }
-  const t = ctx.currentTime + tOffset,
-    D = dest != null ? dest : ctx.destination;
-  const ch = strIdx != null ? STR_TIMBRE[strIdx] : STR_TIMBRE[3];
+  if (strIdx === void 0) strIdx = null;
+  if (velocity === void 0) velocity = 0.7;
+  if (tOffset === void 0) tOffset = 0;
+
+  const t = ctx.currentTime + tOffset;
+  const D = dest != null ? dest : ctx.destination;
+  const si = strIdx != null ? strIdx : Math.min(5, Math.max(0,
+    f < 100 ? 0 : f < 130 ? 1 : f < 185 ? 2 : f < 250 ? 3 : f < 330 ? 4 : 5
+  ));
+  const tim = STR_TIMBRE[si];
+
+  // ── 主增益
   const G = ctx.createGain();
   G.connect(D);
-  G.gain.setValueAtTime(vol * .88, t);
+  G.gain.setValueAtTime(vol * 0.9, t);
 
-  // ── 力度動態低通（力度大→亮，力度小→悶）
+  // ── 力度動態低通：只做細緻的高頻控制，不再承擔音色全部工作
+  //    大部分音色塑形已移到激勵訊號端
   const velLpf = ctx.createBiquadFilter();
   velLpf.type = 'lowpass';
-  velLpf.frequency.value = 2500 + velocity * 9500;
-  velLpf.Q.value = .5;
+  velLpf.frequency.value = 3500 + velocity * 8000; // 比之前更寬，讓激勵訊號的特色透出來
+  velLpf.Q.value = 0.4;
+  velLpf.connect(G);
 
-  // ── 箱體共鳴 Formants 串聯（模擬木頭空腔）
-  const chain = [[100, 9, 12],
-  // Helmholtz 空氣共鳴
-  [195, 7, 8],
-  // 面板第一共鳴
-  [275, 5, 8],
-  // 面板第二共鳴
-  [420, 3, 6] // 高階共鳴
-  ].reduce((prev, _ref0) => {
-    let freq = _ref0[0],
-      gain = _ref0[1],
-      Q = _ref0[2];
-    const bf = ctx.createBiquadFilter();
-    bf.type = 'peaking';
-    bf.frequency.value = freq;
-    bf.gain.value = gain;
-    bf.Q.value = Q;
-    prev.connect(bf);
-    return bf;
-  }, velLpf);
+  // ── Helmholtz 共鳴補強（只留一個，對應箱體最主要的低頻共鳴）
+  //    其他 3 個 peaking filter 已整合進激勵訊號，這裡不再需要
+  const helm = ctx.createBiquadFilter();
+  helm.type = 'peaking';
+  helm.frequency.value = 100;
+  helm.gain.value = 7;
+  helm.Q.value = 6;
+  helm.connect(velLpf);
 
-  // ── 每弦存在感
-  const pres = ctx.createBiquadFilter();
-  pres.type = 'peaking';
-  pres.frequency.value = ch.pFreq;
-  pres.gain.value = ch.pGain;
-  pres.Q.value = 1.2;
-  chain.connect(pres);
-  pres.connect(G);
-
-  // ── K-S 物理模型
-  const buf = karplusString(ctx, f, sustained != null ? sustained : false);
+  // ── K-S 物理模型（新版，含激勵訊號設計）
+  const buf = karplusString(ctx, f, sustained != null ? sustained : false, si, velocity);
   const src = ctx.createBufferSource();
   src.buffer = buf;
-  src.connect(velLpf);
+  src.connect(helm);
   src.start(t);
 
-  // ── 觸弦聲（起音高頻雜訊）
-  const tnLen = Math.max(2, Math.floor(ctx.sampleRate * .005));
-  const tnBuf = ctx.createBuffer(1, tnLen, ctx.sampleRate);
-  const tnd = tnBuf.getChannelData(0);
-  for (let i = 0; i < tnLen; i++) tnd[i] = Math.random() * 2 - 1;
-  const tnSrc = ctx.createBufferSource();
-  tnSrc.buffer = tnBuf;
-  const tnHpf = ctx.createBiquadFilter();
-  tnHpf.type = 'highpass';
-  tnHpf.frequency.value = 2500;
-  tnHpf.Q.value = .5;
-  const tnG = ctx.createGain();
-  tnG.gain.setValueAtTime(vol * .06, t);
-  tnG.gain.exponentialRampToValueAtTime(.0001, t + .008);
-  tnSrc.connect(tnHpf);
-  tnHpf.connect(tnG);
-  tnG.connect(D);
-  tnSrc.start(t);
-  tnSrc.stop(t + .010);
-  return {
-    kind: "guitar",
-    src,
-    G
-  };
+  return { kind: "guitar", src, G };
 }
 // ── 換弦摩擦聲
 function playStringSlide(ctx, vol, dest) {
