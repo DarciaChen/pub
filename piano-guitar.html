@@ -638,7 +638,7 @@ function GuitarStrings(_ref7) {
         fontSize: 8,
         fontFamily: "monospace"
       }
-    }, 6 - di), /*#__PURE__*/React.createElement("span", {
+    }, 6 - vi), /*#__PURE__*/React.createElement("span", {
       style: {
         color: vib ? "#6ac4ff" : "#1e1e2e",
         fontSize: 8,
@@ -698,14 +698,14 @@ function ChordDiagram(_ref8) {
     width: W,
     height: H
   }, frets.map((f, si) => {
-    const x = 12 + (5 - si) * CW;
+    const x = 12 + si * CW;
     if (f === null) return /*#__PURE__*/React.createElement("text", {
       key: si,
       x: x,
       y: 10,
       textAnchor: "middle",
       fontSize: 9,
-      fill: "#444",
+      fill: "#7888a8",
       fontFamily: "sans-serif"
     }, "\xD7");
     if (f === 0) return /*#__PURE__*/React.createElement("circle", {
@@ -748,13 +748,13 @@ function ChordDiagram(_ref8) {
     y: 16 + CH * .65,
     textAnchor: "end",
     fontSize: 6.5,
-    fill: "#555",
+    fill: "#7888a8",
     fontFamily: "monospace"
   }, startF), frets.map((f, si) => {
     if (f == null || f === 0 || f < startF || f > startF + ROWS - 1) return null;
     return /*#__PURE__*/React.createElement("circle", {
       key: si,
-      cx: 12 + (5 - si) * CW,
+      cx: 12 + si * CW,
       cy: 16 + (f - startF + 0.5) * CH,
       r: 5,
       fill: "#6ac4ff",
