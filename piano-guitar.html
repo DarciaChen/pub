@@ -334,40 +334,41 @@ const KEY_MAP = {
 };
 
 // ─── Chord data ───────────────────────────────────────────────
-// guitar:[str6..str1] null=muted | frets:[str6..str1] fret number
+// 排序原則：C大調常用 → A小調常用 → 其他常用開放 → 封閉 → sus/add延伸
 const CHORD_DATA = [
-  {name:"A",     piano:[57,61,64],         guitar:[null,45,52,57,61,64],      frets:[null,0,2,2,2,0]},
-  {name:"A7",    piano:[57,61,64,67],       guitar:[null,45,52,55,61,64],      frets:[null,0,2,0,2,0]},
+  // 排序：基礎三和弦 → 七和弦/延伸 → 封閉/轉位 → sus/add
+  {name:"C",     piano:[60,64,67],          guitar:[null,48,52,55,60,64],      frets:[null,3,2,0,1,0]},
+  {name:"D",     piano:[62,66,69],          guitar:[null,null,50,57,62,66],    frets:[null,null,0,2,3,2]},
+  {name:"Dm",    piano:[62,65,69],          guitar:[null,null,50,57,62,65],    frets:[null,null,0,2,3,1]},
+  {name:"E",     piano:[64,68,71],          guitar:[40,47,52,56,59,64],        frets:[0,2,2,1,0,0]},
+  {name:"Em",    piano:[64,67,71],          guitar:[40,47,52,55,59,64],        frets:[0,2,2,0,0,0]},
+  {name:"F",     piano:[65,69,72],          guitar:[41,48,53,57,60,65],        frets:[1,3,3,2,1,1]},
+  {name:"G",     piano:[67,71,74],          guitar:[43,47,50,55,59,67],        frets:[3,2,0,0,0,3]},
+  {name:"A",     piano:[57,61,64],          guitar:[null,45,52,57,61,64],      frets:[null,0,2,2,2,0]},
   {name:"Am",    piano:[57,60,64],          guitar:[null,45,52,57,60,64],      frets:[null,0,2,2,1,0]},
+  {name:"B7",    piano:[59,63,66,69],       guitar:[null,47,51,57,59,66],      frets:[null,2,1,2,0,2]},
+  {name:"C7",    piano:[60,64,67,70],       guitar:[null,48,52,58,60,64],      frets:[null,3,2,3,1,0]},
+  {name:"Cmaj7", piano:[60,64,67,71],       guitar:[null,48,52,55,59,64],      frets:[null,3,2,0,0,0]},
+  {name:"D7",    piano:[62,66,69,72],       guitar:[null,null,50,57,60,66],    frets:[null,null,0,2,1,2]},
+  {name:"Dm7",   piano:[62,65,69,72],       guitar:[null,null,50,57,60,65],    frets:[null,null,0,2,1,1]},
+  {name:"E7",    piano:[64,68,71,74],       guitar:[40,47,50,56,59,64],        frets:[0,2,0,1,0,0]},
+  {name:"Em7",   piano:[64,67,71,74],       guitar:[40,47,52,55,62,64],        frets:[0,2,2,0,3,0]},
+  {name:"E9",    piano:[64,68,71,74,66],    guitar:[40,47,50,56,59,66],        frets:[0,2,0,1,0,2]},
+  {name:"G7",    piano:[67,71,74,77],       guitar:[43,47,50,55,59,65],        frets:[3,2,0,0,0,1]},
+  {name:"A7",    piano:[57,61,64,67],       guitar:[null,45,52,55,61,64],      frets:[null,0,2,0,2,0]},
   {name:"Am7",   piano:[57,60,64,67],       guitar:[null,45,52,55,60,64],      frets:[null,0,2,0,1,0]},
-  {name:"Asus2", piano:[57,59,64],          guitar:[null,45,52,57,59,64],      frets:[null,0,2,2,0,0]},
-  {name:"Asus4", piano:[57,62,64],          guitar:[null,45,52,57,62,64],      frets:[null,0,2,2,3,0]},
+  {name:"Bm7",   piano:[59,62,66,69],       guitar:[null,47,54,57,62,66],      frets:[null,2,4,2,3,2]},
+  {name:"Fmaj7", piano:[65,69,72,76],       guitar:[null,null,53,57,60,64],    frets:[null,null,3,2,1,0]},
   {name:"B",     piano:[59,63,66],          guitar:[null,47,54,59,63,66],      frets:[null,2,4,4,4,2]},
   {name:"Bm",    piano:[59,62,66],          guitar:[null,47,54,59,62,66],      frets:[null,2,4,4,3,2]},
-  {name:"Bm7",   piano:[59,62,66,69],       guitar:[null,47,54,57,62,66],      frets:[null,2,4,2,3,2]},
-  {name:"B7",    piano:[59,63,66,69],       guitar:[null,47,51,57,59,66],      frets:[null,2,1,2,0,2]},
-  {name:"C",     piano:[60,64,67],          guitar:[null,48,52,55,60,64],      frets:[null,3,2,0,1,0]},
+  {name:"Gm",    piano:[67,70,74],          guitar:[43,50,55,58,62,67],        frets:[3,5,5,3,3,3]},
   {name:"C/E",   piano:[60,64,67],          guitar:[40,48,52,55,60,64],        frets:[0,3,2,0,1,0]},
-  {name:"C7",    piano:[60,64,67,70],       guitar:[null,48,52,58,60,64],      frets:[null,3,2,3,1,0]},
   {name:"Cadd9", piano:[60,64,67,74],       guitar:[null,48,52,55,62,67],      frets:[null,3,2,0,3,3]},
-  {name:"Cmaj7", piano:[60,64,67,71],       guitar:[null,48,52,55,59,64],      frets:[null,3,2,0,0,0]},
-  {name:"D",     piano:[62,66,69],          guitar:[null,null,50,57,62,66],    frets:[null,null,0,2,3,2]},
-  {name:"D7",    piano:[62,66,69,72],       guitar:[null,null,50,57,60,66],    frets:[null,null,0,2,1,2]},
-  {name:"Dm",    piano:[62,65,69],          guitar:[null,null,50,57,62,65],    frets:[null,null,0,2,3,1]},
-  {name:"Dm7",   piano:[62,65,69,72],       guitar:[null,null,50,57,60,65],    frets:[null,null,0,2,1,1]},
   {name:"Dsus2", piano:[62,64,69],          guitar:[null,null,50,57,62,64],    frets:[null,null,0,2,3,0]},
   {name:"Dsus4", piano:[62,67,69],          guitar:[null,null,50,57,62,67],    frets:[null,null,0,2,3,3]},
-  {name:"E",     piano:[64,68,71],          guitar:[40,47,52,56,59,64],        frets:[0,2,2,1,0,0]},
-  {name:"E7",    piano:[64,68,71,74],       guitar:[40,47,50,56,59,64],        frets:[0,2,0,1,0,0]},
-  {name:"E9",    piano:[64,68,71,74,66],    guitar:[40,47,50,56,59,66],        frets:[0,2,0,1,0,2]},
-  {name:"Em",    piano:[64,67,71],          guitar:[40,47,52,55,59,64],        frets:[0,2,2,0,0,0]},
-  {name:"Em7",   piano:[64,67,71,74],       guitar:[40,47,52,55,62,64],        frets:[0,2,2,0,3,0]},
   {name:"Esus4", piano:[64,69,71],          guitar:[40,47,52,57,59,64],        frets:[0,2,2,2,0,0]},
-  {name:"F",     piano:[65,69,72],          guitar:[41,48,53,57,60,65],        frets:[1,3,3,2,1,1]},
-  {name:"Fmaj7", piano:[65,69,72,76],       guitar:[null,null,53,57,60,64],    frets:[null,null,3,2,1,0]},
-  {name:"G",     piano:[67,71,74],          guitar:[43,47,50,55,59,67],        frets:[3,2,0,0,0,3]},
-  {name:"G7",    piano:[67,71,74,77],       guitar:[43,47,50,55,59,65],        frets:[3,2,0,0,0,1]},
-  {name:"Gm",    piano:[67,70,74],          guitar:[43,50,55,58,62,67],        frets:[3,5,5,3,3,3]}
+  {name:"Asus2", piano:[57,59,64],          guitar:[null,45,52,57,59,64],      frets:[null,0,2,2,0,0]},
+  {name:"Asus4", piano:[57,62,64],          guitar:[null,45,52,57,62,64],      frets:[null,0,2,2,3,0]}
 ];
 
 // ─── Constants ────────────────────────────────────────────────
@@ -795,7 +796,8 @@ function pianoOn(ctx, f, vol, dest, tOffset) {
   [0, .0026].forEach((d, i) => {
     const o = ctx.createOscillator();
     o.type = "triangle";
-    o.frequency.value = f * (1 + d);
+    // 每次按鍵微量隨機走音（±0.04%）：重複同鍵時拍頻略有不同，避免機械感
+    o.frequency.value = f * (1 + d + (Math.random() - 0.5) * 0.0008);
     const og = ctx.createGain();
     og.gain.value = i === 0 ? 1 : .6;
     o.connect(og);
@@ -950,7 +952,10 @@ function karplusString(ctx, f, sustained, strIdx, velocity) {
   if (strIdx === void 0) strIdx = 3;
   if (velocity === void 0) velocity = 0.7;
 
-  const key = `${Math.round(f * 10)}_${sustained ? 1 : 0}_${strIdx}_${Math.round(velocity * 10)}`;
+  // round-robin 變體：同一音高備 2 個變體隨機輪替，激勵噪聲使其自然相異，
+  // 避免重複彈同一音時波形逐位元組相同的「機關槍效應」
+  const variant = Math.random() < 0.5 ? 0 : 1;
+  const key = `${Math.round(f * 10)}_${sustained ? 1 : 0}_${strIdx}_${Math.round(velocity * 10)}_v${variant}`;
   if (ksCache.has(key)) return ksCache.get(key);
 
   const sr = ctx.sampleRate;
@@ -1756,7 +1761,9 @@ function Piano() {
             strIdx = _ref14.strIdx;
           // 同一步驟內多音同時觸發時（pinch/all121t），加微小隨機時間差模擬手指非完全同步
           const tOffset = notes.length > 1 ? idx * (.002 + Math.random() * .004) : 0;
-          const n = capTimbre === "guitar" ? guitarOn(ctx, mfreq(midi), vol, sustained != null ? sustained : false, dest, strIdx != null ? strIdx : null, velRef.current, tOffset) : pianoOn(ctx, mfreq(midi), vol, dest, tOffset);
+          // 每音微量力度抖動（±0.04）：模擬手指施力不完全均勻，亮度逐弦微變
+          const velJit = Math.max(0.1, Math.min(1, velRef.current + (Math.random() - 0.5) * 0.08));
+          const n = capTimbre === "guitar" ? guitarOn(ctx, mfreq(midi), vol, sustained != null ? sustained : false, dest, strIdx != null ? strIdx : null, velJit, tOffset) : pianoOn(ctx, mfreq(midi), vol, dest, tOffset);
           chordNodes.current.push({
             n,
             timbre: capTimbre
@@ -1913,7 +1920,10 @@ function Piano() {
           fontSize: 8,
           fontFamily: "monospace",
           color: on || hi ? "#446" : "#bbb",
-          pointerEvents: "none"
+          pointerEvents: "none",
+          userSelect: "none",
+          WebkitUserSelect: "none",
+          WebkitTouchCallout: "none"
         }
       }, WHITE_NAMES[wi], oct));
     }), BLACK_ST.map((st, bi) => {
@@ -2561,7 +2571,10 @@ function Piano() {
     style: {
       overflowX: "auto",
       maxWidth: "min(92vw,740px)",
-      borderRadius: 4
+      borderRadius: 4,
+      userSelect: "none",
+      WebkitUserSelect: "none",
+      WebkitTouchCallout: "none"
     }
   }, /*#__PURE__*/React.createElement("div", {
     style: {
@@ -2573,13 +2586,13 @@ function Piano() {
     style: {
       marginTop: 14,
       textAlign: "center",
-      color: "#181822",
+      color: "#7888a8",
       fontSize: 9,
       fontFamily: "monospace",
       letterSpacing: 1.2,
       lineHeight: 2
     }
-  }, "A W S E D \xB7 F T G Y H U J \xB7 K O L P \u2014 \u9375\u76E4\u97F3\u7B26", /*#__PURE__*/React.createElement("br", null), "SPACE \u2014 \u5EF6\u97F3\u8E0F\u677F \xB7 \u624B\u6307\u6ED1\u52D5 = \u6ED1\u97F3"));
+  }, "\u96FB\u8166/\u85CD\u7259\u9375\u76E4\u5F48\u594F\uFF1AA S D F G H J = \u767D\u9375 \xB7 W E T Y U = \u9ED1\u9375 \xB7 K O L P = \u9AD8\u97F3\u5EF6\u4F38", /*#__PURE__*/React.createElement("br", null), "SPACE \u2014 \u5EF6\u97F3\u8E0F\u677F \xB7 \u624B\u6307\u6ED1\u52D5 = \u6ED1\u97F3"));
 }
 ReactDOM.createRoot(document.getElementById("root")).render(React.createElement(Piano,null));
 })();</script></body></html>
