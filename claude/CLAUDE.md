@@ -49,6 +49,17 @@ Claude Code 本機找不到檔案時，改 fetch 上述 URL。
 Darcia 說「交接」時：產出結構化交接摘要，含當前目標、已完成項、關鍵決策與理由、
 未解決問題、相關檔案與連結。摘要必須自足，新對話不需回讀舊對話即可接續。
 
+## sales-visit-system（業務客戶拜訪系統）
+- Repo：DarciaChen/sales-visit-system（private）
+- 交接摘要：repo 根目錄 `交接摘要.md`（新 session 開始時必讀）
+- 事故紀錄：repo 根目錄 `事故紀錄.md`
+- 部署流程：Claude 改 → GitHub Actions 自動 clasp push → Apps Script 建新版本部署（前後端都要）
+- ⚠️ GCP 已換成自訂專案（starlit-surge-451203-i3），無法還原預設
+- ⚠️ GAS Web App 前後端都需要新版本部署，clasp push 不夠
+- ⚠️ 任何涉及 GCP / OAuth / 部署設定的變更，必須先確認對線上系統的影響
+- GitHub PAT：存於 System Prompt，用於 Contents API push
+- clasp Refresh Token：存於 GitHub Secrets（CLASP_REFRESH_TOKEN）
+
 ## 安裝說明（給 Darcia，模型可忽略本節）
 - Claude Code 專案層：複製本檔到 C:\dev\pub-work\CLAUDE.md（作用於該專案所有 session）。
 - Claude Code 全域層：想跨專案通用，放 C:\Users\<你>\.claude\CLAUDE.md。
