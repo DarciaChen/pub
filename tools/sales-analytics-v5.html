@@ -556,7 +556,18 @@ async function runAnalysis(){
   for(const k of RKEYS){
     for(const file of regionFiles[k]){
       try{
-        const buf=await file.arrayBuffer();
+        // 雙保險：先試 arrayBuffer()，失敗退回 FileReader
+        const buf=await (async()=>{
+          if(typeof file.arrayBuffer==='function'){
+            try{ return await file.arrayBuffer(); }catch(e){ /*fallthrough*/ }
+          }
+          return await new Promise((res,rej)=>{
+            const r=new FileReader();
+            r.onload=e=>res(e.target.result);
+            r.onerror=()=>rej(new Error('FileReader 讀取失敗'));
+            r.readAsArrayBuffer(file);
+          });
+        })();
         const wb=XLSX.read(buf,{type:'array'});
         const parsed=parseWB(wb,file.name);
         if(!allData[k][parsed.periodKey]) allData[k][parsed.periodKey]=parsed;
