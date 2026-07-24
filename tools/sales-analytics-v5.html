@@ -39,6 +39,7 @@ body{font-family:'Noto Sans TC',sans-serif;background:var(--paper);color:var(--t
   border-radius:6px;color:var(--accent2);
   font-family:'Noto Sans TC',sans-serif;font-size:12px;font-weight:600;
   text-align:center;cursor:pointer;
+  position:relative;overflow:hidden;
   touch-action:manipulation;
 }
 .region-upload-label:hover,.region-upload-label:active{background:rgba(42,122,79,.25);}
@@ -335,7 +336,7 @@ function buildSidebar() {
     label.textContent = '＋ 點擊上傳 XLS 檔案';
     const fileInput = document.createElement('input');
     fileInput.type = 'file'; fileInput.accept = '.xls,.xlsx'; fileInput.multiple = true;
-    fileInput.style.cssText = 'display:none';
+    fileInput.style.cssText = 'position:absolute;width:1px;height:1px;opacity:0;overflow:hidden;';
     fileInput.addEventListener('change', function(){ addFiles(k, this); });
     label.appendChild(fileInput);
     dropDiv.appendChild(label);
