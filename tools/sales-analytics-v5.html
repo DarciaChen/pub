@@ -174,10 +174,28 @@ tfoot td:nth-child(-n+3){text-align:left;}
 .empty-icon{font-size:44px;opacity:.25;}
 .empty-text{font-family:'Syne',sans-serif;font-size:14px;font-weight:700;}
 .empty-sub{font-size:12px;text-align:center;max-width:300px;line-height:1.6;}
+/* explicit upload button — always visible, reliable on iOS */
+.upload-btn{
+  display:none; /* shown only on mobile via media query */
+  width:100%; margin-top:6px; padding:10px;
+  background:rgba(42,122,79,.18); border:1px solid var(--accent2);
+  border-radius:6px; color:var(--accent2);
+  font-family:'Noto Sans TC',sans-serif; font-size:13px; font-weight:600;
+  cursor:pointer; text-align:center;
+}
+.upload-btn:active{background:rgba(42,122,79,.3);}
 #results{display:none;}
 .spinner{display:inline-block;width:11px;height:11px;border:2px solid rgba(30,79,160,.2);border-top-color:var(--accent3);border-radius:50%;animation:spin .6s linear infinite;vertical-align:middle;margin-right:5px;}
 @keyframes spin{to{transform:rotate(360deg);}}
-@media(max-width:880px){.shell{flex-direction:column;}.sidebar{width:100%;height:auto;position:static;}.ov-grid{grid-template-columns:repeat(2,1fr);}.sig-grid{grid-template-columns:1fr;}.month-grid{grid-template-columns:repeat(2,1fr);}}
+@media(max-width:880px){
+  .shell{flex-direction:column;}
+  .sidebar{width:100%;height:auto;position:static;overflow-y:visible;max-height:none;}
+  .region-drop{min-height:52px;}
+  .upload-btn{display:flex!important;}
+  .ov-grid{grid-template-columns:repeat(2,1fr);}
+  .sig-grid{grid-template-columns:1fr;}
+  .month-grid{grid-template-columns:repeat(2,1fr);}
+}
 </style>
 </head>
 <body>
@@ -305,10 +323,13 @@ function buildSidebar() {
       <span class="rfc" id="rfc-${k}">0 檔</span>
     </div>
     <div class="region-drop" id="rdrop-${k}">
-      <input type="file" accept=".xls,.xlsx" multiple onchange="addFiles('${k}',this)">
-      <div class="drop-hint" id="rhint-${k}">＋ 拖曳或點擊</div>
+      <input type="file" accept=".xls,.xlsx" multiple id="finput-${k}" onchange="addFiles('${k}',this)">
+      <div class="drop-hint" id="rhint-${k}">＋ 拖曳或點擊上傳</div>
       <div class="file-chips" id="rchips-${k}" style="display:none"></div>
-    </div>`;
+    </div>
+    <button class="upload-btn" onclick="document.getElementById('finput-${k}').click()">
+      📂 上傳 ${k} 區 XLS 檔案
+    </button>`;
     c.appendChild(b);
     const dz = b.querySelector('.region-drop');
     dz.addEventListener('dragover', e=>{e.preventDefault();dz.classList.add('drag-over');});
