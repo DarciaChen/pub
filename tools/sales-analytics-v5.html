@@ -1,0 +1,1122 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>業績分析工具 v5</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=JetBrains+Mono:wght@400;500;600&family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --ink:#0e0f14; --paper:#f5f4ef; --paper2:#eceae2; --line:#d4d0c4; --line2:#bfbbb0;
+  --accent:#c84b2f; --accent2:#2a7a4f; --accent3:#1e4fa0; --warn:#b8640a;
+  --text:#1a1b22; --text2:#6b6860; --text3:#9b9890;
+  --up:#1d6b3e; --down:#b82020;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:'Noto Sans TC',sans-serif;background:var(--paper);color:var(--text);min-height:100vh;font-size:13px;}
+.shell{display:flex;min-height:100vh;}
+
+/* ── Sidebar ── */
+.sidebar{width:268px;flex-shrink:0;background:var(--ink);color:#c8c5bc;display:flex;flex-direction:column;position:sticky;top:0;height:100vh;overflow-y:auto;}
+.sb-header{padding:24px 20px 18px;border-bottom:1px solid rgba(255,255,255,.07);}
+.sb-logo{font-family:'Syne',sans-serif;font-size:17px;font-weight:800;color:#fff;letter-spacing:-.3px;margin-bottom:3px;}
+.sb-sub{font-family:'JetBrains Mono',monospace;font-size:9px;color:#4a4840;letter-spacing:.8px;}
+.sb-sec{padding:14px 16px 6px;}
+.sb-sec-label{font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:1.5px;color:#3a3830;text-transform:uppercase;margin-bottom:8px;}
+.region-block{margin-bottom:8px;border:1px solid rgba(255,255,255,.06);border-radius:8px;overflow:hidden;}
+.region-header{display:flex;align-items:center;background:rgba(255,255,255,.04);padding:7px 11px;gap:8px;}
+.region-letter{font-family:'Syne',sans-serif;font-size:15px;font-weight:800;color:#fff;width:20px;}
+.region-name-input{flex:1;background:transparent;border:none;outline:none;font-family:'Noto Sans TC',sans-serif;font-size:12px;color:#c8c5bc;}
+.region-name-input::placeholder{color:#3a3830;}
+.rfc{font-family:'JetBrains Mono',monospace;font-size:10px;color:#3a3830;white-space:nowrap;}
+.rfc.has{color:var(--accent2);}
+.region-drop{background:rgba(255,255,255,.02);border-top:1px dashed rgba(255,255,255,.06);padding:7px 11px;cursor:pointer;position:relative;min-height:40px;display:flex;align-items:center;justify-content:center;transition:background .15s;}
+.region-drop:hover,.region-drop.drag-over{background:rgba(42,122,79,.12);}
+.region-drop input[type=file]{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%;}
+.drop-hint{font-family:'JetBrains Mono',monospace;font-size:10px;color:#3a3830;pointer-events:none;}
+.file-chips{display:flex;flex-direction:column;gap:3px;width:100%;}
+.file-chip{display:flex;align-items:center;background:rgba(255,255,255,.04);border-radius:4px;padding:3px 7px;font-family:'JetBrains Mono',monospace;font-size:9px;color:#7a7870;gap:4px;}
+.fc-period{color:var(--accent2);font-weight:600;flex-shrink:0;}
+.fc-name{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.fc-rm{cursor:pointer;color:#3a3830;flex-shrink:0;font-size:13px;line-height:1;}
+.fc-rm:hover{color:var(--accent);}
+.sb-actions{padding:12px 16px;margin-top:auto;border-top:1px solid rgba(255,255,255,.06);}
+.btn-run{width:100%;padding:10px;border:none;cursor:pointer;background:var(--accent);color:#fff;font-family:'Syne',sans-serif;font-size:13px;font-weight:700;border-radius:6px;transition:all .18s;}
+.btn-run:hover{filter:brightness(1.1);transform:translateY(-1px);}
+.btn-run:disabled{background:#2a2925;color:#3a3830;cursor:not-allowed;transform:none;}
+.btn-reset{width:100%;padding:7px;border:1px solid rgba(255,255,255,.07);background:transparent;color:#5a5850;cursor:pointer;font-size:12px;border-radius:6px;margin-top:7px;transition:all .15s;}
+.btn-reset:hover{color:#c8c5bc;border-color:rgba(255,255,255,.18);}
+
+/* ── Main ── */
+.main{flex:1;min-width:0;}
+.topbar{display:flex;align-items:center;gap:10px;padding:13px 26px;border-bottom:1px solid var(--line);background:var(--paper);position:sticky;top:0;z-index:100;flex-wrap:wrap;}
+.topbar-title{font-family:'Syne',sans-serif;font-size:15px;font-weight:700;color:var(--ink);}
+.tbc{display:flex;align-items:center;gap:7px;margin-left:auto;flex-wrap:wrap;}
+.ctrl-label{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text2);white-space:nowrap;}
+select.ps{font-family:'JetBrains Mono',monospace;font-size:11px;background:var(--paper2);border:1px solid var(--line);color:var(--text);padding:4px 7px;border-radius:5px;cursor:pointer;outline:none;}
+select.ps:focus{border-color:var(--accent3);}
+.btn-rr{padding:5px 13px;border:none;cursor:pointer;background:var(--accent3);color:#fff;font-family:'Syne',sans-serif;font-size:11px;font-weight:700;border-radius:5px;transition:all .15s;}
+.btn-rr:hover{filter:brightness(1.1);}
+.btn-rr:disabled{opacity:.4;cursor:not-allowed;}
+.btn-ex{padding:5px 13px;border:1px solid var(--line2);cursor:pointer;background:transparent;color:var(--text2);font-size:11px;border-radius:5px;transition:all .15s;}
+.btn-ex:hover{color:var(--text);border-color:var(--ink);}
+.btn-ex:disabled{opacity:.35;cursor:not-allowed;}
+
+/* mode pill group */
+.mode-group{display:flex;gap:2px;background:var(--paper2);border:1px solid var(--line);border-radius:6px;padding:2px;}
+.mode-pill{padding:4px 10px;border-radius:4px;font-size:11px;font-weight:500;cursor:pointer;border:none;background:transparent;color:var(--text2);white-space:nowrap;transition:all .15s;}
+.mode-pill.active{background:#fff;color:var(--ink);box-shadow:0 1px 3px rgba(0,0,0,.1);}
+
+/* multi-select period list */
+.period-multi{display:flex;flex-wrap:wrap;gap:4px;align-items:center;}
+.period-cb-label{display:flex;align-items:center;gap:4px;padding:3px 8px;border-radius:4px;border:1px solid var(--line);background:#fff;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text2);cursor:pointer;white-space:nowrap;}
+.period-cb-label input{display:none;}
+.period-cb-label.checked{background:var(--accent3);color:#fff;border-color:var(--accent3);}
+.period-cb-label.base-checked{background:var(--accent);color:#fff;border-color:var(--accent);}
+
+.content{padding:22px 26px;}
+#status-bar{display:none;padding:9px 13px;border-radius:6px;font-family:'JetBrains Mono',monospace;font-size:11px;margin-bottom:14px;}
+.sb-ok{background:#e4f5ec;color:var(--accent2);border:1px solid #aadec4;}
+.sb-info{background:#e8f0ff;color:var(--accent3);border:1px solid #b8cdff;}
+.sb-warn{background:#fef4e4;color:var(--warn);border:1px solid #f0d090;}
+.sb-err{background:#fde8e4;color:var(--accent);border:1px solid #f5bdb4;}
+
+/* overview */
+.ov-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:11px;margin-bottom:16px;}
+.ov-card{background:#fff;border:1px solid var(--line);border-radius:8px;padding:14px;position:relative;overflow:hidden;}
+.ov-card::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;}
+.ov-card.up::before{background:var(--accent2);}
+.ov-card.down::before{background:var(--accent);}
+.ov-card.flat::before{background:var(--line2);}
+.ov-zone{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text3);margin-bottom:3px;letter-spacing:.4px;}
+.ov-name{font-family:'Syne',sans-serif;font-size:13px;font-weight:700;color:var(--ink);margin-bottom:8px;}
+.ov-val{font-family:'JetBrains Mono',monospace;font-size:18px;font-weight:600;margin-bottom:2px;}
+.ov-val.up{color:var(--up);} .ov-val.down{color:var(--down);}
+.ov-prev{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text3);}
+.ov-pct{display:inline-block;margin-top:7px;font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:600;padding:2px 8px;border-radius:12px;}
+.ov-pct.up{background:#e4f5ec;color:var(--up);} .ov-pct.down{background:#fde8e4;color:var(--down);}
+
+.grand-strip{background:var(--ink);color:#fff;border-radius:8px;padding:13px 20px;display:flex;align-items:center;justify-content:space-between;margin-bottom:22px;flex-wrap:wrap;gap:10px;}
+.gs-gl{font-size:10px;color:#6a6860;font-family:'JetBrains Mono',monospace;margin-bottom:2px;}
+.gs-gv{font-family:'JetBrains Mono',monospace;font-size:15px;font-weight:600;color:#fff;}
+.gs-gv.up{color:#5dba8a;} .gs-gv.down{color:#f07a6a;}
+
+/* tabs */
+.tab-strip{display:flex;gap:1px;margin-bottom:14px;border-bottom:1px solid var(--line);}
+.tab-btn{padding:7px 14px;border:none;background:transparent;cursor:pointer;font-family:'Noto Sans TC',sans-serif;font-size:12px;font-weight:500;color:var(--text2);border-bottom:2px solid transparent;margin-bottom:-1px;transition:all .15s;}
+.tab-btn:hover{color:var(--text);}
+.tab-btn.active{color:var(--ink);border-bottom-color:var(--accent);font-weight:700;}
+.analysis-pills{display:flex;gap:5px;margin-bottom:16px;flex-wrap:wrap;}
+.pill{padding:5px 12px;border-radius:20px;font-size:12px;font-weight:500;border:1px solid var(--line);background:#fff;color:var(--text2);cursor:pointer;transition:all .15s;white-space:nowrap;}
+.pill:hover{border-color:var(--ink);color:var(--ink);}
+.pill.active{background:var(--ink);color:#fff;border-color:var(--ink);}
+
+/* tables */
+.tbl-wrap{border:1px solid var(--line);border-radius:8px;overflow:hidden;margin-bottom:16px;background:#fff;}
+.tbl-head{padding:9px 13px;display:flex;align-items:center;gap:7px;border-bottom:1px solid var(--line);}
+.tbl-head.g{background:#e4f5ec;} .tbl-head.d{background:#fde8e4;} .tbl-head.n{background:var(--paper2);}
+.tbl-title{font-family:'Syne',sans-serif;font-size:12px;font-weight:700;}
+.tbl-head.g .tbl-title{color:var(--up);} .tbl-head.d .tbl-title{color:var(--down);} .tbl-head.n .tbl-title{color:var(--ink);}
+.tbl-badge{font-family:'JetBrains Mono',monospace;font-size:9px;padding:2px 6px;border-radius:8px;background:rgba(0,0,0,.07);color:var(--text2);}
+table{width:100%;border-collapse:collapse;font-size:12px;}
+thead th{padding:6px 9px;text-align:right;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text3);background:var(--paper2);border-bottom:1px solid var(--line);white-space:nowrap;font-weight:500;}
+thead th:nth-child(-n+3){text-align:left;}
+tbody tr{border-bottom:1px solid var(--line);}
+tbody tr:last-child{border-bottom:none;}
+tbody tr:hover{background:var(--paper2);}
+td{padding:6px 9px;text-align:right;}
+td:nth-child(1){text-align:center;color:var(--text3);font-family:'JetBrains Mono',monospace;font-size:10px;width:34px;}
+td:nth-child(2){text-align:left;color:var(--text3);font-family:'JetBrains Mono',monospace;font-size:10px;}
+td:nth-child(3){text-align:left;font-weight:500;}
+.mono{font-family:'JetBrains Mono',monospace;}
+.up{color:var(--up);} .down{color:var(--down);} .muted{color:var(--text3);}
+tfoot td{padding:6px 9px;text-align:right;font-weight:700;font-family:'JetBrains Mono',monospace;font-size:11px;border-top:1px solid var(--line);background:var(--paper2);}
+tfoot td:nth-child(-n+3){text-align:left;}
+
+/* mini bar */
+.mbar{display:flex;align-items:flex-end;gap:2px;height:20px;}
+.mbar-b{border-radius:2px 2px 0 0;min-width:6px;}
+.mbar-b.cur{background:var(--accent3);} .mbar-b.prev{background:#cdd5e8;}
+
+/* trend table — multi-year */
+.trend-val{font-family:'JetBrains Mono',monospace;font-size:11px;}
+.trend-arrow{font-size:10px;margin-left:3px;}
+.spark{display:flex;align-items:flex-end;gap:1px;height:18px;padding:0 2px;}
+.spark-b{border-radius:1px 1px 0 0;min-width:5px;}
+
+/* month cards */
+.month-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:9px;margin-bottom:14px;}
+.m-card{background:#fff;border:1px solid var(--line);border-radius:8px;padding:12px;}
+.m-card-title{font-family:'Syne',sans-serif;font-size:11px;font-weight:700;color:var(--ink);margin-bottom:8px;}
+.m-bar-row{display:flex;align-items:center;gap:7px;margin-bottom:5px;}
+.m-bar-label{font-size:10px;width:36px;color:var(--text2);flex-shrink:0;font-family:'JetBrains Mono',monospace;}
+.m-bar-track{flex:1;background:var(--paper2);border-radius:2px;height:5px;overflow:hidden;}
+.m-bar-fill{height:5px;border-radius:2px;}
+.m-fill-cur{background:var(--accent3);} .m-fill-prev{background:#cdd5e8;}
+.m-bar-val{font-family:'JetBrains Mono',monospace;font-size:10px;width:68px;text-align:right;}
+.m-bar-pct{font-family:'JetBrains Mono',monospace;font-size:10px;width:48px;text-align:right;}
+
+/* concentration */
+.conc-row{display:flex;align-items:center;gap:9px;margin-bottom:6px;}
+.conc-name{font-size:11px;color:var(--text2);width:76px;flex-shrink:0;}
+.conc-track{flex:1;background:var(--paper2);border-radius:2px;height:6px;overflow:hidden;}
+.conc-fill{height:6px;border-radius:2px;background:var(--accent3);}
+.conc-val{font-family:'JetBrains Mono',monospace;font-size:11px;width:44px;text-align:right;color:var(--text);}
+.insight-box{background:#fff;border:1px solid var(--line);border-radius:8px;padding:13px 15px;margin-bottom:14px;}
+.insight-label{font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:1px;text-transform:uppercase;color:var(--text3);margin-bottom:9px;}
+
+/* signals */
+.sig-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;}
+
+/* empty */
+.empty-state{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:320px;color:var(--text3);gap:10px;}
+.empty-icon{font-size:44px;opacity:.25;}
+.empty-text{font-family:'Syne',sans-serif;font-size:14px;font-weight:700;}
+.empty-sub{font-size:12px;text-align:center;max-width:300px;line-height:1.6;}
+#results{display:none;}
+.spinner{display:inline-block;width:11px;height:11px;border:2px solid rgba(30,79,160,.2);border-top-color:var(--accent3);border-radius:50%;animation:spin .6s linear infinite;vertical-align:middle;margin-right:5px;}
+@keyframes spin{to{transform:rotate(360deg);}}
+@media(max-width:880px){.shell{flex-direction:column;}.sidebar{width:100%;height:auto;position:static;}.ov-grid{grid-template-columns:repeat(2,1fr);}.sig-grid{grid-template-columns:1fr;}.month-grid{grid-template-columns:repeat(2,1fr);}}
+</style>
+</head>
+<body>
+<div class="shell">
+
+<!-- ══ SIDEBAR ══ -->
+<aside class="sidebar">
+  <div class="sb-header">
+    <div class="sb-logo">業績分析</div>
+    <div class="sb-sub">SALES ANALYTICS v5</div>
+  </div>
+  <div class="sb-sec">
+    <div class="sb-sec-label">資料上傳 — 每區可多檔</div>
+    <div id="region-blocks"></div>
+  </div>
+  <div class="sb-actions">
+    <button class="btn-run" id="btn-run" onclick="runAnalysis()" disabled>開始分析</button>
+    <button class="btn-reset" onclick="resetAll()">↺ 重置</button>
+  </div>
+</aside>
+
+<!-- ══ MAIN ══ -->
+<div class="main">
+  <div class="topbar">
+    <div class="topbar-title" id="topbar-title">業績分析工具</div>
+    <div class="tbc" id="topbar-controls" style="display:none">
+      <!-- mode selector -->
+      <div class="mode-group">
+        <button class="mode-pill active" id="mpill-yoy"   onclick="setMode('yoy')">前年同期</button>
+        <button class="mode-pill"        id="mpill-sum"   onclick="setMode('sum')">多季加總</button>
+        <button class="mode-pill"        id="mpill-trend" onclick="setMode('trend')">多年趨勢</button>
+      </div>
+      <!-- yoy: single period selector -->
+      <div id="ctrl-yoy" style="display:flex;align-items:center;gap:6px">
+        <span class="ctrl-label">期間</span>
+        <select class="ps" id="sel-yoy"></select>
+      </div>
+      <!-- sum: two multi-select groups -->
+      <div id="ctrl-sum" style="display:none;align-items:center;gap:6px;flex-wrap:wrap">
+        <span class="ctrl-label">比較期</span>
+        <div class="period-multi" id="sum-cur-group"></div>
+        <span class="ctrl-label" style="color:var(--accent)">vs</span>
+        <span class="ctrl-label">基期</span>
+        <div class="period-multi" id="sum-base-group"></div>
+      </div>
+      <!-- trend: choose period-type (Q1 / H1 / etc) -->
+      <div id="ctrl-trend" style="display:none;align-items:center;gap:6px">
+        <span class="ctrl-label">期間類型</span>
+        <select class="ps" id="sel-trend-type"></select>
+      </div>
+      <button class="btn-rr" onclick="rerun()">重新分析</button>
+      <button class="btn-ex" id="btn-export" onclick="exportExcel()" disabled>⬇ Excel</button>
+    </div>
+  </div>
+
+  <div class="content">
+    <div id="status-bar"></div>
+    <div class="empty-state" id="empty-state">
+      <div class="empty-icon">📂</div>
+      <div class="empty-text">請在左側上傳資料</div>
+      <div class="empty-sub">每區可上傳多個 XLS，工具會自動合併時間軸並提供三種比較模式</div>
+    </div>
+    <div id="results">
+      <div class="ov-grid" id="ov-grid"></div>
+      <div class="grand-strip" id="grand-strip"></div>
+      <div class="tab-strip" id="region-tabs"></div>
+      <div class="analysis-pills" id="analysis-pills">
+        <button class="pill active" onclick="switchViz('top20')">📊 TOP20 增長衰退</button>
+        <button class="pill" onclick="switchViz('monthly')">📅 月度趨勢</button>
+        <button class="pill" onclick="switchViz('conc')">🎯 集中度</button>
+        <button class="pill" onclick="switchViz('signals')">⚡ 異常訊號</button>
+      </div>
+      <div id="viz-area"></div>
+    </div>
+  </div>
+</div>
+</div>
+
+<script>
+// ══════════════════════════════════════════════════════════════════
+// CONSTANTS
+// ══════════════════════════════════════════════════════════════════
+const RKEYS = ['A','B','C','D'];
+const MON_NAMES = ['一月','二月','三月','四月','五月','六月','七月','八月','九月','十月','十一月','十二月'];
+const KW_CODE=['代號','代   號','代碼'], KW_NAME=['簡稱','簡    稱','名稱'];
+const KW_YEAR=['年度','年    度'], KW_TOTAL=['1-12月總額','1-9月總額','1-6月總額','1-3月總額','年總額','總額','合計金額'];
+const KW_GRAND=['合計','小計','總計'];
+const MON_KWS=[['一月','1月'],['二月','2月'],['三月','3月'],['四月','4月'],['五月','5月'],['六月','6月'],
+               ['七月','7月'],['八月','8月'],['九月','9月'],['十月','10月'],['十一月','11月'],['十二月','12月']];
+const SUFFIX_LABEL={Q1:'第一季',H1:'上半年','Q1-Q3':'前三季',H2:'下半年',FULL:'全年'};
+
+// ══════════════════════════════════════════════════════════════════
+// STATE
+// ══════════════════════════════════════════════════════════════════
+const regionFiles = {A:[],B:[],C:[],D:[]};
+const regionNames = {A:'A',B:'B',C:'C',D:'D'};
+// allData[regionKey][periodKey] = { periodKey, year_cur, year_prev, records[], totalCur, totalPrev, monthCount }
+const allData = {};
+let allPeriods = [];  // sorted list of unique period keys across all regions
+let allSuffixes = []; // unique period suffixes e.g. ['Q1','H1','FULL']
+
+// Current comparison state
+let mode = 'yoy';       // 'yoy' | 'sum' | 'trend'
+let yoyPeriod = null;   // period key for yoy mode
+let sumCur = [];        // selected period keys for sum mode - cur side
+let sumBase = [];       // selected period keys for sum mode - base side
+let trendSuffix = null; // period suffix for trend mode
+
+let activeRegion = 'A';
+let activeViz = 'top20';
+
+// ══════════════════════════════════════════════════════════════════
+// SIDEBAR BUILD
+// ══════════════════════════════════════════════════════════════════
+function buildSidebar() {
+  const c = document.getElementById('region-blocks');
+  c.innerHTML = '';
+  RKEYS.forEach(k => {
+    const b = document.createElement('div');
+    b.className = 'region-block'; b.id = `rb-${k}`;
+    b.innerHTML = `<div class="region-header">
+      <span class="region-letter">${k}</span>
+      <input class="region-name-input" id="rname-${k}" placeholder="區域名稱（選填）"
+        oninput="regionNames['${k}']=this.value||'${k}'">
+      <span class="rfc" id="rfc-${k}">0 檔</span>
+    </div>
+    <div class="region-drop" id="rdrop-${k}">
+      <input type="file" accept=".xls,.xlsx" multiple onchange="addFiles('${k}',this)">
+      <div class="drop-hint" id="rhint-${k}">＋ 拖曳或點擊</div>
+      <div class="file-chips" id="rchips-${k}" style="display:none"></div>
+    </div>`;
+    c.appendChild(b);
+    const dz = b.querySelector('.region-drop');
+    dz.addEventListener('dragover', e=>{e.preventDefault();dz.classList.add('drag-over');});
+    dz.addEventListener('dragleave', ()=>dz.classList.remove('drag-over'));
+    dz.addEventListener('drop', e=>{e.preventDefault();dz.classList.remove('drag-over');addFilesFromList(k,e.dataTransfer.files);});
+  });
+}
+
+function addFiles(k,input){addFilesFromList(k,input.files);input.value='';}
+function addFilesFromList(k,fl){
+  Array.from(fl).forEach(f=>{if(!regionFiles[k].find(x=>x.name===f.name))regionFiles[k].push(f);});
+  updateChips(k); checkRunnable();
+}
+function removeFile(k,name){regionFiles[k]=regionFiles[k].filter(f=>f.name!==name);updateChips(k);checkRunnable();}
+
+function updateChips(k){
+  const files=regionFiles[k];
+  document.getElementById(`rfc-${k}`).textContent=`${files.length} 檔`;
+  document.getElementById(`rfc-${k}`).className='rfc'+(files.length?' has':'');
+  const hint=document.getElementById(`rhint-${k}`);
+  const chips=document.getElementById(`rchips-${k}`);
+  if(files.length){
+    hint.style.display='none'; chips.style.display='flex';
+    chips.innerHTML=files.map(f=>{
+      const p=detectPeriod(f.name);
+      return `<div class="file-chip">
+        <span class="fc-period">${p?p.displayLabel||p.key:'?'}</span>
+        <span class="fc-name" title="${f.name}">${f.name}</span>
+        <span class="fc-rm" onclick="removeFile('${k}','${f.name}')">×</span>
+      </div>`;
+    }).join('');
+  } else {
+    hint.style.display='block'; chips.style.display='none'; chips.innerHTML='';
+  }
+}
+function checkRunnable(){document.getElementById('btn-run').disabled=!RKEYS.some(k=>regionFiles[k].length>0);}
+
+// ══════════════════════════════════════════════════════════════════
+// PERIOD DETECTION
+// ══════════════════════════════════════════════════════════════════
+function detectPeriod(filename) {
+  const base = filename.replace(/\.[^.]+$/,'');
+  const matches = [...base.matchAll(/(\d{2,3})[年]?[Qq]([1-4])((?:\+\d+)*)/g)];
+  if (!matches.length) return null;
+  const m = matches[matches.length-1];
+  const year=parseInt(m[1]), startQ=parseInt(m[2]);
+  const plusCount=(m[3]||'').split('+').filter(Boolean).length;
+  const totalQ=1+plusCount;
+
+  // Q4 cumulative = full year → treat as "年" (full year)
+  // Q3 cumulative = Jan–Sep, Q2/H1 = Jan–Jun, Q1 = Jan–Mar
+  let suffix, label, monthCount;
+  if(startQ===4 && totalQ===1) {
+    // single Q4 file — could be just Q4 or full year cumulative
+    // Since your files are always cumulative from Jan, Q4 = full year
+    suffix='FULL'; label='全年'; monthCount=12;
+  } else if(totalQ===4 || (startQ===1 && totalQ===4)) {
+    suffix='FULL'; label='全年'; monthCount=12;
+  } else if(totalQ===3 || (startQ===1 && totalQ===3)) {
+    suffix='Q1-Q3'; label='前三季'; monthCount=9;
+  } else if((totalQ===2&&startQ===1)||(startQ===2&&totalQ===1)) {
+    suffix='H1'; label='上半年'; monthCount=6;
+  } else if(totalQ===2&&startQ===3) {
+    suffix='H2'; label='下半年'; monthCount=6;
+  } else if(startQ===3&&totalQ===1) {
+    suffix='Q1-Q3'; label='前三季'; monthCount=9; // Q3 cumulative = Jan-Sep
+  } else if(startQ===2&&totalQ===1) {
+    suffix='H1'; label='上半年'; monthCount=6; // Q2 cumulative = Jan-Jun
+  } else {
+    suffix=`Q${startQ}`; label=['','第一季','第二季','第三季','第四季'][startQ]||`Q${startQ}`; monthCount=3;
+  }
+
+  // Period key = "YYYsuffix" e.g. "114FULL", "115Q1", "114H1"
+  // Display label: full year shows just "114年", others show "114年Q1" / "114年上半年" etc.
+  const key=`${year}${suffix}`;
+  const displayLabel = suffix==='FULL' ? `${year}年` : `${year}年${label}`;
+  return {year, suffix, key, label, displayLabel, monthCount};
+}
+
+function periodSortKey(p){
+  const yr=parseInt(p.match(/^(\d+)/)?.[1]||0)*10;
+  if(p.endsWith('FULL'))   return yr+9;
+  if(p.endsWith('Q1-Q3')) return yr+6;
+  if(p.endsWith('H2'))    return yr+7;
+  if(p.endsWith('H1'))    return yr+3;
+  if(p.endsWith('Q1'))    return yr+1;
+  return yr+5;
+}
+
+// ══════════════════════════════════════════════════════════════════
+// COLUMN DETECTION
+// ══════════════════════════════════════════════════════════════════
+function detectCols(rows){
+  let hdrIdx=0;
+  for(let i=0;i<Math.min(5,rows.length);i++){
+    const r=rows[i].map(c=>String(c||'').trim());
+    if(r.some(c=>KW_CODE.some(k=>c.includes(k)))&&r.some(c=>KW_YEAR.some(k=>c.includes(k)))){hdrIdx=i;break;}
+  }
+  const hdr=rows[hdrIdx].map(c=>String(c||'').trim());
+  const fi=kws=>hdr.findIndex(c=>kws.some(k=>c.includes(k)));
+  const colCode=Math.max(fi(KW_CODE),0), colName=fi(KW_NAME)<0?1:fi(KW_NAME);
+  const colYear=fi(KW_YEAR)<0?2:fi(KW_YEAR), colTotal=fi(KW_TOTAL)<0?6:fi(KW_TOTAL);
+  const colMonths=MON_KWS.map((kws,mi)=>{const idx=hdr.findIndex(c=>kws.some(k=>c.includes(k)));return idx>=0?idx:3+mi;});
+  const monthCount=colMonths.filter((ci,mi)=>hdr[ci]&&MON_KWS[mi].some(k=>hdr[ci].includes(k))).length||1;
+  return{hdrIdx,colCode,colName,colYear,colTotal,colMonths,monthCount};
+}
+
+function detectYears(rows,colYear,start){
+  const cnt={};
+  for(let i=start;i<rows.length;i++){const v=String(rows[i][colYear]||'').trim();if(v&&!KW_GRAND.some(k=>v.includes(k))&&!v.includes('差額'))cnt[v]=(cnt[v]||0)+1;}
+  const toNum=s=>parseInt(s.replace(/\D/g,''))||0;
+  const sorted=Object.keys(cnt).sort((a,b)=>cnt[b]-cnt[a]).slice(0,3).sort((a,b)=>toNum(b)-toNum(a));
+  return{yearCur:sorted[0]||'115年',yearPrev:sorted[1]||'114年'};
+}
+
+function N(v){if(v===null||v===undefined||v==='')return null;const n=Number(v);return isNaN(n)?null:n;}
+
+// ══════════════════════════════════════════════════════════════════
+// PARSE SINGLE WORKBOOK
+// Returns: { periodKey, yearCur, yearPrev, records[], totalCur, totalPrev, monthCount }
+// Each record: { code, name, cur, prev, curMon[], prevMon[] }
+// ══════════════════════════════════════════════════════════════════
+/**
+ * Find the correct sheet: the one whose header row contains both
+ * a code-like column AND a year-like column.
+ * Skips pivot/summary sheets (工作表1, pivot, etc.) that lack this structure.
+ */
+function findDataSheet(wb){
+  const CODE_KW=['代號','代   號','代碼'];
+  const YEAR_KW=['年度','年    度'];
+  for(const name of wb.SheetNames){
+    const ws=wb.Sheets[name];
+    const rows=XLSX.utils.sheet_to_json(ws,{header:1,defval:null,range:0});
+    for(let i=0;i<Math.min(6,rows.length);i++){
+      const r=(rows[i]||[]).map(c=>String(c||'').trim());
+      if(r.some(c=>CODE_KW.some(k=>c.includes(k)))&&r.some(c=>YEAR_KW.some(k=>c.includes(k)))){
+        return ws; // found it
+      }
+    }
+  }
+  return wb.Sheets[wb.SheetNames[0]]; // fallback
+}
+
+function parseWB(wb, filename){
+  const ws=findDataSheet(wb);
+  const rows=XLSX.utils.sheet_to_json(ws,{header:1,defval:null});
+  const{hdrIdx,colCode,colName,colYear,colTotal,colMonths,monthCount}=detectCols(rows);
+  const dataStart=hdrIdx+1;
+  const{yearCur,yearPrev}=detectYears(rows,colYear,dataStart);
+
+  // Period key from filename (authoritative) or fall back to data year + monthCount
+  const fnP=detectPeriod(filename);
+  const mc=fnP?fnP.monthCount:monthCount;
+  let periodKey;
+  if(fnP){
+    periodKey=fnP.key;
+  } else {
+    const yr=parseInt(yearCur.replace(/\D/g,''))||115;
+    const q=mc<=3?1:mc<=6?2:mc<=9?3:4;
+    periodKey=`${yr}Q${q}`;
+  }
+
+  let officialCur=null, officialPrev=null;
+  const records=[]; let curCode=null,curName=null;
+
+  for(let i=dataStart;i<rows.length;i++){
+    const row=rows[i];
+    const rawCode=String(row[colCode]||'').trim();
+    const rawName=String(row[colName]||'').trim();
+    const rawYear=String(row[colYear]||'').trim();
+
+    if(KW_GRAND.some(k=>rawCode.includes(k))){
+      const t=N(row[colTotal]);
+      if(t!==null){
+        if(rawYear===yearCur||!rawYear) officialCur=t;
+        // try to get prev from next row
+        if(i+1<rows.length){
+          const nr=rows[i+1];
+          if(String(nr[colYear]||'').trim()===yearPrev){const t2=N(nr[colTotal]);if(t2!==null)officialPrev=t2;}
+        }
+      }
+      continue;
+    }
+    if(rawCode){curCode=rawCode;curName=rawName||rawCode;}
+    if(rawYear===yearCur&&curCode){
+      const curMon=colMonths.map(ci=>N(row[ci])||0);
+      const cur=N(row[colTotal])||curMon.reduce((s,v)=>s+v,0);
+      let prev=0,prevMon=curMon.map(()=>0);
+      if(i+1<rows.length&&String(rows[i+1][colYear]||'').trim()===yearPrev){
+        const nr=rows[i+1];
+        prevMon=colMonths.map(ci=>N(nr[ci])||0);
+        prev=N(nr[colTotal])||prevMon.reduce((s,v)=>s+v,0);
+      }
+      records.push({code:curCode,name:curName,cur,prev,curMon,prevMon});
+    }
+  }
+
+  const seen=new Set();
+  const deduped=records.filter(r=>{if(seen.has(r.code))return false;seen.add(r.code);return true;});
+  const totalCur=officialCur??deduped.reduce((s,r)=>s+r.cur,0);
+  const totalPrev=officialPrev??deduped.reduce((s,r)=>s+r.prev,0);
+  return{periodKey, year:fnP?fnP.year:yrNum, suffix:fnP?fnP.suffix:'FULL', displayLabel:fnP?fnP.displayLabel:String(yrNum)+'年', yearCur,yearPrev,records:deduped,totalCur,totalPrev,monthCount:mc};
+}
+
+// ══════════════════════════════════════════════════════════════════
+// MAIN ANALYSIS RUN
+// ══════════════════════════════════════════════════════════════════
+async function runAnalysis(){
+  showStatus('info','<span class="spinner"></span>解析中…');
+  document.getElementById('btn-run').disabled=true;
+  await sleep(40);
+
+  RKEYS.forEach(k=>allData[k]={});
+  const periodSet=new Set();
+
+  for(const k of RKEYS){
+    for(const file of regionFiles[k]){
+      try{
+        const buf=await file.arrayBuffer();
+        const wb=XLSX.read(buf,{type:'array'});
+        const parsed=parseWB(wb,file.name);
+        if(!allData[k][parsed.periodKey]) allData[k][parsed.periodKey]=parsed;
+        periodSet.add(parsed.periodKey);
+      }catch(e){
+        showStatus('err',`❌ ${k}區 [${file.name}] 解析失敗：${e.message}`);
+        document.getElementById('btn-run').disabled=false; return;
+      }
+    }
+  }
+
+  allPeriods=[...periodSet].sort((a,b)=>periodSortKey(a)-periodSortKey(b));
+  // Collect unique suffixes from actual parsed data (not period key, which is now year-only)
+  const suffixSet=new Set();
+  RKEYS.forEach(k=>Object.values(allData[k]).forEach(d=>{ if(d.suffix) suffixSet.add(d.suffix); }));
+  allSuffixes=[...suffixSet];
+  if(!allSuffixes.length) allSuffixes=['FULL'];
+
+  if(!allPeriods.length){showStatus('err','❌ 未能識別任何期間');document.getElementById('btn-run').disabled=false;return;}
+
+  // Defaults
+  mode='yoy';
+  yoyPeriod=allPeriods[allPeriods.length-1];
+  sumCur=[allPeriods[allPeriods.length-1]];
+  sumBase=allPeriods.length>1?[allPeriods[allPeriods.length-2]]:[];
+  trendSuffix=allSuffixes[0];
+
+  buildControls();
+  document.getElementById('topbar-controls').style.display='flex';
+  document.getElementById('empty-state').style.display='none';
+  showStatus('ok',`✓ 解析完成，共 ${allPeriods.length} 個期間：${allPeriods.join('、')}`);
+  renderAll();
+  document.getElementById('btn-run').disabled=false;
+  document.getElementById('btn-export').disabled=false;
+}
+
+// ══════════════════════════════════════════════════════════════════
+// CONTROLS BUILD
+// ══════════════════════════════════════════════════════════════════
+function pLabel(p){
+  // p = "114FULL" → "114年", "115Q1" → "115年Q1", "114H1" → "114年上半年"
+  const SLABEL={Q1:'Q1',H1:'上半年','Q1-Q3':'前三季',H2:'下半年',FULL:''};
+  const m=p.match(/^(\d{2,3})(.*)$/);
+  if(!m)return p;
+  const yr=m[1], sfx=m[2]||'FULL';
+  const lbl=SLABEL[sfx];
+  if(lbl===undefined)return`${yr}年${sfx}`;
+  return lbl===''?`${yr}年`:`${yr}年${lbl}`;
+}
+
+function buildControls(){
+  // YoY selector
+  document.getElementById('sel-yoy').innerHTML=allPeriods.map(p=>`<option value="${p}" ${p===yoyPeriod?'selected':''}>${pLabel(p)}</option>`).join('');
+
+  // Sum multi-select
+  buildSumGroup('sum-cur-group',sumCur,'cur');
+  buildSumGroup('sum-base-group',sumBase,'base');
+
+  // Trend type selector
+  document.getElementById('sel-trend-type').innerHTML=allSuffixes.map(s=>`<option value="${s}" ${s===trendSuffix?'selected':''}>${SUFFIX_LABEL[s]||s}</option>`).join('');
+
+  syncModeUI();
+}
+
+function buildSumGroup(containerId, selected, side){
+  const c=document.getElementById(containerId); c.innerHTML='';
+  allPeriods.forEach(p=>{
+    const lbl=document.createElement('label');
+    const chk=selected.includes(p);
+    lbl.className='period-cb-label'+(chk?(side==='cur'?' checked':' base-checked'):'');
+    lbl.innerHTML=`<input type="checkbox" ${chk?'checked':''} onchange="toggleSum('${side}','${p}',this.checked)">${p}`;
+    c.appendChild(lbl);
+  });
+}
+
+function toggleSum(side,p,checked){
+  if(side==='cur'){if(checked)sumCur.push(p);else sumCur=sumCur.filter(x=>x!==p);}
+  else{if(checked)sumBase.push(p);else sumBase=sumBase.filter(x=>x!==p);}
+  buildSumGroup(side==='cur'?'sum-cur-group':'sum-base-group', side==='cur'?sumCur:sumBase, side);
+}
+
+function syncModeUI(){
+  ['yoy','sum','trend'].forEach(m=>{
+    document.getElementById(`mpill-${m}`).className='mode-pill'+(mode===m?' active':'');
+    document.getElementById(`ctrl-${m}`).style.display=mode===m?'flex':'none';
+  });
+}
+
+function setMode(m){mode=m;syncModeUI();}
+
+function rerun(){
+  if(mode==='yoy') yoyPeriod=document.getElementById('sel-yoy').value;
+  if(mode==='trend') trendSuffix=document.getElementById('sel-trend-type').value;
+  renderAll();
+}
+
+// ══════════════════════════════════════════════════════════════════
+// DATA ASSEMBLY PER REGION
+// ══════════════════════════════════════════════════════════════════
+/**
+ * Returns { records[], totalCur, totalPrev, monthCount, curLabel, baseLabel }
+ * Unified for all three modes.
+ */
+function getRegionData(rk){
+  if(mode==='yoy'){
+    // Use single file's built-in cur vs prev
+    const d=allData[rk][yoyPeriod];
+    if(!d)return empty3();
+    const records=d.records.map(r=>({...r,diff:r.cur-r.prev,pct:r.prev?(r.cur-r.prev)/r.prev*100:null}));
+    return{records,totalCur:d.totalCur,totalPrev:d.totalPrev,monthCount:d.monthCount,curLabel:d.yearCur,baseLabel:d.yearPrev};
+  }
+  if(mode==='sum'){
+    // Merge cur periods and base periods, sum their cur values
+    return mergePeriods(rk,sumCur,sumBase);
+  }
+  if(mode==='trend'){
+    // For trend mode, getRegionData is not used for the main table
+    // Return yoy-like using latest matching period
+    const matching=allPeriods.filter(p=>p.endsWith(trendSuffix));
+    const latest=matching[matching.length-1];
+    const d=allData[rk]?.[latest];
+    if(!d)return empty3();
+    const records=d.records.map(r=>({...r,diff:r.cur-r.prev,pct:r.prev?(r.cur-r.prev)/r.prev*100:null}));
+    return{records,totalCur:d.totalCur,totalPrev:d.totalPrev,monthCount:d.monthCount,curLabel:d.yearCur,baseLabel:d.yearPrev};
+  }
+  return empty3();
+}
+
+function empty3(){return{records:[],totalCur:0,totalPrev:0,monthCount:3,curLabel:'—',baseLabel:'—'};}
+
+function mergePeriods(rk, curKeys, baseKeys){
+  // Aggregate by customer code across multiple periods
+  const agg=(keys)=>{
+    const map={};
+    keys.forEach(pk=>{
+      const d=allData[rk]?.[pk];
+      if(!d)return;
+      d.records.forEach(r=>{
+        if(!map[r.code])map[r.code]={code:r.code,name:r.name,val:0,mon:new Array(r.curMon.length).fill(0)};
+        map[r.code].val+=r.cur;
+        r.curMon.forEach((v,i)=>map[r.code].mon[i]=(map[r.code].mon[i]||0)+v);
+      });
+    });
+    return map;
+  };
+  const curMap=agg(curKeys), baseMap=agg(baseKeys);
+  const allCodes=new Set([...Object.keys(curMap),...Object.keys(baseMap)]);
+  const records=[...allCodes].map(code=>{
+    const c=curMap[code], b=baseMap[code];
+    const cur=c?c.val:0, prev=b?b.val:0;
+    const name=c?.name||b?.name||code;
+    return{code,name,cur,prev,curMon:c?.mon||[],prevMon:b?.mon||[],diff:cur-prev,pct:prev?(cur-prev)/prev*100:null};
+  });
+  const totalCur=curKeys.reduce((s,pk)=>{const d=allData[rk]?.[pk];return s+(d?d.totalCur:0);},0);
+  const totalPrev=baseKeys.reduce((s,pk)=>{const d=allData[rk]?.[pk];return s+(d?d.totalCur:0);},0);
+  const mc=Math.max(...[...curKeys,...baseKeys].map(pk=>allData[rk]?.[pk]?.monthCount||3));
+  const curLabel=curKeys.join('+'), baseLabel=baseKeys.join('+');
+  return{records,totalCur,totalPrev,monthCount:mc,curLabel,baseLabel};
+}
+
+// ══════════════════════════════════════════════════════════════════
+// TREND MODE DATA — multi-year same-period per customer
+// ══════════════════════════════════════════════════════════════════
+function getTrendData(rk){
+  const matching=allPeriods.filter(p=>{
+    // Check if any region has a parsed entry for this period key with matching suffix
+    return RKEYS.some(k=>allData[k][p]&&allData[k][p].suffix===trendSuffix);
+  }).sort((a,b)=>periodSortKey(a)-periodSortKey(b));
+  if(!matching.length)return{years:[],customers:[]};
+  // years = the yearCur of each matching period
+  const yearLabels=matching.map(pk=>{const d=allData[rk]?.[pk];return d?d.yearCur:pk;});
+  // All customer codes across all matching periods
+  const allCodes=new Set();
+  matching.forEach(pk=>{allData[rk]?.[pk]?.records.forEach(r=>allCodes.add(r.code));});
+  const customers=[...allCodes].map(code=>{
+    const vals=matching.map(pk=>{const d=allData[rk]?.[pk];if(!d)return null;return d.records.find(r=>r.code===code)?.cur??null;});
+    const name=matching.map(pk=>allData[rk]?.[pk]?.records.find(r=>r.code===code)?.name).find(Boolean)||code;
+    // Latest non-null value for sort
+    const latest=vals.filter(v=>v!==null).pop()||0;
+    return{code,name,vals,latest};
+  }).sort((a,b)=>b.latest-a.latest);
+  return{years:yearLabels,periods:matching,customers};
+}
+
+// ══════════════════════════════════════════════════════════════════
+// RENDER ALL
+// ══════════════════════════════════════════════════════════════════
+function rName(k){return regionNames[k]||k;}
+
+function renderAll(){
+  document.getElementById('results').style.display='block';
+  updateTopbarTitle();
+  renderOvGrid();
+  renderGrandStrip();
+  renderRegionTabs();
+  renderViz();
+}
+
+function updateTopbarTitle(){
+  const yoyLabel=pLabel(yoyPeriod||'');
+  const titles={yoy:`${yoyLabel} 前年同期比較`,sum:`多季加總比較 [${sumCur.map(pLabel).join('+')}] vs [${sumBase.map(pLabel).join('+')}]`,trend:`${SUFFIX_LABEL[trendSuffix]||trendSuffix} 多年趨勢`};
+  document.getElementById('topbar-title').textContent=titles[mode]||'業績分析';
+}
+
+function renderOvGrid(){
+  const g=document.getElementById('ov-grid'); g.innerHTML='';
+  RKEYS.forEach(k=>{
+    const{totalCur,totalPrev}=getRegionData(k);
+    const diff=totalCur-totalPrev,pct=totalPrev?diff/totalPrev*100:0,up=pct>=0;
+    g.innerHTML+=`<div class="ov-card ${diff===0&&totalCur===0?'flat':up?'up':'down'}">
+      <div class="ov-zone">${k} 區</div>
+      <div class="ov-name">${rName(k)}</div>
+      <div class="ov-val ${up?'up':'down'}">${fmt(totalCur)}</div>
+      <div class="ov-prev">對比 ${fmt(totalPrev)}</div>
+      <span class="ov-pct ${up?'up':'down'}">${up?'▲':'▼'} ${Math.abs(pct).toFixed(1)}%</span>
+    </div>`;
+  });
+}
+
+function renderGrandStrip(){
+  let gc=0,gp=0;
+  RKEYS.forEach(k=>{const d=getRegionData(k);gc+=d.totalCur;gp+=d.totalPrev;});
+  const diff=gc-gp,pct=gp?diff/gp*100:0,up=pct>=0;
+  // cur/base labels from first available region
+  const sample=getRegionData(RKEYS.find(k=>allData[k][yoyPeriod||''])||RKEYS[0]);
+  const curLbl=mode==='yoy'?sample.curLabel:mode==='sum'?sumCur.map(pLabel).join('+'):'最新期';
+  const baseLbl=mode==='yoy'?sample.baseLabel:mode==='sum'?sumBase.map(pLabel).join('+'):'前期';
+  document.getElementById('grand-strip').innerHTML=`
+    <div><div class="gs-gl">四區合計 ${curLbl}</div><div class="gs-gv">${fmt(gc)}</div></div>
+    <div><div class="gs-gl">對比 ${baseLbl}</div><div class="gs-gv">${fmt(gp)}</div></div>
+    <div><div class="gs-gl">差額</div><div class="gs-gv ${up?'up':'down'}">${up?'+':''}${fmt(diff)}</div></div>
+    <div><div class="gs-gl">整體成長率</div><div class="gs-gv ${up?'up':'down'}">${up?'▲':'▼'} ${Math.abs(pct).toFixed(1)}%</div></div>`;
+}
+
+function renderRegionTabs(){
+  const bar=document.getElementById('region-tabs');bar.innerHTML='';
+  RKEYS.forEach(k=>{
+    const b=document.createElement('button');
+    b.className='tab-btn'+(k===activeRegion?' active':'');
+    b.textContent=`${k}${rName(k)!==k?' '+rName(k):''}`;
+    b.onclick=()=>{activeRegion=k;renderRegionTabs();renderViz();};
+    bar.appendChild(b);
+  });
+}
+
+function switchViz(v){
+  activeViz=v;
+  document.querySelectorAll('.pill').forEach((p,i)=>p.classList.toggle('active',['top20','monthly','conc','signals'][i]===v));
+  renderViz();
+}
+
+function renderViz(){
+  const area=document.getElementById('viz-area');
+  const rk=activeRegion;
+  if(mode==='trend'&&activeViz==='top20'){area.innerHTML=renderTrend(rk);return;}
+  const{records,totalCur,monthCount,curLabel,baseLabel}=getRegionData(rk);
+  if(activeViz==='top20')     area.innerHTML=renderTop20(records,totalCur,curLabel,baseLabel);
+  else if(activeViz==='monthly')  area.innerHTML=renderMonthly(records,totalCur,monthCount,curLabel,baseLabel);
+  else if(activeViz==='conc')     area.innerHTML=renderConc(records,totalCur,curLabel);
+  else if(activeViz==='signals')  area.innerHTML=renderSignals(records,curLabel,baseLabel);
+}
+
+// ══════════════════════════════════════════════════════════════════
+// TOP20
+// ══════════════════════════════════════════════════════════════════
+const t20g=r=>[...r].filter(x=>x.cur>0||x.prev>0).sort((a,b)=>b.diff-a.diff).slice(0,20);
+const t20d=r=>[...r].filter(x=>x.cur>0||x.prev>0).sort((a,b)=>a.diff-b.diff).slice(0,20);
+
+function buildTbl(subset,total,type,title,curL,baseL){
+  const isUp=type==='g';
+  const tDiff=subset.reduce((s,r)=>s+r.diff,0);
+  const sc=subset.reduce((s,r)=>s+r.cur,0),sp=subset.reduce((s,r)=>s+r.prev,0),sd=sc-sp;
+  const rows=subset.map((r,i)=>{
+    const pR=total?r.cur/total*100:null,pD=tDiff?r.diff/tDiff*100:null;
+    const dc=r.diff>0?'up':r.diff<0?'down':'muted';
+    const pctStr=r.pct!==null?`<span class="${r.pct>=0?'up':'down'} mono">${r.pct>=0?'+':''}${r.pct.toFixed(1)}%</span>`:`<span class="muted">—</span>`;
+    const mx=Math.max(r.cur,r.prev,1),hc=Math.round(r.cur/mx*16),hp=Math.round(r.prev/mx*16);
+    return`<tr><td>${i+1}</td><td>${r.code||''}</td><td>${r.name||''}</td>
+      <td class="mono">${fmt(r.cur)}</td><td class="mono muted">${fmt(r.prev)}</td>
+      <td class="mono ${dc}" style="font-weight:600">${r.diff>=0?'+':''}${fmt(r.diff)}</td>
+      <td>${pctStr}</td>
+      <td class="mono muted">${pR!==null?pR.toFixed(1)+'%':'—'}</td>
+      <td class="mono muted">${pD!==null?pD.toFixed(1)+'%':'—'}</td>
+      <td><div class="mbar"><div class="mbar-b prev" style="height:${hp}px"></div><div class="mbar-b cur" style="height:${hc}px"></div></div></td>
+    </tr>`;
+  }).join('');
+  const spct=sp?(sd/sp*100).toFixed(1)+'%':'—',srpct=total?(sc/total*100).toFixed(1)+'%':'—';
+  return`<div class="tbl-wrap"><div class="tbl-head ${type}"><span class="tbl-title">${title}</span><span class="tbl-badge">依差額排序</span></div>
+    <table><thead><tr><th>#</th><th>代號</th><th>客戶</th>
+      <th>${curL}</th><th>${baseL}</th><th>差額</th><th>成長率</th><th>佔區域%</th><th>佔差額%</th><th>走勢</th>
+    </tr></thead><tbody>${rows}</tbody>
+    <tfoot><tr><td colspan="3">TOP20 小計</td>
+      <td>${fmt(sc)}</td><td>${fmt(sp)}</td>
+      <td class="${sd>=0?'up':'down'}">${sd>=0?'+':''}${fmt(sd)}</td>
+      <td class="muted">${spct}</td><td class="muted">${srpct}</td><td class="muted">100%</td><td></td>
+    </tr></tfoot></table></div>`;
+}
+
+function renderTop20(records,total,curL,baseL){
+  return buildTbl(t20g(records),total,'g','▲ TOP20 增長排名',curL,baseL)+
+         buildTbl(t20d(records),total,'d','▼ TOP20 衰退排名',curL,baseL);
+}
+
+// ══════════════════════════════════════════════════════════════════
+// TREND VIEW (multi-year same-period)
+// ══════════════════════════════════════════════════════════════════
+function renderTrend(rk){
+  const{years,periods,customers}=getTrendData(rk);
+  if(!years.length)return'<div class="empty-state"><div class="empty-icon">📊</div><div class="empty-text">無符合此期間類型的資料</div></div>';
+
+  const yrThs=years.map((y,i)=>{
+    const prev=years[i-1];
+    return`<th>${y}</th><th>${prev?`vs ${prev}`:'基準'}</th>`;
+  }).join('');
+
+  const rows=customers.slice(0,40).map((c,ri)=>{
+    const cells=c.vals.map((v,i)=>{
+      const prev=c.vals[i-1];
+      const diff=v!==null&&prev!==null?v-prev:null;
+      const pct=diff!==null&&prev?diff/prev*100:null;
+      const arrow=pct===null?'':pct>0?'<span class="trend-arrow up">↑</span>':pct<0?'<span class="trend-arrow down">↓</span>':'<span class="trend-arrow muted">→</span>';
+      const pctStr=pct!==null?`<span class="${pct>=0?'up':'down'} mono" style="font-size:10px"> ${pct>=0?'+':''}${pct.toFixed(1)}%</span>`:'';
+      return`<td class="mono ${v===0||v===null?'muted':''}">${v!==null?fmt(v):'—'}</td><td>${arrow}${pctStr}</td>`;
+    }).join('');
+    // sparkline
+    const nonNull=c.vals.filter(v=>v!==null);
+    const mx=Math.max(...nonNull,1);
+    const sparks=c.vals.map(v=>{
+      const h=v!==null?Math.max(2,Math.round(v/mx*16)):1;
+      const col=v===null?'#e0ddd5':v===0?'#f5bdb4':'#4f8ef7';
+      return`<div class="spark-b" style="height:${h}px;background:${col};min-width:6px;border-radius:1px 1px 0 0"></div>`;
+    }).join('');
+    return`<tr><td>${ri+1}</td><td>${c.code}</td><td>${c.name}</td>${cells}<td><div class="spark">${sparks}</div></td></tr>`;
+  }).join('');
+
+  // Regional totals per year
+  const totals=periods.map(pk=>{const d=allData[rk]?.[pk];return d?d.totalCur:0;});
+  const totalCells=totals.map((t,i)=>{
+    const prev=totals[i-1];
+    const diff=prev!==undefined?t-prev:null;
+    const pct=diff!==null&&prev?diff/prev*100:null;
+    const arrow=pct===null?'':pct>0?'<span class="up">↑</span>':pct<0?'<span class="down">↓</span>':'<span class="muted">→</span>';
+    const pctStr=pct!==null?`<span class="${pct>=0?'up':'down'} mono" style="font-size:10px"> ${pct>=0?'+':''}${pct.toFixed(1)}%</span>`:'';
+    return`<td class="mono" style="font-weight:700">${fmt(t)}</td><td>${arrow}${pctStr}</td>`;
+  }).join('');
+
+  const hint=`<div style="font-size:11px;color:var(--text2);margin-bottom:10px;font-family:'JetBrains Mono',monospace">
+    期間類型：<strong>${SUFFIX_LABEL[trendSuffix]||trendSuffix}</strong>　共 ${years.length} 個年度　顯示前 40 大客戶（依最新期金額排序）
+  </div>`;
+
+  return hint+`<div class="tbl-wrap"><div class="tbl-head n"><span class="tbl-title">📈 多年同期趨勢</span><span class="tbl-badge">${trendSuffix} × ${years.length} 年</span></div>
+    <table><thead><tr><th>#</th><th>代號</th><th>客戶</th>${yrThs}<th>走勢</th></tr></thead>
+    <tbody>${rows}</tbody>
+    <tfoot><tr><td colspan="3">區域合計</td>${totalCells}<td></td></tr></tfoot>
+    </table></div>`;
+}
+
+// ══════════════════════════════════════════════════════════════════
+// MONTHLY
+// ══════════════════════════════════════════════════════════════════
+function renderMonthly(records,totalCur,monthCount,curL,baseL){
+  const mc=Math.min(monthCount,12);
+  const mc_=new Array(mc).fill(0),mp_=new Array(mc).fill(0);
+  records.forEach(r=>{for(let i=0;i<mc;i++){mc_[i]+=(r.curMon[i]||0);mp_[i]+=(r.prevMon[i]||0);}});
+  const mx=Math.max(...mc_,...mp_,1);
+  const cards=Array.from({length:mc},(_,mi)=>{
+    const vc=mc_[mi],vp=mp_[mi],d=vc-vp,pct=vp?d/vp*100:null,up=pct>=0;
+    return`<div class="m-card"><div class="m-card-title">${MON_NAMES[mi]||`月${mi+1}`}</div>
+      <div class="m-bar-row"><span class="m-bar-label">${curL}</span>
+        <div class="m-bar-track"><div class="m-bar-fill m-fill-cur" style="width:${Math.round(vc/mx*100)}%"></div></div>
+        <span class="m-bar-val mono">${fmt(vc)}</span>
+        <span class="m-bar-pct ${pct!==null?(up?'up':'down'):''} mono">${pct!==null?(up?'+':'')+pct.toFixed(1)+'%':'—'}</span></div>
+      <div class="m-bar-row"><span class="m-bar-label muted">${baseL}</span>
+        <div class="m-bar-track"><div class="m-bar-fill m-fill-prev" style="width:${Math.round(vp/mx*100)}%"></div></div>
+        <span class="m-bar-val mono muted">${fmt(vp)}</span><span class="m-bar-pct muted mono">基期</span></div>
+      <div class="m-bar-row"><span class="m-bar-label">差額</span><div class="m-bar-track"></div>
+        <span class="m-bar-val mono ${up?'up':'down'}" style="font-weight:600">${up?'+':''}${fmt(d)}</span></div>
+    </div>`;
+  }).join('');
+
+  const active=records.filter(r=>r.cur>0);
+  const vol=active.map(r=>{const avg=r.curMon.slice(0,mc).reduce((s,v)=>s+v,0)/mc;const vr=r.curMon.slice(0,mc).reduce((s,v)=>s+Math.pow(v-avg,2),0)/mc;return{...r,sd:Math.sqrt(vr)};}).sort((a,b)=>b.sd-a.sd).slice(0,10);
+  const mThs=Array.from({length:mc},(_,mi)=>`<th>${MON_NAMES[mi]}</th>`).join('');
+  const volRows=vol.map((r,i)=>{
+    const pS=r.pct!==null?`<span class="${r.pct>=0?'up':'down'} mono">${r.pct>=0?'+':''}${r.pct.toFixed(1)}%</span>`:`<span class="muted">—</span>`;
+    const mCells=Array.from({length:mc},(_,mi)=>`<td class="mono ${r.curMon[mi]>0?'':'muted'}">${r.curMon[mi]>0?fmt(r.curMon[mi]):'—'}</td>`).join('');
+    return`<tr><td>${i+1}</td><td>${r.code}</td><td>${r.name}</td>${mCells}<td class="mono">${fmt(r.cur)}</td><td>${pS}</td></tr>`;
+  }).join('');
+  const gapRows=active.filter(r=>r.cur>0&&r.curMon.slice(0,mc).some(v=>v===0)).sort((a,b)=>b.cur-a.cur).slice(0,15).map((r,i)=>{
+    const gaps=r.curMon.slice(0,mc).filter(v=>v===0).length;
+    const pS=r.pct!==null?`<span class="${r.pct>=0?'up':'down'} mono">${r.pct>=0?'+':''}${r.pct.toFixed(1)}%</span>`:`<span class="muted">—</span>`;
+    const mCells=Array.from({length:mc},(_,mi)=>`<td class="mono ${r.curMon[mi]>0?'':'down'}">${r.curMon[mi]>0?fmt(r.curMon[mi]):'—'}</td>`).join('');
+    return`<tr><td>${i+1}</td><td>${r.code}</td><td>${r.name}</td>${mCells}<td class="mono">${fmt(r.cur)}</td><td>${pS}</td><td class="mono down">${gaps}</td></tr>`;
+  }).join('')||`<tr><td colspan="20" style="text-align:center;color:var(--text3);padding:10px">無月度斷單客戶</td></tr>`;
+
+  const sparse=active.filter(r=>r.curMon.slice(0,mc).some(v=>v===0)).length;
+  const regular=active.filter(r=>r.curMon.slice(0,mc).every(v=>v>0)).length;
+
+  return`<div style="font-size:11px;color:var(--text2);margin-bottom:9px;font-family:'JetBrains Mono',monospace">
+    月月全勤 <span style="color:var(--up);font-weight:600">${regular}</span> 家 ／ 有月度斷單 <span style="color:var(--warn);font-weight:600">${sparse}</span> 家
+  </div>
+  <div class="month-grid" style="grid-template-columns:repeat(${Math.min(mc,3)},1fr)">${cards}</div>
+  <div class="tbl-wrap"><div class="tbl-head n"><span class="tbl-title">📈 月度波動最大客戶 TOP10</span></div>
+    <table><thead><tr><th>#</th><th>代號</th><th>客戶</th>${mThs}<th>合計</th><th>成長率</th></tr></thead><tbody>${volRows}</tbody></table></div>
+  <div class="tbl-wrap"><div class="tbl-head n"><span class="tbl-title">🟠 月度斷單客戶 TOP15</span></div>
+    <table><thead><tr><th>#</th><th>代號</th><th>客戶</th>${mThs}<th>合計</th><th>成長率</th><th>斷月</th></tr></thead><tbody>${gapRows}</tbody></table></div>`;
+}
+
+// ══════════════════════════════════════════════════════════════════
+// CONCENTRATION
+// ══════════════════════════════════════════════════════════════════
+function renderConc(records,totalCur,curL){
+  const active=[...records].filter(r=>r.cur>0).sort((a,b)=>b.cur-a.cur);
+  if(!active.length)return'<p style="color:var(--text3);padding:16px">無有效資料</p>';
+  let concRows='';
+  [1,3,5,10,20,50].forEach(t=>{
+    if(t>active.length)return;
+    const sum=active.slice(0,t).reduce((s,r)=>s+r.cur,0);
+    const pct=totalCur?sum/totalCur*100:0;
+    concRows+=`<div class="conc-row"><span class="conc-name">TOP ${t}</span>
+      <div class="conc-track"><div class="conc-fill" style="width:${pct.toFixed(1)}%"></div></div>
+      <span class="conc-val">${pct.toFixed(1)}%</span></div>`;
+  });
+  const hhi=active.reduce((s,r)=>{const sh=totalCur?r.cur/totalCur:0;return s+sh*sh;},0)*10000;
+  const hhiC=hhi>2500?'var(--down)':hhi>1500?'var(--warn)':'var(--up)';
+  const hhiLv=hhi>2500?'高度集中':hhi>1500?'中度集中':'分散型';
+  let cum=0;
+  const listRows=active.map((r,i)=>{
+    cum+=r.cur;
+    const share=totalCur?r.cur/totalCur*100:0,cumPct=totalCur?cum/totalCur*100:0;
+    const pS=r.pct!==null?`<span class="${r.pct>=0?'up':'down'} mono">${r.pct>=0?'+':''}${r.pct.toFixed(1)}%</span>`:`<span class="muted">—</span>`;
+    return`<tr><td>${i+1}</td><td>${r.code}</td><td>${r.name}</td>
+      <td class="mono">${fmt(r.cur)}</td><td class="mono muted">${fmt(r.prev)}</td>
+      <td>${pS}</td><td class="mono">${share.toFixed(1)}%</td><td class="mono muted">${cumPct.toFixed(1)}%</td></tr>`;
+  }).join('');
+  return`<div style="display:grid;grid-template-columns:260px 1fr;gap:12px;align-items:start">
+    <div class="insight-box"><div class="insight-label">集中度分析 ${curL}</div>${concRows}
+      <div style="margin-top:10px;font-size:11px;color:var(--text2)">HHI 指數 <span style="font-weight:700;color:${hhiC};font-family:'JetBrains Mono',monospace">${Math.round(hhi)}</span> <span style="color:${hhiC}">${hhiLv}</span></div>
+      <div style="margin-top:5px;font-size:11px;color:var(--text3)">有業績客戶 ${active.length} 家</div>
+    </div>
+    <div class="tbl-wrap" style="margin-bottom:0"><div class="tbl-head n"><span class="tbl-title">🏆 客戶業績完整排名</span><span class="tbl-badge">${curL}</span></div>
+      <table style="font-size:11px"><thead><tr><th>#</th><th>代號</th><th>客戶</th><th>比較期</th><th>基期</th><th>成長率</th><th>個別%</th><th>累計%</th></tr></thead>
+      <tbody>${listRows}</tbody></table></div></div>`;
+}
+
+// ══════════════════════════════════════════════════════════════════
+// SIGNALS
+// ══════════════════════════════════════════════════════════════════
+function renderSignals(records,curL,baseL){
+  const zeroed  =records.filter(r=>r.prev>0&&r.cur===0).sort((a,b)=>b.prev-a.prev);
+  const newC    =records.filter(r=>r.cur>0&&r.prev===0).sort((a,b)=>b.cur-a.cur);
+  const hdec    =records.filter(r=>r.prev>0&&r.pct!==null&&r.pct<-50).sort((a,b)=>a.pct-b.pct);
+  const surge   =records.filter(r=>r.prev>0&&r.pct!==null&&r.pct>100).sort((a,b)=>b.pct-a.pct);
+  const mkT=(list,title,cls,cols,ths,rf)=>`<div class="tbl-wrap"><div class="tbl-head ${cls}"><span class="tbl-title">${title}</span><span class="tbl-badge">${list.length} 家</span></div>
+    <table><thead><tr>${ths}</tr></thead><tbody>${list.length?list.map(rf).join(''):'<tr><td colspan="'+cols+'" style="text-align:center;color:var(--text3);padding:10px">無</td></tr>'}</tbody></table></div>`;
+  const lTh=s=>`<th style="text-align:left">${s}</th>`,rTh=s=>`<th>${s}</th>`;
+  return`<div class="sig-grid">
+    ${mkT(zeroed,`🔴 交易中斷（${baseL}有 → ${curL}歸零）`,'d',5,lTh('#')+lTh('代號')+lTh('客戶')+rTh(baseL)+rTh(curL),
+      r=>`<tr><td>${zeroed.indexOf(r)+1}</td><td>${r.code}</td><td>${r.name}</td><td class="mono muted">${fmt(r.prev)}</td><td class="mono down" style="font-weight:600">歸零</td></tr>`)}
+    ${mkT(newC,`🟡 新進／回訪（${baseL}無 → ${curL}有）`,'n',5,lTh('#')+lTh('代號')+lTh('客戶')+rTh(curL)+rTh(baseL),
+      r=>`<tr><td>${newC.indexOf(r)+1}</td><td>${r.code}</td><td>${r.name}</td><td class="mono up" style="font-weight:600">${fmt(r.cur)}</td><td class="mono muted">—</td></tr>`)}
+  </div><div class="sig-grid">
+    ${mkT(hdec,`📉 重大衰退（>50%）`,'d',6,lTh('#')+lTh('代號')+lTh('客戶')+rTh(curL)+rTh(baseL)+rTh('衰退率'),
+      r=>`<tr><td>${hdec.indexOf(r)+1}</td><td>${r.code}</td><td>${r.name}</td><td class="mono">${fmt(r.cur)}</td><td class="mono muted">${fmt(r.prev)}</td><td class="mono down" style="font-weight:600">${r.pct.toFixed(1)}%</td></tr>`)}
+    ${mkT(surge,`🚀 爆發成長（>100%）`,'g',6,lTh('#')+lTh('代號')+lTh('客戶')+rTh(curL)+rTh(baseL)+rTh('成長率'),
+      r=>`<tr><td>${surge.indexOf(r)+1}</td><td>${r.code}</td><td>${r.name}</td><td class="mono">${fmt(r.cur)}</td><td class="mono muted">${fmt(r.prev)}</td><td class="mono up" style="font-weight:600">+${r.pct.toFixed(1)}%</td></tr>`)}
+  </div>`;
+}
+
+// ══════════════════════════════════════════════════════════════════
+// EXCEL EXPORT
+// ══════════════════════════════════════════════════════════════════
+function exportExcel(){
+  const wb=XLSX.utils.book_new();
+  const MON_EX=MON_NAMES.slice(0,12);
+
+  // 總覽
+  const modeDesc={yoy:`前年同期比較 ${yoyPeriod}`,sum:`多季加總 [${sumCur.join('+')}] vs [${sumBase.join('+')}]`,trend:`${SUFFIX_LABEL[trendSuffix]||trendSuffix} 多年趨勢`}[mode];
+  const ovRows=[[`業績分析總覽 — ${modeDesc}`],[],['區域','比較期','基期','差額','成長率%','有業績','客戶總數','交易中斷','新進回訪','重大衰退>50%']];
+  let gc=0,gp=0;
+  RKEYS.forEach(k=>{
+    const{records,totalCur,totalPrev,curLabel,baseLabel}=getRegionData(k);
+    const diff=totalCur-totalPrev,pct=totalPrev?+(diff/totalPrev*100).toFixed(2):null;
+    const act=records.filter(r=>r.cur>0).length;
+    ovRows.push([`${k} ${rName(k)}`,totalCur,totalPrev,diff,pct,act,records.length,
+      records.filter(r=>r.prev>0&&r.cur===0).length,records.filter(r=>r.cur>0&&r.prev===0).length,
+      records.filter(r=>r.prev>0&&r.pct!==null&&r.pct<-50).length]);
+    gc+=totalCur;gp+=totalPrev;
+  });
+  const gd=gc-gp;
+  ovRows.push(['合計',gc,gp,gd,gp?+(gd/gp*100).toFixed(2):null,'','','','','']);
+  const ovSh=XLSX.utils.aoa_to_sheet(ovRows);
+  ovSh['!cols']=[{wch:13},{wch:13},{wch:13},{wch:13},{wch:10},{wch:11},{wch:10},{wch:11},{wch:11},{wch:14}];
+  XLSX.utils.book_append_sheet(wb,ovSh,'總覽');
+
+  RKEYS.forEach(k=>{
+    const{records,totalCur,totalPrev,monthCount,curLabel,baseLabel}=getRegionData(k);
+    const mc=Math.min(monthCount,12);
+    const label=`${k}${rName(k)!==k?rName(k):''}`;
+    const zeroed=records.filter(r=>r.prev>0&&r.cur===0).sort((a,b)=>b.prev-a.prev);
+    const newCust=records.filter(r=>r.cur>0&&r.prev===0).sort((a,b)=>b.cur-a.cur);
+    const hdec=records.filter(r=>r.prev>0&&r.pct!==null&&r.pct<-50).sort((a,b)=>a.pct-b.pct);
+    const surge=records.filter(r=>r.prev>0&&r.pct!==null&&r.pct>100).sort((a,b)=>b.pct-a.pct);
+    const active=[...records].filter(r=>r.cur>0).sort((a,b)=>b.cur-a.cur);
+    const mc_=new Array(mc).fill(0),mp_=new Array(mc).fill(0);
+    records.forEach(r=>{for(let i=0;i<mc;i++){mc_[i]+=(r.curMon[i]||0);mp_[i]+=(r.prevMon[i]||0);}});
+
+    // TOP20
+    const shA=[[`${label} — TOP20 增長衰退  [${curLabel}] vs [${baseLabel}]`],
+      [`合計：比較期=${totalCur}  基期=${totalPrev}  差額=${totalCur-totalPrev}`],[]];
+    [{label:'▲ TOP20 增長',fn:t20g},{label:'▼ TOP20 衰退',fn:t20d}].forEach(({label:ttl,fn})=>{
+      const sub=fn(records);const tot=sub.reduce((s,r)=>s+r.diff,0);let ss=0,sp=0;
+      shA.push([ttl]);shA.push(['排名','代號','客戶','比較期','基期','差額','成長率%','佔區域%','佔差額%']);
+      sub.forEach((r,i)=>{shA.push([i+1,r.code,r.name,r.cur,r.prev,r.diff,r.pct!==null?+r.pct.toFixed(2):null,totalCur?+(r.cur/totalCur*100).toFixed(2):null,tot?+(r.diff/tot*100).toFixed(2):null]);ss+=r.cur;sp+=r.prev;});
+      shA.push(['','','小計',ss,sp,ss-sp,'',totalCur?+((ss/totalCur)*100).toFixed(2):null,100]);shA.push([]);
+    });
+    const shAws=XLSX.utils.aoa_to_sheet(shA);shAws['!cols']=[{wch:5},{wch:9},{wch:18},{wch:13},{wch:13},{wch:13},{wch:10},{wch:11},{wch:11}];
+    XLSX.utils.book_append_sheet(wb,shAws,`${k}_TOP20`);
+
+    // 月度趨勢
+    const shB=[[`${label} — 月度趨勢  [${curLabel}] vs [${baseLabel}]`],[]];
+    shB.push(['月份','比較期','基期','差額','成長率%','月佔比%']);
+    for(let mi=0;mi<mc;mi++){const d=mc_[mi]-mp_[mi];shB.push([MON_EX[mi],mc_[mi],mp_[mi],d,mp_[mi]?+(d/mp_[mi]*100).toFixed(2):null,totalCur?+(mc_[mi]/totalCur*100).toFixed(2):null]);}
+    shB.push(['合計',totalCur,totalPrev,totalCur-totalPrev,totalPrev?+((totalCur-totalPrev)/totalPrev*100).toFixed(2):null,100]);shB.push([]);
+    shB.push(['月度波動TOP10']);shB.push(['排名','代號','客戶',...MON_EX.slice(0,mc),'合計','成長率%']);
+    const vol=active.map(r=>{const avg=r.curMon.slice(0,mc).reduce((s,v)=>s+v,0)/mc;const vr=r.curMon.slice(0,mc).reduce((s,v)=>s+Math.pow(v-avg,2),0)/mc;return{...r,sd:Math.sqrt(vr)};}).sort((a,b)=>b.sd-a.sd).slice(0,10);
+    vol.forEach((r,i)=>shB.push([i+1,r.code,r.name,...r.curMon.slice(0,mc),r.cur,r.pct!==null?+r.pct.toFixed(2):null]));
+    shB.push([]);shB.push(['月度斷單客戶']);shB.push(['代號','客戶',...MON_EX.slice(0,mc),'合計','成長率%','斷月數']);
+    records.filter(r=>r.cur>0&&r.curMon.slice(0,mc).some(v=>v===0)).sort((a,b)=>b.cur-a.cur).forEach(r=>{
+      shB.push([r.code,r.name,...r.curMon.slice(0,mc).map(v=>v||''),r.cur,r.pct!==null?+r.pct.toFixed(2):null,r.curMon.slice(0,mc).filter(v=>v===0).length]);
+    });
+    XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(shB),`${k}_月度趨勢`);
+
+    // 集中度
+    const shC=[[`${label} — 客戶集中度  [${curLabel}]`],[]];
+    shC.push(['累計客戶','累計金額','佔比%']);
+    let prev2=0;[1,3,5,10,20,50,active.length].forEach(t=>{if(t>active.length||t===prev2)return;prev2=t;const sum=active.slice(0,t).reduce((s,r)=>s+r.cur,0);shC.push([t,sum,totalCur?+(sum/totalCur*100).toFixed(2):null]);});
+    shC.push([]);shC.push(['客戶完整排名']);shC.push(['排名','代號','客戶','比較期','基期','差額','成長率%','個別%','累計%']);
+    let cum=0;active.forEach((r,i)=>{cum+=r.cur;shC.push([i+1,r.code,r.name,r.cur,r.prev,r.diff,r.pct!==null?+r.pct.toFixed(2):null,totalCur?+(r.cur/totalCur*100).toFixed(2):null,totalCur?+(cum/totalCur*100).toFixed(2):null]);});
+    XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(shC),`${k}_集中度`);
+
+    // 異常訊號
+    const shD=[[`${label} — 異常訊號  [${curLabel}] vs [${baseLabel}]`],[]];
+    [[`🔴 交易中斷（${zeroed.length}家）`,zeroed,['代號','客戶','基期金額','比較期','備註'],r=>[r.code,r.name,r.prev,0,'需回訪']],
+     [`🟡 新進/回訪（${newCust.length}家）`,newCust,['代號','客戶','比較期金額','基期','備註'],r=>[r.code,r.name,r.cur,0,'確認屬性']],
+     [`📉 重大衰退>50%（${hdec.length}家）`,hdec,['代號','客戶','比較期','基期','衰退率%','備註'],r=>[r.code,r.name,r.cur,r.prev,+r.pct.toFixed(2),'確認原因']],
+     [`🚀 爆發成長>100%（${surge.length}家）`,surge,['代號','客戶','比較期','基期','成長率%','備註'],r=>[r.code,r.name,r.cur,r.prev,+r.pct.toFixed(2),'確認可持續']],
+    ].forEach(([t,list,hdrs,rf])=>{shD.push([t]);shD.push(hdrs);list.length?list.forEach(r=>shD.push(rf(r))):shD.push(['（無）']);shD.push([]);});
+    const shDws=XLSX.utils.aoa_to_sheet(shD);shDws['!cols']=[{wch:9},{wch:18},{wch:13},{wch:13},{wch:13},{wch:14}];
+    XLSX.utils.book_append_sheet(wb,shDws,`${k}_異常訊號`);
+
+    // 多年趨勢 (if trend mode)
+    if(mode==='trend'){
+      const{years,periods,customers}=getTrendData(k);
+      if(years.length){
+        const shT=[[`${label} — 多年同期趨勢  ${SUFFIX_LABEL[trendSuffix]||trendSuffix}`],[]];
+        const hdrs=['排名','代號','客戶',...years.flatMap(y=>[y,'成長率%'])];
+        shT.push(hdrs);
+        customers.slice(0,50).forEach((c,i)=>{
+          const cells=c.vals.flatMap((v,vi)=>{const prev=c.vals[vi-1];const pct=v!==null&&prev!==null&&prev?+((v-prev)/prev*100).toFixed(2):null;return[v??'',pct];});
+          shT.push([i+1,c.code,c.name,...cells]);
+        });
+        XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(shT),`${k}_多年趨勢`);
+      }
+    }
+  });
+
+  XLSX.writeFile(wb,`業績分析_${mode==='yoy'?yoyPeriod:mode==='sum'?sumCur.join('+')+' vs '+sumBase.join('+'):trendSuffix+'趨勢'}.xlsx`);
+}
+
+// ══════════════════════════════════════════════════════════════════
+// HELPERS
+// ══════════════════════════════════════════════════════════════════
+function fmt(v){if(v===null||v===undefined)return'—';return(v<0?'-':'')+Math.abs(Math.round(v)).toLocaleString('zh-TW');}
+function showStatus(t,m){const b=document.getElementById('status-bar');b.style.display='block';b.className={info:'sb-info',ok:'sb-ok',warn:'sb-warn',err:'sb-err'}[t]||'sb-info';b.innerHTML=m;}
+function sleep(ms){return new Promise(r=>setTimeout(r,ms));}
+function resetAll(){
+  RKEYS.forEach(k=>{regionFiles[k]=[];allData[k]={};updateChips(k);document.getElementById(`rname-${k}`)?.setAttribute('value','');});
+  allPeriods=[];allSuffixes=[];mode='yoy';yoyPeriod=null;sumCur=[];sumBase=[];trendSuffix=null;
+  document.getElementById('topbar-controls').style.display='none';
+  document.getElementById('results').style.display='none';
+  document.getElementById('status-bar').style.display='none';
+  document.getElementById('empty-state').style.display='flex';
+  document.getElementById('btn-run').disabled=true;
+  document.getElementById('btn-export').disabled=true;
+  document.getElementById('topbar-title').textContent='業績分析工具';
+}
+
+buildSidebar();
+</script>
+</body>
+</html>
