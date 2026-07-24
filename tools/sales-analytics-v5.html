@@ -639,6 +639,7 @@ function parseWB(wb, filename){
   const deduped=records.filter(r=>{if(seen.has(r.code))return false;seen.add(r.code);return true;});
   const totalCur=officialCur??deduped.reduce((s,r)=>s+r.cur,0);
   const totalPrev=officialPrev??deduped.reduce((s,r)=>s+r.prev,0);
+  const yrNum=parseInt(yearCur.replace(/\D/g,''))||115;
   return{periodKey, year:fnP?fnP.year:yrNum, suffix:fnP?fnP.suffix:'FULL', displayLabel:fnP?fnP.displayLabel:String(yrNum)+'年', yearCur,yearPrev,records:deduped,totalCur,totalPrev,monthCount:mc};
 }
 
