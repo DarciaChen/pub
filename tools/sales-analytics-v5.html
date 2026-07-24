@@ -33,7 +33,27 @@ body{font-family:'Noto Sans TC',sans-serif;background:var(--paper);color:var(--t
 .rfc.has{color:var(--accent2);}
 .region-drop{background:rgba(255,255,255,.02);border-top:1px dashed rgba(255,255,255,.06);padding:7px 11px;min-height:36px;display:flex;align-items:center;justify-content:center;transition:background .15s;}
 .region-drop.drag-over{background:rgba(42,122,79,.12);}
-.region-drop input[type=file]{display:none;}
+.region-drop input[type=file]{display:none;} /* desktop: hidden, triggered by drop zone */
+/* mobile upload area: visible, full-width tap target */
+.mobile-file-input{
+  display:none; /* shown only on mobile */
+  width:100%;
+  padding:13px 8px;
+  margin-top:6px;
+  background:rgba(42,122,79,.15);
+  border:1.5px dashed var(--accent2);
+  border-radius:6px;
+  color:var(--accent2);
+  font-family:'Noto Sans TC',sans-serif;
+  font-size:13px; font-weight:600;
+  text-align:center;
+  cursor:pointer;
+  -webkit-tap-highlight-color:rgba(42,122,79,.2);
+  touch-action:manipulation;
+  /* Make it look like a button but IS the input itself */
+  opacity:1 !important;
+  position:relative;
+}
 .drop-hint{font-family:'JetBrains Mono',monospace;font-size:10px;color:#3a3830;pointer-events:none;}
 .file-chips{display:flex;flex-direction:column;gap:3px;width:100%;}
 .file-chip{display:flex;align-items:center;background:rgba(255,255,255,.04);border-radius:4px;padding:3px 7px;font-family:'JetBrains Mono',monospace;font-size:9px;color:#7a7870;gap:4px;}
@@ -193,7 +213,9 @@ tfoot td:nth-child(-n+3){text-align:left;}
 @media(max-width:880px){
   .shell{flex-direction:column;}
   .sidebar{width:100%;height:auto;position:static;overflow-y:visible;max-height:none;}
-  .region-drop{min-height:52px;}
+  .region-drop{display:none;}
+  .upload-btn{display:none !important;}
+  .mobile-file-input{display:block !important;}
   .ov-grid{grid-template-columns:repeat(2,1fr);}
   .sig-grid{grid-template-columns:1fr;}
   .month-grid{grid-template-columns:repeat(2,1fr);}
@@ -332,7 +354,13 @@ function buildSidebar() {
     </div>
     <button class="upload-btn" type="button" onclick="document.getElementById('finput-${k}').click()">
       📂 點擊上傳 ${k} 區 XLS 檔案
-    </button>`;
+    </button>
+    <label class="mobile-file-input">
+      📂 點擊上傳 ${k} 區 XLS 檔案
+      <input type="file" accept=".xls,.xlsx" multiple
+        style="position:absolute;inset:0;opacity:0;width:100%;height:100%;cursor:pointer;"
+        onchange="addFiles('${k}',this)">
+    </label>`;
     c.appendChild(b);
     const dz = b.querySelector('.region-drop');
     dz.addEventListener('dragover', e=>{e.preventDefault();dz.classList.add('drag-over');});
