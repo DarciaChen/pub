@@ -289,6 +289,7 @@ const SUFFIX_LABEL={Q1:'第一季',H1:'上半年','Q1-Q3':'前三季',H2:'下半
 // STATE
 // ══════════════════════════════════════════════════════════════════
 const regionFiles = {A:[],B:[],C:[],D:[]};
+const preloadedBuffers = {A:[],B:[],C:[],D:[]}; // 選檔當下同步讀入，避免 Google Drive 檔案失效
 const regionNames = {A:'A',B:'B',C:'C',D:'D'};
 // allData[regionKey][periodKey] = { periodKey, year_cur, year_prev, records[], totalCur, totalPrev, monthCount }
 const allData = {};
@@ -354,12 +355,24 @@ function buildSidebar() {
 function addFiles(k,input){addFilesFromList(k,input.files);input.value='';}
 function addFilesFromList(k,fl){
   Array.from(fl).forEach(f=>{
-    if(!regionFiles[k].find(x=>x.name===f.name)) regionFiles[k].push(f);
+    if(regionFiles[k].find(x=>x.name===f.name)) return;
+    regionFiles[k].push(f);
+    // 關鍵：必須在 change 事件的同步環境裡立刻讀取
+    // Google Drive 選來的檔案，離開這個同步環境後就會失效
+    f.arrayBuffer().then(buf=>{
+      preloadedBuffers[k].push({name:f.name, buf});
+    }).catch(()=>{
+      // arrayBuffer() 失敗時退回 FileReader（同樣需要盡早讀）
+      const r=new FileReader();
+      r.onload=e=>preloadedBuffers[k].push({name:f.name, buf:e.target.result});
+      r.readAsArrayBuffer(f);
+    });
   });
   updateChips(k); checkRunnable();
 }
 function removeFile(k,name){
   regionFiles[k]=regionFiles[k].filter(f=>f.name!==name);
+  preloadedBuffers[k]=preloadedBuffers[k].filter(b=>b.name!==name);
   updateChips(k); checkRunnable();
 }
 
@@ -572,34 +585,24 @@ async function runAnalysis(){
   const buffers={}; // {regionKey: [{name, buf}]}
   RKEYS.forEach(k=>{ buffers[k]=[]; });
 
-  for(const k of RKEYS){
-    for(const file of regionFiles[k]){
-      try{
-        let buf;
-        try{ buf = await file.arrayBuffer(); }
-        catch(e1){
-          buf = await new Promise((res,rej)=>{
-            const r=new FileReader();
-            r.onload=e=>res(e.target.result);
-            r.onerror=e=>rej(new Error(e.target.error?.message||'FileReader失敗'));
-            r.onabort=()=>rej(new Error('FileReader中止'));
-            r.readAsArrayBuffer(file);
-          });
-        }
-        buffers[k].push({name:file.name, buf});
-      }catch(e){
-        showStatus('err',`❌ ${k}區 [${file.name}] 讀取失敗：${e.message}`);
-        document.getElementById('btn-run').disabled=false; return;
-      }
-    }
-  }
-
-  // ── 第二步：所有檔案讀完後，才做其他非同步操作 ──
+  // 等待所有 preloadedBuffers 備齊（選檔時已開始讀，這裡只是確認完成）
   showStatus('info','<span class="spinner"></span>解析中…');
+  const waitStart=Date.now();
+  while(true){
+    const allReady=RKEYS.every(k=>
+      regionFiles[k].every(f=>preloadedBuffers[k].find(b=>b.name===f.name))
+    );
+    if(allReady) break;
+    if(Date.now()-waitStart>15000){
+      showStatus('err','❌ 讀取逾時，請確認檔案來源（建議先下載到手機再上傳）');
+      document.getElementById('btn-run').disabled=false; return;
+    }
+    await sleep(100);
+  }
   await sleep(10);
 
   for(const k of RKEYS){
-    for(const entry of buffers[k]){
+    for(const entry of preloadedBuffers[k]){
       try{
         const buf=entry.buf;
         const wb=XLSX.read(buf,{type:'array'});
@@ -1179,7 +1182,7 @@ function fmt(v){if(v===null||v===undefined)return'—';return(v<0?'-':'')+Math.a
 function showStatus(t,m){const b=document.getElementById('status-bar');b.style.display='block';b.className={info:'sb-info',ok:'sb-ok',warn:'sb-warn',err:'sb-err'}[t]||'sb-info';b.innerHTML=m;}
 function sleep(ms){return new Promise(r=>setTimeout(r,ms));}
 function resetAll(){
-  RKEYS.forEach(k=>{regionFiles[k]=[];allData[k]={};updateChips(k);document.getElementById(`rname-${k}`)?.setAttribute('value','');});
+  RKEYS.forEach(k=>{regionFiles[k]=[];preloadedBuffers[k]=[];allData[k]={};updateChips(k);document.getElementById(`rname-${k}`)?.setAttribute('value','');});
   allPeriods=[];allSuffixes=[];mode='yoy';yoyPeriod=null;sumCur=[];sumBase=[];trendSuffix=null;
   document.getElementById('topbar-controls').style.display='none';
   document.getElementById('results').style.display='none';
