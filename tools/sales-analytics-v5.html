@@ -579,15 +579,32 @@ async function runAnalysis(){
       try{
         // 雙保險：先試 arrayBuffer()，失敗退回 FileReader
         const buf=await (async()=>{
+          // 方法一：arrayBuffer()
           if(typeof file.arrayBuffer==='function'){
-            try{ return await file.arrayBuffer(); }catch(e){ /*fallthrough*/ }
+            try{ return await file.arrayBuffer(); }
+            catch(e1){ console.warn('arrayBuffer失敗:',e1.message); }
           }
-          return await new Promise((res,rej)=>{
-            const r=new FileReader();
-            r.onload=e=>res(e.target.result);
-            r.onerror=()=>rej(new Error('FileReader 讀取失敗'));
-            r.readAsArrayBuffer(file);
-          });
+          // 方法二：FileReader
+          try{
+            return await new Promise((res,rej)=>{
+              const r=new FileReader();
+              r.onload=e=>res(e.target.result);
+              r.onerror=e=>rej(new Error('FileReader.onerror: '+e.target.error?.message));
+              r.onabort=()=>rej(new Error('FileReader.onabort'));
+              r.readAsArrayBuffer(file);
+            });
+          }catch(e2){
+            // 方法三：Blob URL → fetch
+            try{
+              const url=URL.createObjectURL(file);
+              const resp=await fetch(url);
+              const buf=await resp.arrayBuffer();
+              URL.revokeObjectURL(url);
+              return buf;
+            }catch(e3){
+              throw new Error(`三種讀取方式均失敗 — arrayBuffer:${e3.message}`);
+            }
+          }
         })();
         const wb=XLSX.read(buf,{type:'array'});
         const parsed=parseWB(wb,file.name);
