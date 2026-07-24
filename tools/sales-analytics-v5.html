@@ -588,26 +588,20 @@ async function runAnalysis(){
   for(const k of RKEYS){
     for(const file of regionFiles[k]){
       try{
-        // 雙保險：先試 arrayBuffer()，失敗退回 FileReader
-        const buf=await (async()=>{
-          // 方法一：arrayBuffer()
-          if(typeof file.arrayBuffer==='function'){
-            try{ return await file.arrayBuffer(); }
-            catch(e1){ console.warn('arrayBuffer失敗:',e1.message); }
-          }
-          // 方法二：FileReader
-          try{
-            return await new Promise((res,rej)=>{
-              const r=new FileReader();
-              r.onload=e=>res(e.target.result);
-              r.onerror=e=>rej(new Error('FileReader.onerror: '+e.target.error?.message));
-              r.onabort=()=>rej(new Error('FileReader.onabort'));
-              r.readAsArrayBuffer(file);
-            });
-          }catch(e2){
-              throw new Error(`讀取失敗：${e2.message||e2}`);
-          }
-        })();
+        // 直接讀取，不用 IIFE（安卓 Chrome 需維持同一 user activation 執行環境）
+        let buf;
+        try{
+          buf = await file.arrayBuffer();
+        }catch(e1){
+          console.warn('arrayBuffer失敗:',e1.message);
+          buf = await new Promise((res,rej)=>{
+            const r=new FileReader();
+            r.onload=e=>res(e.target.result);
+            r.onerror=e=>rej(new Error('FileReader失敗:'+(e.target.error?.message||'')));
+            r.onabort=()=>rej(new Error('FileReader中止'));
+            r.readAsArrayBuffer(file);
+          });
+        }
         const wb=XLSX.read(buf,{type:'array'});
         const parsed=parseWB(wb,file.name);
         if(!allData[k][parsed.periodKey]) allData[k][parsed.periodKey]=parsed;
