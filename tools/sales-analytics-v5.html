@@ -336,7 +336,28 @@ function buildSidebar() {
     fileInput.type = 'file'; fileInput.accept = '.xls,.xlsx'; fileInput.multiple = true;
     fileInput.id = 'finput-'+k;
     fileInput.style.cssText = 'display:block;width:100%;padding:8px 0;cursor:pointer;color:var(--accent2);font-size:13px;background:transparent;border:none;';
-    fileInput.addEventListener('change', function(){ addFiles(k, this); });
+    fileInput.addEventListener('change', async function(){
+      // 必須在這個 async change handler 裡直接 await 讀取
+      // 不能呼叫其他函式再讀，否則 Google Drive 檔案會失效
+      const files = Array.from(this.files);
+      for(const f of files){
+        if(regionFiles[k].find(x=>x.name===f.name)) continue;
+        regionFiles[k].push(f);
+        try{
+          const buf = await f.arrayBuffer();
+          preloadedBuffers[k].push({name:f.name, buf});
+        }catch(e){
+          await new Promise((res)=>{
+            const r=new FileReader();
+            r.onload=e=>{ preloadedBuffers[k].push({name:f.name, buf:e.target.result}); res(); };
+            r.onerror=()=>res();
+            r.readAsArrayBuffer(f);
+          });
+        }
+      }
+      this.value='';
+      updateChips(k); checkRunnable();
+    });
     dropDiv.appendChild(fileInput);
 
     const chips = document.createElement('div');
@@ -352,22 +373,26 @@ function buildSidebar() {
   });
 }
 
-function addFiles(k,input){addFilesFromList(k,input.files);input.value='';}
-function addFilesFromList(k,fl){
-  Array.from(fl).forEach(f=>{
-    if(regionFiles[k].find(x=>x.name===f.name)) return;
+function addFiles(k,input){
+  // 桌機拖曳用（drag-drop），直接讀取
+  addFilesFromList(k, Array.from(input.files||input));
+}
+async function addFilesFromList(k,fl){
+  for(const f of fl){
+    if(regionFiles[k].find(x=>x.name===f.name)) continue;
     regionFiles[k].push(f);
-    // 關鍵：必須在 change 事件的同步環境裡立刻讀取
-    // Google Drive 選來的檔案，離開這個同步環境後就會失效
-    f.arrayBuffer().then(buf=>{
+    try{
+      const buf = await f.arrayBuffer();
       preloadedBuffers[k].push({name:f.name, buf});
-    }).catch(()=>{
-      // arrayBuffer() 失敗時退回 FileReader（同樣需要盡早讀）
-      const r=new FileReader();
-      r.onload=e=>preloadedBuffers[k].push({name:f.name, buf:e.target.result});
-      r.readAsArrayBuffer(f);
-    });
-  });
+    }catch(e){
+      await new Promise((res)=>{
+        const r=new FileReader();
+        r.onload=e=>{ preloadedBuffers[k].push({name:f.name, buf:e.target.result}); res(); };
+        r.onerror=()=>res();
+        r.readAsArrayBuffer(f);
+      });
+    }
+  }
   updateChips(k); checkRunnable();
 }
 function removeFile(k,name){
