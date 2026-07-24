@@ -31,9 +31,17 @@ body{font-family:'Noto Sans TC',sans-serif;background:var(--paper);color:var(--t
 .region-name-input::placeholder{color:#3a3830;}
 .rfc{font-family:'JetBrains Mono',monospace;font-size:10px;color:#3a3830;white-space:nowrap;}
 .rfc.has{color:var(--accent2);}
-.region-drop{background:rgba(255,255,255,.02);border-top:1px dashed rgba(255,255,255,.06);padding:7px 11px;cursor:pointer;position:relative;min-height:44px;display:flex;align-items:center;justify-content:center;transition:background .15s;}
-.region-drop:hover,.region-drop.drag-over{background:rgba(42,122,79,.12);}
-.region-drop input[type=file]{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%;}
+.region-drop{background:rgba(255,255,255,.02);border-top:1px dashed rgba(255,255,255,.06);padding:4px 11px;min-height:0;transition:background .15s;}
+.region-drop.drag-over{background:rgba(42,122,79,.12);}
+.region-upload-label{
+  display:block;width:100%;padding:10px 8px;
+  background:rgba(42,122,79,.12);border:1.5px dashed rgba(56,217,169,.4);
+  border-radius:6px;color:var(--accent2);
+  font-family:'Noto Sans TC',sans-serif;font-size:12px;font-weight:600;
+  text-align:center;cursor:pointer;
+  touch-action:manipulation;
+}
+.region-upload-label:hover,.region-upload-label:active{background:rgba(42,122,79,.25);}
 .drop-hint{font-family:'JetBrains Mono',monospace;font-size:10px;color:#3a3830;pointer-events:none;}
 .file-chips{display:flex;flex-direction:column;gap:3px;width:100%;}
 .file-chip{display:flex;align-items:center;background:rgba(255,255,255,.04);border-radius:4px;padding:3px 7px;font-family:'JetBrains Mono',monospace;font-size:9px;color:#7a7870;gap:4px;}
@@ -306,22 +314,42 @@ function buildSidebar() {
   RKEYS.forEach(k => {
     const b = document.createElement('div');
     b.className = 'region-block'; b.id = `rb-${k}`;
-    b.innerHTML = `<div class="region-header">
-      <span class="region-letter">${k}</span>
-      <input class="region-name-input" id="rname-${k}" placeholder="區域名稱（選填）"
-        oninput="regionNames['${k}']=this.value||'${k}'">
-      <span class="rfc" id="rfc-${k}">0 檔</span>
-    </div>
-    <div class="region-drop" id="rdrop-${k}">
-      <input type="file" accept=".xls,.xlsx" multiple onchange="addFiles('${k}',this)">
-      <div class="drop-hint" id="rhint-${k}">＋ 拖曳或點擊上傳</div>
-      <div class="file-chips" id="rchips-${k}" style="display:none"></div>
-    </div>`;
+    // 用 createElement 確保事件正確綁定（不依賴 innerHTML 的 onchange 解析）
+    const header = document.createElement('div');
+    header.className = 'region-header';
+    header.innerHTML = `<span class="region-letter">${k}</span>
+      <input class="region-name-input" id="rname-${k}" placeholder="區域名稱（選填）">
+      <span class="rfc" id="rfc-${k}">0 檔</span>`;
+    b.appendChild(header);
+    header.querySelector('.region-name-input').addEventListener('input', function(){
+      regionNames[k] = this.value || k;
+    });
+
+    // 上傳 label + input（最標準可靠的方式，適用所有瀏覽器/環境）
+    const dropDiv = document.createElement('div');
+    dropDiv.className = 'region-drop'; dropDiv.id = 'rdrop-'+k;
+
+    const label = document.createElement('label');
+    label.className = 'region-upload-label';
+    label.id = 'rhint-'+k;
+    label.textContent = '＋ 點擊上傳 XLS 檔案';
+    const fileInput = document.createElement('input');
+    fileInput.type = 'file'; fileInput.accept = '.xls,.xlsx'; fileInput.multiple = true;
+    fileInput.style.cssText = 'display:none';
+    fileInput.addEventListener('change', function(){ addFiles(k, this); });
+    label.appendChild(fileInput);
+    dropDiv.appendChild(label);
+
+    const chips = document.createElement('div');
+    chips.className = 'file-chips'; chips.id = 'rchips-'+k; chips.style.display = 'none';
+    dropDiv.appendChild(chips);
+    b.appendChild(dropDiv);
     c.appendChild(b);
-    const dz = b.querySelector('.region-drop');
-    dz.addEventListener('dragover', e=>{e.preventDefault();dz.classList.add('drag-over');});
-    dz.addEventListener('dragleave', ()=>dz.classList.remove('drag-over'));
-    dz.addEventListener('drop', e=>{e.preventDefault();dz.classList.remove('drag-over');addFilesFromList(k,e.dataTransfer.files);});
+
+    // 桌機拖曳支援
+    dropDiv.addEventListener('dragover', e=>{e.preventDefault();dropDiv.classList.add('drag-over');});
+    dropDiv.addEventListener('dragleave', ()=>dropDiv.classList.remove('drag-over'));
+    dropDiv.addEventListener('drop', e=>{e.preventDefault();dropDiv.classList.remove('drag-over');addFilesFromList(k,e.dataTransfer.files);});
   });
 }
 
@@ -344,7 +372,7 @@ function updateChips(k){
   const hint=document.getElementById(`rhint-${k}`);
   const chips=document.getElementById(`rchips-${k}`);
   if(files.length){
-    hint.style.display='none'; chips.style.display='flex';
+    if(hint) hint.style.display='none'; chips.style.display='flex';
     chips.innerHTML=files.map(f=>{
       const p=detectPeriod(f.name);
       return `<div class="file-chip">
