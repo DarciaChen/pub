@@ -345,15 +345,17 @@ function buildSidebar() {
 function addFiles(k,input){addFilesFromList(k,input.files);input.value='';}
 function addFilesFromList(k,fl){
   Array.from(fl).forEach(f=>{
-    if(regionFiles[k].find(x=>x.name===f.name))return; // skip duplicate
+    if(regionFiles[k].find(x=>x.name===f.name))return;
     regionFiles[k].push(f);
-    // Read ArrayBuffer immediately — avoids Android Chrome stale file reference on delayed read
-    const reader=new FileReader();
-    reader.onload=e=>{
-      regionBuffers[k].push({name:f.name, buf:e.target.result});
-    };
-    reader.onerror=()=>console.warn('FileReader error for',f.name);
-    reader.readAsArrayBuffer(f);
+    // Read immediately, store a Promise so runAnalysis can await completion
+    const p=new Promise((res,rej)=>{
+      const reader=new FileReader();
+      reader.onload=e=>{regionBuffers[k].push({name:f.name,buf:e.target.result});res();};
+      reader.onerror=()=>{console.warn('FileReader error',f.name);res();};// resolve anyway to not block
+      reader.readAsArrayBuffer(f);
+    });
+    // attach promise to the file object for tracking
+    f._readPromise=p;
   });
   updateChips(k); checkRunnable();
 }
@@ -563,16 +565,9 @@ async function runAnalysis(){
   RKEYS.forEach(k=>allData[k]={});
   const periodSet=new Set();
 
-  // Wait for all FileReaders to finish (they run async on select)
-  await new Promise(res=>{
-    const check=()=>{
-      const allReady=RKEYS.every(k=>
-        regionFiles[k].every(f=>regionBuffers[k].find(b=>b.name===f.name))
-      );
-      if(allReady)res(); else setTimeout(check,80);
-    };
-    check();
-  });
+  // Wait for all FileReaders to finish — collect all pending promises
+  const readPromises=RKEYS.flatMap(k=>regionFiles[k].map(f=>f._readPromise).filter(Boolean));
+  if(readPromises.length) await Promise.all(readPromises);
 
   for(const k of RKEYS){
     for(const file of regionFiles[k]){
