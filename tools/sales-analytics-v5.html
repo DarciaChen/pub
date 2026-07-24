@@ -298,6 +298,7 @@ const regionNames = {A:'A',B:'B',C:'C',D:'D'};
 const allData = {};
 // regionBuffers[k] = [{name, buf}] — ArrayBuffer read immediately on select, avoids Android stale-file issue
 const regionBuffers = {A:[],B:[],C:[],D:[]};
+const readPromiseMap = new Map(); // filename → Promise, tracks FileReader completion
 let allPeriods = [];  // sorted list of unique period keys across all regions
 let allSuffixes = []; // unique period suffixes e.g. ['Q1','H1','FULL']
 
@@ -347,21 +348,24 @@ function addFilesFromList(k,fl){
   Array.from(fl).forEach(f=>{
     if(regionFiles[k].find(x=>x.name===f.name))return;
     regionFiles[k].push(f);
-    // Read immediately, store a Promise so runAnalysis can await completion
-    const p=new Promise((res,rej)=>{
+    // Read immediately into buffer; track via Map (not file property — some browsers block that)
+    const p=new Promise((res)=>{
       const reader=new FileReader();
-      reader.onload=e=>{regionBuffers[k].push({name:f.name,buf:e.target.result});res();};
-      reader.onerror=()=>{console.warn('FileReader error',f.name);res();};// resolve anyway to not block
+      reader.onload=e=>{
+        regionBuffers[k].push({name:f.name,buf:e.target.result});
+        res();
+      };
+      reader.onerror=()=>{console.warn('FileReader error',f.name);res();};
       reader.readAsArrayBuffer(f);
     });
-    // attach promise to the file object for tracking
-    f._readPromise=p;
+    readPromiseMap.set(k+'::'+f.name, p);
   });
   updateChips(k); checkRunnable();
 }
 function removeFile(k,name){
   regionFiles[k]=regionFiles[k].filter(f=>f.name!==name);
   regionBuffers[k]=regionBuffers[k].filter(b=>b.name!==name);
+  readPromiseMap.delete(k+'::'+name);
   updateChips(k);checkRunnable();
 }
 
@@ -565,8 +569,8 @@ async function runAnalysis(){
   RKEYS.forEach(k=>allData[k]={});
   const periodSet=new Set();
 
-  // Wait for all FileReaders to finish — collect all pending promises
-  const readPromises=RKEYS.flatMap(k=>regionFiles[k].map(f=>f._readPromise).filter(Boolean));
+  // Wait for all pending FileReaders
+  const readPromises=[...readPromiseMap.values()];
   if(readPromises.length) await Promise.all(readPromises);
 
   for(const k of RKEYS){
@@ -1152,6 +1156,7 @@ function showStatus(t,m){const b=document.getElementById('status-bar');b.style.d
 function sleep(ms){return new Promise(r=>setTimeout(r,ms));}
 function resetAll(){
   RKEYS.forEach(k=>{regionFiles[k]=[];regionBuffers[k]=[];allData[k]={};updateChips(k);document.getElementById(`rname-${k}`)?.setAttribute('value','');});
+  readPromiseMap.clear();
   allPeriods=[];allSuffixes=[];mode='yoy';yoyPeriod=null;sumCur=[];sumBase=[];trendSuffix=null;
   document.getElementById('topbar-controls').style.display='none';
   document.getElementById('results').style.display='none';
