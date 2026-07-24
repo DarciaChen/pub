@@ -31,9 +31,9 @@ body{font-family:'Noto Sans TC',sans-serif;background:var(--paper);color:var(--t
 .region-name-input::placeholder{color:#3a3830;}
 .rfc{font-family:'JetBrains Mono',monospace;font-size:10px;color:#3a3830;white-space:nowrap;}
 .rfc.has{color:var(--accent2);}
-.region-drop{background:rgba(255,255,255,.02);border-top:1px dashed rgba(255,255,255,.06);padding:7px 11px;cursor:pointer;position:relative;min-height:40px;display:flex;align-items:center;justify-content:center;transition:background .15s;}
-.region-drop:hover,.region-drop.drag-over{background:rgba(42,122,79,.12);}
-.region-drop input[type=file]{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%;}
+.region-drop{background:rgba(255,255,255,.02);border-top:1px dashed rgba(255,255,255,.06);padding:7px 11px;min-height:36px;display:flex;align-items:center;justify-content:center;transition:background .15s;}
+.region-drop.drag-over{background:rgba(42,122,79,.12);}
+.region-drop input[type=file]{display:none;}
 .drop-hint{font-family:'JetBrains Mono',monospace;font-size:10px;color:#3a3830;pointer-events:none;}
 .file-chips{display:flex;flex-direction:column;gap:3px;width:100%;}
 .file-chip{display:flex;align-items:center;background:rgba(255,255,255,.04);border-radius:4px;padding:3px 7px;font-family:'JetBrains Mono',monospace;font-size:9px;color:#7a7870;gap:4px;}
@@ -174,16 +174,19 @@ tfoot td:nth-child(-n+3){text-align:left;}
 .empty-icon{font-size:44px;opacity:.25;}
 .empty-text{font-family:'Syne',sans-serif;font-size:14px;font-weight:700;}
 .empty-sub{font-size:12px;text-align:center;max-width:300px;line-height:1.6;}
-/* explicit upload button — always visible, reliable on iOS */
+/* upload button — always visible, works on iOS & Android & desktop */
 .upload-btn{
-  display:none; /* shown only on mobile via media query */
-  width:100%; margin-top:6px; padding:10px;
-  background:rgba(42,122,79,.18); border:1px solid var(--accent2);
+  display:block;
+  width:100%; margin-top:6px; padding:11px 8px;
+  background:rgba(42,122,79,.15); border:1.5px dashed var(--accent2);
   border-radius:6px; color:var(--accent2);
   font-family:'Noto Sans TC',sans-serif; font-size:13px; font-weight:600;
-  cursor:pointer; text-align:center;
+  cursor:pointer; text-align:center; line-height:1.4;
+  -webkit-tap-highlight-color: rgba(42,122,79,.2);
+  touch-action: manipulation;
 }
-.upload-btn:active{background:rgba(42,122,79,.3);}
+.upload-btn:hover{background:rgba(42,122,79,.25);}
+.upload-btn:active{background:rgba(42,122,79,.35);}
 #results{display:none;}
 .spinner{display:inline-block;width:11px;height:11px;border:2px solid rgba(30,79,160,.2);border-top-color:var(--accent3);border-radius:50%;animation:spin .6s linear infinite;vertical-align:middle;margin-right:5px;}
 @keyframes spin{to{transform:rotate(360deg);}}
@@ -191,7 +194,6 @@ tfoot td:nth-child(-n+3){text-align:left;}
   .shell{flex-direction:column;}
   .sidebar{width:100%;height:auto;position:static;overflow-y:visible;max-height:none;}
   .region-drop{min-height:52px;}
-  .upload-btn{display:flex!important;}
   .ov-grid{grid-template-columns:repeat(2,1fr);}
   .sig-grid{grid-template-columns:1fr;}
   .month-grid{grid-template-columns:repeat(2,1fr);}
@@ -324,11 +326,11 @@ function buildSidebar() {
     </div>
     <div class="region-drop" id="rdrop-${k}">
       <input type="file" accept=".xls,.xlsx" multiple id="finput-${k}" onchange="addFiles('${k}',this)">
-      <div class="drop-hint" id="rhint-${k}">＋ 拖曳或點擊上傳</div>
+      <div class="drop-hint" id="rhint-${k}">拖曳至此（桌機）</div>
       <div class="file-chips" id="rchips-${k}" style="display:none"></div>
     </div>
-    <button class="upload-btn" onclick="document.getElementById('finput-${k}').click()">
-      📂 上傳 ${k} 區 XLS 檔案
+    <button class="upload-btn" type="button" onclick="document.getElementById('finput-${k}').click()">
+      📂 點擊上傳 ${k} 區 XLS 檔案
     </button>`;
     c.appendChild(b);
     const dz = b.querySelector('.region-drop');
