@@ -466,7 +466,15 @@ function detectYears(rows,colYear,start){
   return{yearCur:sorted[0]||'115年',yearPrev:sorted[1]||'114年'};
 }
 
-function N(v){if(v===null||v===undefined||v==='')return null;const n=Number(v);return isNaN(n)?null:n;}
+function N(v){
+  if(v===null||v===undefined||v==='')return null;
+  if(typeof v==='number')return v;
+  // Handle strings like "75,150 " or "1,234.56"
+  const cleaned=String(v).replace(/,/g,'').trim();
+  if(cleaned==='')return null;
+  const n=Number(cleaned);
+  return isNaN(n)?null:n;
+}
 
 // ══════════════════════════════════════════════════════════════════
 // PARSE SINGLE WORKBOOK
