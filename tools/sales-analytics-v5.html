@@ -296,9 +296,7 @@ const regionFiles = {A:[],B:[],C:[],D:[]};
 const regionNames = {A:'A',B:'B',C:'C',D:'D'};
 // allData[regionKey][periodKey] = { periodKey, year_cur, year_prev, records[], totalCur, totalPrev, monthCount }
 const allData = {};
-// regionBuffers[k] = [{name, buf}] — ArrayBuffer read immediately on select, avoids Android stale-file issue
-const regionBuffers = {A:[],B:[],C:[],D:[]};
-const readPromiseMap = new Map(); // filename → Promise, tracks FileReader completion
+
 let allPeriods = [];  // sorted list of unique period keys across all regions
 let allSuffixes = []; // unique period suffixes e.g. ['Q1','H1','FULL']
 
@@ -346,27 +344,13 @@ function buildSidebar() {
 function addFiles(k,input){addFilesFromList(k,input.files);input.value='';}
 function addFilesFromList(k,fl){
   Array.from(fl).forEach(f=>{
-    if(regionFiles[k].find(x=>x.name===f.name))return;
-    regionFiles[k].push(f);
-    // Read immediately into buffer; track via Map (not file property — some browsers block that)
-    const p=new Promise((res)=>{
-      const reader=new FileReader();
-      reader.onload=e=>{
-        regionBuffers[k].push({name:f.name,buf:e.target.result});
-        res();
-      };
-      reader.onerror=()=>{console.warn('FileReader error',f.name);res();};
-      reader.readAsArrayBuffer(f);
-    });
-    readPromiseMap.set(k+'::'+f.name, p);
+    if(!regionFiles[k].find(x=>x.name===f.name)) regionFiles[k].push(f);
   });
   updateChips(k); checkRunnable();
 }
 function removeFile(k,name){
   regionFiles[k]=regionFiles[k].filter(f=>f.name!==name);
-  regionBuffers[k]=regionBuffers[k].filter(b=>b.name!==name);
-  readPromiseMap.delete(k+'::'+name);
-  updateChips(k);checkRunnable();
+  updateChips(k); checkRunnable();
 }
 
 function updateChips(k){
@@ -569,16 +553,11 @@ async function runAnalysis(){
   RKEYS.forEach(k=>allData[k]={});
   const periodSet=new Set();
 
-  // Wait for all pending FileReaders
-  const readPromises=[...readPromiseMap.values()];
-  if(readPromises.length) await Promise.all(readPromises);
-
   for(const k of RKEYS){
     for(const file of regionFiles[k]){
       try{
-        const entry=regionBuffers[k].find(b=>b.name===file.name);
-        if(!entry)throw new Error('檔案緩衝讀取失敗，請重新上傳');
-        const wb=XLSX.read(entry.buf,{type:'array'});
+        const buf=await file.arrayBuffer();
+        const wb=XLSX.read(buf,{type:'array'});
         const parsed=parseWB(wb,file.name);
         if(!allData[k][parsed.periodKey]) allData[k][parsed.periodKey]=parsed;
         periodSet.add(parsed.periodKey);
@@ -1155,8 +1134,7 @@ function fmt(v){if(v===null||v===undefined)return'—';return(v<0?'-':'')+Math.a
 function showStatus(t,m){const b=document.getElementById('status-bar');b.style.display='block';b.className={info:'sb-info',ok:'sb-ok',warn:'sb-warn',err:'sb-err'}[t]||'sb-info';b.innerHTML=m;}
 function sleep(ms){return new Promise(r=>setTimeout(r,ms));}
 function resetAll(){
-  RKEYS.forEach(k=>{regionFiles[k]=[];regionBuffers[k]=[];allData[k]={};updateChips(k);document.getElementById(`rname-${k}`)?.setAttribute('value','');});
-  readPromiseMap.clear();
+  RKEYS.forEach(k=>{regionFiles[k]=[];allData[k]={};updateChips(k);document.getElementById(`rname-${k}`)?.setAttribute('value','');});
   allPeriods=[];allSuffixes=[];mode='yoy';yoyPeriod=null;sumCur=[];sumBase=[];trendSuffix=null;
   document.getElementById('topbar-controls').style.display='none';
   document.getElementById('results').style.display='none';
