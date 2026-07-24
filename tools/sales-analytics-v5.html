@@ -192,7 +192,51 @@ tfoot td:nth-child(-n+3){text-align:left;}
   .region-drop{min-height:52px;}
   .ov-grid{grid-template-columns:repeat(2,1fr);}
   .sig-grid{grid-template-columns:1fr;}
-  .month-grid{grid-template-columns:repeat(2,1fr);}
+  .month-grid{grid-template-columns:1fr;}
+
+  /* topbar: 垂直堆疊 */
+  .topbar{flex-direction:column;align-items:flex-start;padding:10px 14px;gap:8px;}
+  .topbar-title{font-size:14px;}
+  .tbc{margin-left:0;width:100%;flex-direction:column;gap:6px;}
+  .mode-group{width:100%;}
+  .mode-pill{flex:1;font-size:11px;padding:6px 4px;}
+  #ctrl-yoy,#ctrl-sum,#ctrl-trend{flex-wrap:wrap;gap:4px;}
+  .ps{font-size:11px;max-width:100%;}
+  .btn-rr,.btn-ex{width:100%;padding:9px;text-align:center;}
+
+  /* 分析 pills */
+  .analysis-pills{gap:4px;}
+  .pill{font-size:11px;padding:4px 10px;}
+
+  /* 表格：手機版精簡顯示 */
+  table{font-size:11px;}
+  thead th{padding:5px 6px;font-size:9px;}
+  td{padding:5px 6px;}
+
+  /* 手機隱藏次要欄位：佔區域%、佔差額%、走勢 */
+  .col-hide-mobile{display:none;}
+
+  /* 客戶名稱不換行，超出用省略號 */
+  td:nth-child(3){
+    max-width:80px;
+    white-space:nowrap;
+    overflow:hidden;
+    text-overflow:ellipsis;
+  }
+
+  /* overview cards: 2欄 */
+  .ov-card{padding:10px;}
+  .ov-val{font-size:15px;}
+
+  /* grand strip: 2x2 grid */
+  .grand-strip{display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:12px 14px;}
+
+  /* region tabs: 可橫向捲動 */
+  .tab-strip{overflow-x:auto;flex-wrap:nowrap;-webkit-overflow-scrolling:touch;}
+  .tab-btn{white-space:nowrap;flex-shrink:0;}
+
+  /* content padding */
+  .content{padding:14px 12px;}
 }
 </style>
 </head>
@@ -911,20 +955,20 @@ function buildTbl(subset,total,type,title,curL,baseL){
       <td class="mono">${fmt(r.cur)}</td><td class="mono muted">${fmt(r.prev)}</td>
       <td class="mono ${dc}" style="font-weight:600">${r.diff>=0?'+':''}${fmt(r.diff)}</td>
       <td>${pctStr}</td>
-      <td class="mono muted">${pR!==null?pR.toFixed(1)+'%':'—'}</td>
-      <td class="mono muted">${pD!==null?pD.toFixed(1)+'%':'—'}</td>
-      <td><div class="mbar"><div class="mbar-b prev" style="height:${hp}px"></div><div class="mbar-b cur" style="height:${hc}px"></div></div></td>
+      <td class="mono muted col-hide-mobile">${pR!==null?pR.toFixed(1)+'%':'—'}</td>
+      <td class="mono muted col-hide-mobile">${pD!==null?pD.toFixed(1)+'%':'—'}</td>
+      <td class="col-hide-mobile"><div class="mbar"><div class="mbar-b prev" style="height:${hp}px"></div><div class="mbar-b cur" style="height:${hc}px"></div></div></td>
     </tr>`;
   }).join('');
   const spct=sp?(sd/sp*100).toFixed(1)+'%':'—',srpct=total?(sc/total*100).toFixed(1)+'%':'—';
   return`<div class="tbl-wrap"><div class="tbl-head ${type}"><span class="tbl-title">${title}</span><span class="tbl-badge">依差額排序</span></div>
     <table><thead><tr><th>#</th><th>代號</th><th>客戶</th>
-      <th>${curL}</th><th>${baseL}</th><th>差額</th><th>成長率</th><th>佔區域%</th><th>佔差額%</th><th>走勢</th>
+      <th>${curL}</th><th>${baseL}</th><th>差額</th><th>成長率</th><th class="col-hide-mobile">佔區域%</th><th class="col-hide-mobile">佔差額%</th><th class="col-hide-mobile">走勢</th>
     </tr></thead><tbody>${rows}</tbody>
     <tfoot><tr><td colspan="3">TOP20 小計</td>
       <td>${fmt(sc)}</td><td>${fmt(sp)}</td>
       <td class="${sd>=0?'up':'down'}">${sd>=0?'+':''}${fmt(sd)}</td>
-      <td class="muted">${spct}</td><td class="muted">${srpct}</td><td class="muted">100%</td><td></td>
+      <td class="muted col-hide-mobile">${spct}</td><td class="muted col-hide-mobile">${srpct}</td><td class="muted col-hide-mobile">100%</td><td class="col-hide-mobile"></td>
     </tr></tfoot></table></div>`;
 }
 
