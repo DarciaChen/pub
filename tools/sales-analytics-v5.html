@@ -564,50 +564,50 @@ function parseWB(wb, filename){
 // MAIN ANALYSIS RUN
 // ══════════════════════════════════════════════════════════════════
 async function runAnalysis(){
-  showStatus('info','<span class="spinner"></span>解析中…');
   document.getElementById('btn-run').disabled=true;
-  await sleep(40);
 
+  // ── 第一步：立刻讀取所有檔案（必須在任何 await 之前，否則 Android 會讓 File 失效）──
   RKEYS.forEach(k=>allData[k]={});
   const periodSet=new Set();
-
-  // 診斷：確認 File 物件狀態
-  let diagMsg = '';
-  RKEYS.forEach(k=>{
-    regionFiles[k].forEach(f=>{
-      const valid = f && f.size > 0 && f.name;
-      diagMsg += `${k}: ${f?.name||'?'} size=${f?.size||0} type=${f?.type||'?'} valid=${valid}\n`;
-    });
-  });
-  if(diagMsg){
-    console.log('File診斷:\n'+diagMsg);
-    showStatus('info', '<pre style="font-size:10px;line-height:1.4">'+diagMsg+'</pre>');
-    await sleep(1500); // 讓用戶看到診斷訊息
-  }
+  const buffers={}; // {regionKey: [{name, buf}]}
+  RKEYS.forEach(k=>{ buffers[k]=[]; });
 
   for(const k of RKEYS){
     for(const file of regionFiles[k]){
       try{
-        // 直接讀取，不用 IIFE（安卓 Chrome 需維持同一 user activation 執行環境）
         let buf;
-        try{
-          buf = await file.arrayBuffer();
-        }catch(e1){
-          console.warn('arrayBuffer失敗:',e1.message);
+        try{ buf = await file.arrayBuffer(); }
+        catch(e1){
           buf = await new Promise((res,rej)=>{
             const r=new FileReader();
             r.onload=e=>res(e.target.result);
-            r.onerror=e=>rej(new Error('FileReader失敗:'+(e.target.error?.message||'')));
+            r.onerror=e=>rej(new Error(e.target.error?.message||'FileReader失敗'));
             r.onabort=()=>rej(new Error('FileReader中止'));
             r.readAsArrayBuffer(file);
           });
         }
+        buffers[k].push({name:file.name, buf});
+      }catch(e){
+        showStatus('err',`❌ ${k}區 [${file.name}] 讀取失敗：${e.message}`);
+        document.getElementById('btn-run').disabled=false; return;
+      }
+    }
+  }
+
+  // ── 第二步：所有檔案讀完後，才做其他非同步操作 ──
+  showStatus('info','<span class="spinner"></span>解析中…');
+  await sleep(10);
+
+  for(const k of RKEYS){
+    for(const entry of buffers[k]){
+      try{
+        const buf=entry.buf;
         const wb=XLSX.read(buf,{type:'array'});
-        const parsed=parseWB(wb,file.name);
+        const parsed=parseWB(wb,entry.name);
         if(!allData[k][parsed.periodKey]) allData[k][parsed.periodKey]=parsed;
         periodSet.add(parsed.periodKey);
       }catch(e){
-        showStatus('err',`❌ ${k}區 [${file.name}] 解析失敗：${e.message}`);
+        showStatus('err',`❌ ${k}區 [${entry.name}] 解析失敗：${e.message}`);
         document.getElementById('btn-run').disabled=false; return;
       }
     }
