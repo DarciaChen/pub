@@ -574,6 +574,20 @@ async function runAnalysis(){
   RKEYS.forEach(k=>allData[k]={});
   const periodSet=new Set();
 
+  // 診斷：確認 File 物件狀態
+  let diagMsg = '';
+  RKEYS.forEach(k=>{
+    regionFiles[k].forEach(f=>{
+      const valid = f && f.size > 0 && f.name;
+      diagMsg += `${k}: ${f?.name||'?'} size=${f?.size||0} type=${f?.type||'?'} valid=${valid}\n`;
+    });
+  });
+  if(diagMsg){
+    console.log('File診斷:\n'+diagMsg);
+    showStatus('info', '<pre style="font-size:10px;line-height:1.4">'+diagMsg+'</pre>');
+    await sleep(1500); // 讓用戶看到診斷訊息
+  }
+
   for(const k of RKEYS){
     for(const file of regionFiles[k]){
       try{
