@@ -36,7 +36,7 @@ body{font-family:'Noto Sans TC',sans-serif;background:var(--paper);color:var(--t
 .region-drop input[type=file]{display:none;} /* desktop: hidden, triggered by drop zone */
 /* mobile upload area: visible, full-width tap target */
 .mobile-file-input{
-  display:none; /* shown only on mobile */
+  display:none;
   width:100%;
   padding:13px 8px;
   margin-top:6px;
@@ -48,11 +48,21 @@ body{font-family:'Noto Sans TC',sans-serif;background:var(--paper);color:var(--t
   font-size:13px; font-weight:600;
   text-align:center;
   cursor:pointer;
+  position:relative;
+  overflow:hidden;
   -webkit-tap-highlight-color:rgba(42,122,79,.2);
   touch-action:manipulation;
-  /* Make it look like a button but IS the input itself */
-  opacity:1 !important;
-  position:relative;
+  user-select:none;
+  -webkit-user-select:none;
+}
+.mobile-file-input input[type=file]{
+  position:absolute;
+  inset:0;
+  width:100%;
+  height:100%;
+  opacity:0;
+  cursor:pointer;
+  font-size:100px; /* prevents iOS zoom */
 }
 .drop-hint{font-family:'JetBrains Mono',monospace;font-size:10px;color:#3a3830;pointer-events:none;}
 .file-chips{display:flex;flex-direction:column;gap:3px;width:100%;}
@@ -348,24 +358,32 @@ function buildSidebar() {
       <span class="rfc" id="rfc-${k}">0 檔</span>
     </div>
     <div class="region-drop" id="rdrop-${k}">
-      <input type="file" accept=".xls,.xlsx" multiple id="finput-${k}" onchange="addFiles('${k}',this)">
+      <input type="file" accept=".xls,.xlsx" multiple id="finput-${k}">
       <div class="drop-hint" id="rhint-${k}">拖曳至此（桌機）</div>
       <div class="file-chips" id="rchips-${k}" style="display:none"></div>
-    </div>
-    <button class="upload-btn" type="button" onclick="document.getElementById('finput-${k}').click()">
-      📂 點擊上傳 ${k} 區 XLS 檔案
-    </button>
-    <label class="mobile-file-input">
-      📂 點擊上傳 ${k} 區 XLS 檔案
-      <input type="file" accept=".xls,.xlsx" multiple
-        style="position:absolute;inset:0;opacity:0;width:100%;height:100%;cursor:pointer;"
-        onchange="addFiles('${k}',this)">
-    </label>`;
+    </div>`;
     c.appendChild(b);
+
+    // 用 addEventListener 綁定，避免 innerHTML onchange 解析問題
+    document.getElementById('finput-'+k).addEventListener('change', function(){addFiles(k,this);});
+
+    // 桌機：拖曳
     const dz = b.querySelector('.region-drop');
     dz.addEventListener('dragover', e=>{e.preventDefault();dz.classList.add('drag-over');});
     dz.addEventListener('dragleave', ()=>dz.classList.remove('drag-over'));
     dz.addEventListener('drop', e=>{e.preventDefault();dz.classList.remove('drag-over');addFilesFromList(k,e.dataTransfer.files);});
+
+    // 手機：用 createElement 建立 label+input，確保事件綁定正確
+    const mLabel = document.createElement('label');
+    mLabel.className = 'mobile-file-input';
+    mLabel.textContent = '📂 點擊上傳 ' + k + ' 區 XLS 檔案';
+    const mInput = document.createElement('input');
+    mInput.type = 'file';
+    mInput.accept = '.xls,.xlsx';
+    mInput.multiple = true;
+    mInput.addEventListener('change', function(){addFiles(k,this);});
+    mLabel.appendChild(mInput);
+    b.appendChild(mLabel);
   });
 }
 
