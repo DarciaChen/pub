@@ -330,16 +330,13 @@ function buildSidebar() {
     const dropDiv = document.createElement('div');
     dropDiv.className = 'region-drop'; dropDiv.id = 'rdrop-'+k;
 
-    const label = document.createElement('label');
-    label.className = 'region-upload-label';
-    label.id = 'rhint-'+k;
-    label.textContent = '＋ 點擊上傳 XLS 檔案';
+    // input 完全裸露，不隱藏不遮蓋，確保安卓視為直接用戶觸發
     const fileInput = document.createElement('input');
     fileInput.type = 'file'; fileInput.accept = '.xls,.xlsx'; fileInput.multiple = true;
-    fileInput.style.cssText = 'position:absolute;width:1px;height:1px;opacity:0;overflow:hidden;';
+    fileInput.id = 'finput-'+k;
+    fileInput.style.cssText = 'display:block;width:100%;padding:8px 0;cursor:pointer;color:var(--accent2);font-size:13px;background:transparent;border:none;';
     fileInput.addEventListener('change', function(){ addFiles(k, this); });
-    label.appendChild(fileInput);
-    dropDiv.appendChild(label);
+    dropDiv.appendChild(fileInput);
 
     const chips = document.createElement('div');
     chips.className = 'file-chips'; chips.id = 'rchips-'+k; chips.style.display = 'none';
@@ -608,16 +605,7 @@ async function runAnalysis(){
               r.readAsArrayBuffer(file);
             });
           }catch(e2){
-            // 方法三：Blob URL → fetch
-            try{
-              const url=URL.createObjectURL(file);
-              const resp=await fetch(url);
-              const buf=await resp.arrayBuffer();
-              URL.revokeObjectURL(url);
-              return buf;
-            }catch(e3){
-              throw new Error(`三種讀取方式均失敗 — arrayBuffer:${e3.message}`);
-            }
+              throw new Error(`讀取失敗：${e2.message||e2}`);
           }
         })();
         const wb=XLSX.read(buf,{type:'array'});
