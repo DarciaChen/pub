@@ -333,6 +333,7 @@ const SUFFIX_LABEL={Q1:'第一季',H1:'上半年','Q1-Q3':'前三季',H2:'下半
 // STATE
 // ══════════════════════════════════════════════════════════════════
 const regionFiles = {A:[],B:[],C:[],D:[]};
+const regionTargets = {A:0,B:0,C:0,D:0}; // 各區業績目標
 const preloadedBuffers = {A:[],B:[],C:[],D:[]}; // 選檔當下同步讀入，避免 Google Drive 檔案失效
 const regionNames = {A:'A',B:'B',C:'C',D:'D'};
 // allData[regionKey][periodKey] = { periodKey, year_cur, year_prev, records[], totalCur, totalPrev, monthCount }
@@ -369,6 +370,24 @@ function buildSidebar() {
     b.appendChild(header);
     header.querySelector('.region-name-input').addEventListener('input', function(){
       regionNames[k] = this.value || k;
+    });
+
+    // 目標輸入欄
+    const tgtRow = document.createElement('div');
+    tgtRow.style.cssText = 'padding:4px 11px 8px;display:flex;align-items:center;gap:6px;';
+    tgtRow.innerHTML = `<span style="font-family:'JetBrains Mono',monospace;font-size:10px;color:#4a4840;white-space:nowrap">目標</span>
+      <input id="target-${k}" type="number" min="0" placeholder="輸入目標金額"
+        style="flex:1;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);border-radius:4px;
+               padding:4px 7px;font-family:'JetBrains Mono',monospace;font-size:11px;color:#c8c5bc;outline:none;width:100%">`;
+    b.appendChild(tgtRow);
+    const tgtInput = tgtRow.querySelector('input');
+    // 讀取 localStorage
+    const savedTarget = localStorage.getItem('target_'+k);
+    if(savedTarget){ tgtInput.value=savedTarget; regionTargets[k]=Number(savedTarget); }
+    tgtInput.addEventListener('input', function(){
+      regionTargets[k] = Number(this.value)||0;
+      localStorage.setItem('target_'+k, this.value);
+      if(Object.keys(allData).some(rk=>Object.keys(allData[rk]).length>0)) renderOvGrid();
     });
 
     // 上傳 label + input（最標準可靠的方式，適用所有瀏覽器/環境）
@@ -707,6 +726,20 @@ async function runAnalysis(){
   document.getElementById('empty-state').style.display='none';
   showStatus('ok',`✓ 解析完成，共 ${allPeriods.length} 個期間：${allPeriods.join('、')}`);
   renderAll();
+
+  // 存歷史記錄到 localStorage
+  const today=new Date().toLocaleDateString('zh-TW',{month:'2-digit',day:'2-digit'}).replace('/','/');
+  RKEYS.forEach(k=>{
+    const{totalCur}=getRegionData(k);
+    const tgt=regionTargets[k];
+    if(tgt>0&&totalCur>0){
+      const histKey='history_'+k;
+      const hist=JSON.parse(localStorage.getItem(histKey)||'[]');
+      hist.push({date:today,target:tgt,actual:totalCur,rate:totalCur/tgt*100});
+      // 只保留最近 10 筆
+      localStorage.setItem(histKey,JSON.stringify(hist.slice(-10)));
+    }
+  });
   document.getElementById('btn-run').disabled=false;
   document.getElementById('btn-export').disabled=false;
 }
@@ -884,10 +917,26 @@ function renderOvGrid(){
   RKEYS.forEach(k=>{
     const{totalCur,totalPrev}=getRegionData(k);
     const diff=totalCur-totalPrev,pct=totalPrev?diff/totalPrev*100:0,up=pct>=0;
+    const tgt=regionTargets[k]||0;
+    const achRate=tgt>0?totalCur/tgt*100:null;
+    const achColor=achRate===null?'#6a6860':achRate>=100?'#1d6b3e':achRate>=80?'#b8640a':'#b82020';
+    const achBg=achRate===null?'rgba(106,104,96,.1)':achRate>=100?'rgba(29,107,62,.12)':achRate>=80?'rgba(184,100,10,.12)':'rgba(184,32,32,.12)';
+    const achLabel=achRate===null?'未設目標':achRate>=100?'✓ 達標':`${achRate.toFixed(1)}%`;
+    const historyKey='history_'+k;
+    const history=JSON.parse(localStorage.getItem(historyKey)||'[]').slice(-3);
+    const histHTML=history.length?`<div style="margin-top:8px;border-top:1px solid var(--line);padding-top:6px">
+      ${history.map(h=>`<div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text3);display:flex;justify-content:space-between;margin-bottom:2px">
+        <span>${h.date}</span><span style="color:${h.rate>=100?'var(--up)':h.rate>=80?'var(--warn)':'var(--down)'}">${h.rate.toFixed(1)}%</span>
+      </div>`).join('')}
+    </div>`:'';
     g.innerHTML+=`<div class="ov-card ${diff===0&&totalCur===0?'flat':up?'up':'down'}">
-      <div class="ov-zone">${k} 區</div>
-      <div class="ov-name">${rName(k)}</div>
+      <div style="display:flex;justify-content:space-between;align-items:flex-start">
+        <div><div class="ov-zone">${k} 區</div><div class="ov-name">${rName(k)}</div></div>
+        ${achRate!==null?`<span style="font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:700;
+          padding:3px 8px;border-radius:4px;background:${achBg};color:${achColor}">${achLabel}</span>`:''}
+      </div>
       <div class="ov-val ${up?'up':'down'}">${fmt(totalCur)}</div>
+      ${tgt>0?`<div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text3)">目標 ${fmt(tgt)}</div>`:''}
       <div class="ov-prev">對比 ${fmt(totalPrev)}</div>
       <div style="margin-top:6px;display:flex;align-items:center;justify-content:space-between">
         <span class="${up?'up':'down'}" style="font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:600">
@@ -895,6 +944,7 @@ function renderOvGrid(){
         </span>
         <span class="ov-pct ${up?'up':'down'}">${up?'▲':'▼'} ${Math.abs(pct).toFixed(1)}%</span>
       </div>
+      ${histHTML}
     </div>`;
   });
 }
