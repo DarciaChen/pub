@@ -889,7 +889,12 @@ function renderOvGrid(){
       <div class="ov-name">${rName(k)}</div>
       <div class="ov-val ${up?'up':'down'}">${fmt(totalCur)}</div>
       <div class="ov-prev">對比 ${fmt(totalPrev)}</div>
-      <span class="ov-pct ${up?'up':'down'}">${up?'▲':'▼'} ${Math.abs(pct).toFixed(1)}%</span>
+      <div style="margin-top:6px;display:flex;align-items:center;justify-content:space-between">
+        <span style="font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:600;color:${up?'var(--up)':'var(--down)'}">
+          ${up?'+':''}${fmt(diff)}
+        </span>
+        <span class="ov-pct ${up?'up':'down'}">${up?'▲':'▼'} ${Math.abs(pct).toFixed(1)}%</span>
+      </div>
     </div>`;
   });
 }
@@ -966,11 +971,23 @@ function buildTbl(subset,total,type,title,curL,baseL){
     <table><thead><tr><th>#</th><th>代號</th><th>客戶</th>
       <th>${curL}</th><th>${baseL}</th><th>差額</th><th>成長率</th><th class="col-hide-mobile">佔區域%</th><th class="col-hide-mobile">佔差額%</th><th class="col-hide-mobile">走勢</th>
     </tr></thead><tbody>${rows}</tbody>
-    <tfoot><tr><td colspan="3">TOP20 小計</td>
-      <td>${fmt(sc)}</td><td>${fmt(sp)}</td>
-      <td class="${sd>=0?'up':'down'}">${sd>=0?'+':''}${fmt(sd)}</td>
-      <td class="muted col-hide-mobile">${spct}</td><td class="muted col-hide-mobile">${srpct}</td><td class="muted col-hide-mobile">100%</td><td class="col-hide-mobile"></td>
-    </tr></tfoot></table></div>`;
+    <tfoot>
+      <tr style="border-top:2px solid var(--line2)">
+        <td colspan="3" class="muted" style="font-size:10px;font-weight:400">欄目</td>
+        <td class="muted" style="font-size:10px;font-weight:400">${curL}</td>
+        <td class="muted" style="font-size:10px;font-weight:400">${baseL}</td>
+        <td class="muted" style="font-size:10px;font-weight:400">差額</td>
+        <td class="muted" style="font-size:10px;font-weight:400">成長率</td>
+        <td class="muted col-hide-mobile" style="font-size:10px;font-weight:400">佔區域%</td>
+        <td class="muted col-hide-mobile" style="font-size:10px;font-weight:400">佔差額%</td>
+        <td class="col-hide-mobile"></td>
+      </tr>
+      <tr><td colspan="3">TOP20 小計</td>
+        <td>${fmt(sc)}</td><td>${fmt(sp)}</td>
+        <td class="${sd>=0?'up':'down'}">${sd>=0?'+':''}${fmt(sd)}</td>
+        <td class="muted col-hide-mobile">${spct}</td><td class="muted col-hide-mobile">${srpct}</td><td class="muted col-hide-mobile">100%</td><td class="col-hide-mobile"></td>
+      </tr>
+    </tfoot></table></div>`;
 }
 
 function renderTop20(records,total,curL,baseL){
