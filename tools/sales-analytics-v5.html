@@ -890,7 +890,7 @@ function renderOvGrid(){
       <div class="ov-val ${up?'up':'down'}">${fmt(totalCur)}</div>
       <div class="ov-prev">對比 ${fmt(totalPrev)}</div>
       <div style="margin-top:6px;display:flex;align-items:center;justify-content:space-between">
-        <span style="font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:600;color:${up?'var(--up)':'var(--down)'}">
+        <span class="${up?'up':'down'}" style="font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:600">
           ${up?'+':''}${fmt(diff)}
         </span>
         <span class="ov-pct ${up?'up':'down'}">${up?'▲':'▼'} ${Math.abs(pct).toFixed(1)}%</span>
