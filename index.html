@@ -62,6 +62,18 @@
 </head>
 <body>
 
+<div id="lock-screen" style="position:fixed;inset:0;background:#0e1117;z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px;">
+  <div style="max-width:300px;width:100%;text-align:center;">
+    <div style="font-size:16px;font-weight:700;margin-bottom:4px;">darcia / 工具庫</div>
+    <div style="font-size:12px;color:#8896b3;margin-bottom:22px;">已鎖定，請輸入密碼解鎖</div>
+    <input id="lock-pw" type="password" style="text-align:center;font-size:18px;margin-bottom:8px;width:100%;box-sizing:border-box;padding:12px;border-radius:8px;border:1px solid #2a3347;background:#1e2535;color:#e2e8f0;" placeholder="密碼" autocomplete="off" autocorrect="off" autocapitalize="off">
+    <div id="lock-err" style="color:#ff6b6b;font-size:12px;height:16px;margin-bottom:8px;"></div>
+    <button id="lock-btn" style="width:100%;background:#f5a623;color:#000;font-weight:700;border:none;border-radius:8px;padding:13px;font-size:15px;cursor:pointer;">解鎖</button>
+  </div>
+</div>
+
+<div id="app-root" style="display:none;">
+
 <header>
   <div>
     <div class="logo">darcia<span>/</span>工具庫</div>
@@ -81,7 +93,45 @@
 <div class="list" id="list"></div>
 <div class="empty" id="empty">沒有符合的項目</div>
 
+</div>
+
 <script>
+// ===== 密碼鎖定設定 =====
+var LOCK_PASSWORD="8888";
+var LOCK_REMEMBER_SESSION=true;
+function unlockApp(){
+  document.getElementById('lock-screen').style.display='none';
+  document.getElementById('app-root').style.display='';
+}
+function tryUnlock(){
+  var input=document.getElementById('lock-pw');
+  if(input.value===LOCK_PASSWORD){
+    if(LOCK_REMEMBER_SESSION){
+      try{sessionStorage.setItem('pub_index_unlocked','1');}catch(e){}
+    }
+    unlockApp();
+  }else{
+    document.getElementById('lock-err').textContent='密碼錯誤，請再試一次';
+    input.value='';
+    input.focus();
+  }
+}
+document.getElementById('lock-btn').onclick=tryUnlock;
+document.getElementById('lock-pw').addEventListener('keydown',function(e){
+  if(e.key==='Enter')tryUnlock();
+});
+(function(){
+  var alreadyUnlocked=false;
+  if(LOCK_REMEMBER_SESSION){
+    try{alreadyUnlocked=sessionStorage.getItem('pub_index_unlocked')==='1';}catch(e){}
+  }
+  if(alreadyUnlocked){
+    unlockApp();
+  }else{
+    setTimeout(function(){document.getElementById('lock-pw').focus();},150);
+  }
+})();
+
 // ── REGISTRY ── 由 Claude 自動維護，請勿手動編輯
 const ITEMS = [
     {"type":"html","name":"業績分析工具 v5","file":"tools/sales-analytics-v5.html","date":"2026-07-24","desc":"分區業績分析：前年同期、多季加總、多年趨勢三種比較模式，支援多季累計檔、自動識別期間標籤、多Sheet自動偵測"},
