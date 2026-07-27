@@ -31,8 +31,19 @@
     .filter-btn:hover { border-color: var(--border-hi); color: var(--text); }
     .filter-btn.active { background: var(--accent); border-color: var(--accent); color: #0d1117; font-weight: 600; }
 
+    /* Sections */
+    .sections { max-width: 720px; margin: 0 auto; display: flex; flex-direction: column; gap: 26px; }
+    .section-header {
+      display: flex; align-items: baseline; gap: 8px; margin-bottom: 10px; padding: 0 2px;
+    }
+    .section-title { font-family: 'JetBrains Mono', monospace; font-size: 13px; font-weight: 600; color: var(--text); }
+    .section-count {
+      font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--muted);
+      background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 1px 8px;
+    }
+
     /* List */
-    .list { max-width: 720px; margin: 0 auto; display: flex; flex-direction: column; gap: 8px; }
+    .list { display: flex; flex-direction: column; gap: 8px; }
 
     .item {
       background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
@@ -84,13 +95,12 @@
 
 <div class="filters">
   <button class="filter-btn active" data-filter="all">全部</button>
-  <button class="filter-btn" data-filter="html">HTML 工具</button>
-  <button class="filter-btn" data-filter="script">Apps Script</button>
-  <button class="filter-btn" data-filter="firebase">Firebase App</button>
-  <button class="filter-btn" data-filter="link">外部連結</button>
+  <button class="filter-btn" data-filter="work">業務／工作</button>
+  <button class="filter-btn" data-filter="music">音樂／語言</button>
+  <button class="filter-btn" data-filter="life">生活／娛樂</button>
 </div>
 
-<div class="list" id="list"></div>
+<div class="sections" id="sections"></div>
 <div class="empty" id="empty">沒有符合的項目</div>
 
 </div>
@@ -134,18 +144,18 @@ document.getElementById('lock-pw').addEventListener('keydown',function(e){
 
 // ── REGISTRY ── 由 Claude 自動維護，請勿手動編輯
 const ITEMS = [
-    {"type":"html","name":"開發系統","file":"tools/prospect-leadgen-v3.html","date":"2026-07-27","desc":"輸入地區自動分批檢索工控廠商 · Q1/Q2/Q3/X1四層判斷 · R1角色分類 · 零幻覺防偽 · 匯出Excel/Google試算表含地圖與搜尋連結"},
-    {"type":"html","name":"業績分析工具 v5","file":"tools/sales-analytics-v5.html","date":"2026-07-24","desc":"分區業績分析：前年同期、多季加總、多年趨勢三種比較模式，支援多季累計檔、自動識別期間標籤、多Sheet自動偵測"},
-  {"type":"html","name":"Loopr","url":"https://darciachen.github.io/loopr-RC-50/loopr.html","date":"2026-06-15","desc":"多軌混音工具"},
-  {"type":"html","name":"P50 校準工具","file":"p50-cal.html","date":"2026-06-14","desc":"機率校準練習工具"},
-  {"type":"firebase","name":"作戰中心 Work Command Center","url":"https://darciachen.github.io/work-center","date":"2026-06-15","desc":"AI 工作管理系統 · 語音記錄 · 任務追蹤 · 供應鏈 · 業務"},
-  {"type":"script","name":"工控儀表業務客戶拜訪系統","url":"https://script.google.com/macros/s/AKfycbydqPmPdiwHUIiZjDL4yYxXl7YLuULCkZhTTjpKmH1h1uEbukAju548xSGExLKmM8A7/exec","date":"2026-06-16","desc":"客戶拜訪紀錄 · 今日排程 · 前購搜尋 · AI 解析 · v4.5"},
-  {"type":"html","name":"電子鋼琴 / 吉他模擬器","file":"piano-guitar.html","date":"2026-06-21","desc":"3音域鍵盤+吉他模式 · K-S物理建模木吉他音色 · 13和弦11撥弦模式 · 節拍器/鼓組 · 和弦循環"},
-  {"type":"html","name":"唸給我聽 · 文字朗讀","file":"voice-reader.html","date":"2026-06-22","desc":"輸入文字即朗讀 · 瀏覽器內建女聲 · 可調速度音調 · 無需安裝"},
-  {"type":"html","name":"CONCH SCR 選型報價","file":"qs-search-tool.html","date":"2026-06-22","desc":"SCR電力調整器查價 · 折扣計算 · 負載選型 · 密碼鎖定保護"},
-  {"type":"html","name":"寶寶探索樂園","file":"kids-game.html","date":"2026-06-24","desc":"緹緹的遊戲"},
-  {"type":"html","name":"日文歌詞羅馬拼音標注","file":"jp-romaji-tool.html","date":"2026-06-27","desc":"kuromoji.js自動斷詞 · 逐詞拼音對齊 · 教學用羅馬拼音轉換"},
-  {"type":"html","name":"歌詞 × 吉他譜 合併工具","file":"lyric-tab-merge.html","date":"2026-06-28","desc":"支援小節線|格式吉他譜 · 日文歌詞自動轉羅馬拼音(kuromoji) · 三層格式來源可語音比對自動對齊 · 不保留原歌詞文字"}
+    {"type":"html","name":"開發系統","file":"tools/prospect-leadgen-v3.html","date":"2026-07-27","desc":"輸入地區自動分批檢索工控廠商 · Q1/Q2/Q3/X1四層判斷 · R1角色分類 · 零幻覺防偽 · 匯出Excel/Google試算表含地圖與搜尋連結","category":"work"},
+    {"type":"html","name":"業績分析工具 v5","file":"tools/sales-analytics-v5.html","date":"2026-07-24","desc":"分區業績分析：前年同期、多季加總、多年趨勢三種比較模式，支援多季累計檔、自動識別期間標籤、多Sheet自動偵測","category":"work"},
+  {"type":"html","name":"Loopr","url":"https://darciachen.github.io/loopr-RC-50/loopr.html","date":"2026-06-15","desc":"多軌混音工具","category":"music"},
+  {"type":"html","name":"P50 校準工具","file":"p50-cal.html","date":"2026-06-14","desc":"機率校準練習工具","category":"work"},
+  {"type":"firebase","name":"作戰中心 Work Command Center","url":"https://darciachen.github.io/work-center","date":"2026-06-15","desc":"AI 工作管理系統 · 語音記錄 · 任務追蹤 · 供應鏈 · 業務","category":"work"},
+  {"type":"script","name":"工控儀表業務客戶拜訪系統","url":"https://script.google.com/macros/s/AKfycbydqPmPdiwHUIiZjDL4yYxXl7YLuULCkZhTTjpKmH1h1uEbukAju548xSGExLKmM8A7/exec","date":"2026-06-16","desc":"客戶拜訪紀錄 · 今日排程 · 前購搜尋 · AI 解析 · v4.5","category":"work"},
+  {"type":"html","name":"電子鋼琴 / 吉他模擬器","file":"piano-guitar.html","date":"2026-06-21","desc":"3音域鍵盤+吉他模式 · K-S物理建模木吉他音色 · 13和弦11撥弦模式 · 節拍器/鼓組 · 和弦循環","category":"music"},
+  {"type":"html","name":"唸給我聽 · 文字朗讀","file":"voice-reader.html","date":"2026-06-22","desc":"輸入文字即朗讀 · 瀏覽器內建女聲 · 可調速度音調 · 無需安裝","category":"music"},
+  {"type":"html","name":"CONCH SCR 選型報價","file":"qs-search-tool.html","date":"2026-06-22","desc":"SCR電力調整器查價 · 折扣計算 · 負載選型 · 密碼鎖定保護","category":"work"},
+  {"type":"html","name":"寶寶探索樂園","file":"kids-game.html","date":"2026-06-24","desc":"緹緹的遊戲","category":"life"},
+  {"type":"html","name":"日文歌詞羅馬拼音標注","file":"jp-romaji-tool.html","date":"2026-06-27","desc":"kuromoji.js自動斷詞 · 逐詞拼音對齊 · 教學用羅馬拼音轉換","category":"music"},
+  {"type":"html","name":"歌詞 × 吉他譜 合併工具","file":"lyric-tab-merge.html","date":"2026-06-28","desc":"支援小節線|格式吉他譜 · 日文歌詞自動轉羅馬拼音(kuromoji) · 三層格式來源可語音比對自動對齊 · 不保留原歌詞文字","category":"music"}
 ];
 
 const BASE = 'https://darciachen.github.io/pub/';
@@ -158,21 +168,18 @@ function getUrl(item) {
   return '#';
 }
 
-const listEl = document.getElementById('list');
+const CATEGORIES = [
+  { key: 'work',  label: '業務／工作' },
+  { key: 'music', label: '音樂／語言' },
+  { key: 'life',  label: '生活／娛樂' }
+];
+
+const listEl = document.getElementById('sections');
 const emptyEl = document.getElementById('empty');
 const countEl = document.getElementById('count');
 
-function render(filter) {
-  const filtered = ITEMS.filter(i => filter === 'all' || i.type === filter).slice().reverse();
-  countEl.textContent = filter === 'all' ? `${ITEMS.length} 個項目` : `${filtered.length} / ${ITEMS.length}`;
-
-  if (!filtered.length) {
-    listEl.innerHTML = '';
-    emptyEl.classList.add('show');
-    return;
-  }
-  emptyEl.classList.remove('show');
-  listEl.innerHTML = filtered.map(item => `
+function itemHtml(item) {
+  return `
     <a class="item" href="${getUrl(item)}" target="_blank">
       <span class="tag tag-${item.type}">${TAG_LABEL[item.type] || item.type}</span>
       <div class="info">
@@ -180,7 +187,38 @@ function render(filter) {
         <div class="meta">${item.date}${item.desc ? ' · ' + item.desc : ''}</div>
       </div>
       <span class="arrow">↗</span>
-    </a>`).join('');
+    </a>`;
+}
+
+function render(filter) {
+  const cats = filter === 'all' ? CATEGORIES : CATEGORIES.filter(c => c.key === filter);
+  countEl.textContent = filter === 'all' ? `${ITEMS.length} 個項目` : `${ITEMS.filter(i => i.category === filter).length} / ${ITEMS.length}`;
+
+  let anyShown = false;
+  const sectionsHtml = cats.map(cat => {
+    const items = ITEMS
+      .filter(i => i.category === cat.key)
+      .slice()
+      .sort((a, b) => b.date.localeCompare(a.date));
+    if (!items.length) return '';
+    anyShown = true;
+    return `
+      <div class="section">
+        <div class="section-header">
+          <span class="section-title">${cat.label}</span>
+          <span class="section-count">${items.length}</span>
+        </div>
+        <div class="list">${items.map(itemHtml).join('')}</div>
+      </div>`;
+  }).join('');
+
+  if (!anyShown) {
+    listEl.innerHTML = '';
+    emptyEl.classList.add('show');
+    return;
+  }
+  emptyEl.classList.remove('show');
+  listEl.innerHTML = sectionsHtml;
 }
 
 // Filter buttons
