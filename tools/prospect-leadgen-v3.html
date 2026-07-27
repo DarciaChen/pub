@@ -1,0 +1,827 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>工控客群開發自動化工具</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=IBM+Plex+Sans+TC:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --panel-void:#0A0F14; --panel-surface:#121922; --panel-line:#1E2A38;
+    --signal-mint:#00E5A0; --signal-amber:#FFB020; --signal-red:#FF4757; --signal-cyan:#37C4FF;
+    --signal-violet:#B18CFF; --text-hi:#EAF2F5; --text-mid:#8CA0AE;
+  }
+  body{
+    background-color:var(--panel-void); color:var(--text-hi); font-family:'IBM Plex Sans TC',sans-serif;
+    background-image:
+      linear-gradient(rgba(55,196,255,0.045) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(55,196,255,0.045) 1px, transparent 1px);
+    background-size:28px 28px;
+  }
+  .font-display{font-family:'Space Grotesk',sans-serif;}
+  .font-mono{font-family:'IBM Plex Mono',monospace;}
+  .panel{background-color:var(--panel-surface);border:1px solid var(--panel-line);border-radius:10px;}
+  .led{width:10px;height:10px;border-radius:50%;background:#2A3644;transition:background .3s,box-shadow .3s;}
+  .led.on-mint{background:var(--signal-mint);box-shadow:0 0 8px var(--signal-mint);}
+  .led.on-cyan{background:var(--signal-cyan);box-shadow:0 0 8px var(--signal-cyan);}
+  .led.on-amber{background:var(--signal-amber);box-shadow:0 0 8px var(--signal-amber);}
+  .trace{stroke:var(--panel-line);stroke-width:1.5;fill:none;}
+  .trace.active{stroke:var(--signal-cyan);}
+  .badge{display:inline-block;padding:2px 7px;border-radius:4px;font-size:10.5px;font-family:'IBM Plex Mono',monospace;border:1px solid;white-space:nowrap;}
+  .badge-mint{background:rgba(0,229,160,.12);color:var(--signal-mint);border-color:rgba(0,229,160,.35);}
+  .badge-amber{background:rgba(255,176,32,.12);color:var(--signal-amber);border-color:rgba(255,176,32,.35);}
+  .badge-cyan{background:rgba(55,196,255,.12);color:var(--signal-cyan);border-color:rgba(55,196,255,.35);}
+  .badge-violet{background:rgba(177,140,255,.12);color:var(--signal-violet);border-color:rgba(177,140,255,.35);}
+  .badge-red{background:rgba(255,71,87,.12);color:var(--signal-red);border-color:rgba(255,71,87,.35);}
+  .rocker{position:relative;width:120px;height:34px;background:#0D141B;border:1px solid var(--panel-line);border-radius:17px;cursor:pointer;}
+  .rocker-knob{position:absolute;top:3px;left:3px;width:56px;height:26px;border-radius:14px;background:var(--signal-cyan);transition:left .2s;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;color:#032230;}
+  .rocker.modeB .rocker-knob{left:61px;background:var(--signal-amber);}
+  input[type=text],input[type=password],textarea,select{
+    background:#0D141B;border:1px solid var(--panel-line);color:var(--text-hi);
+    border-radius:6px;padding:9px 12px;width:100%;outline:none;font-family:'IBM Plex Mono',monospace;font-size:13px;}
+  input:focus,textarea:focus,select:focus{border-color:var(--signal-cyan);}
+  ::placeholder{color:#4A5B6B;}
+  .btn-run{background:var(--signal-mint);color:#032118;font-weight:600;border-radius:6px;padding:11px 16px;transition:filter .15s;}
+  .btn-run:hover{filter:brightness(1.1);}
+  .btn-run:disabled{background:#2A3644;color:#5A6B78;cursor:not-allowed;}
+  .btn-ghost{background:transparent;border:1px solid var(--panel-line);color:var(--text-hi);border-radius:6px;padding:8px 12px;font-size:12px;}
+  .btn-ghost:hover{border-color:var(--signal-cyan);color:var(--signal-cyan);}
+  .btn-action{display:inline-block;font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:500;
+    padding:4px 9px;border-radius:5px;margin-right:6px;margin-bottom:4px;text-decoration:none;border:1px solid;}
+  .btn-action:hover{filter:brightness(1.2);}
+  .btn-action-cyan{color:var(--signal-cyan);border-color:rgba(55,196,255,.35);background:rgba(55,196,255,.08);}
+  .btn-action-amber{color:var(--signal-amber);border-color:rgba(255,176,32,.35);background:rgba(255,176,32,.08);}
+  table.data-table{border-collapse:collapse;width:100%;font-size:12.5px;}
+  table.data-table th{text-align:left;color:var(--text-mid);font-weight:500;font-size:10.5px;letter-spacing:.04em;padding:8px 9px;border-bottom:1px solid var(--panel-line);white-space:nowrap;}
+  table.data-table td{padding:9px;border-bottom:1px solid var(--panel-line);vertical-align:top;font-family:'IBM Plex Mono',monospace;}
+  table.data-table tr:hover td{background:rgba(55,196,255,.04);}
+  .chip{display:inline-flex;align-items:center;gap:6px;background:#0D141B;border:1px solid var(--panel-line);
+    border-radius:14px;padding:4px 6px 4px 12px;font-size:11px;font-family:'IBM Plex Mono',monospace;margin:3px;}
+  .chip button{background:none;border:none;color:var(--text-mid);cursor:pointer;font-size:13px;line-height:1;padding:2px 4px;}
+  .chip button:hover{color:var(--signal-red);}
+  details>summary{list-style:none;cursor:pointer;}
+  details>summary::-webkit-details-marker{display:none;}
+  .batch-dot{display:inline-block;width:22px;height:6px;border-radius:3px;background:#2A3644;margin-right:4px;}
+  .batch-dot.done{background:var(--signal-mint);}
+  .batch-dot.active{background:var(--signal-cyan);}
+  .batch-dot.fail{background:var(--signal-red);}
+</style>
+</head>
+<body class="min-h-screen">
+<div class="max-w-7xl mx-auto px-4 py-8">
+
+  <header class="panel px-6 py-5 mb-6 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+    <div>
+      <div class="text-xs font-mono tracking-widest text-[var(--signal-cyan)] mb-1">MODEL&nbsp;&nbsp;IC-LEADGEN&nbsp;&nbsp;v3&nbsp;&nbsp;/&nbsp;&nbsp;工控儀表業務開發</div>
+      <h1 class="font-display text-2xl md:text-3xl font-bold">工控客群開發自動化工具</h1>
+      <div class="text-sm text-[var(--text-mid)] mt-1">自動分批檢索　·　Q1/Q2/Q3/X1 四層判斷　·　交叉驗證計次　·　零幻覺輸出</div>
+    </div>
+    <div class="flex items-center gap-5 panel px-4 py-3 self-start md:self-center">
+      <div class="flex flex-col items-center gap-1"><div class="led" id="led-1"></div><span class="text-[10px] font-mono text-[var(--text-mid)]">輸入</span></div>
+      <svg width="20" height="2" class="opacity-40"><line x1="0" y1="1" x2="20" y2="1" class="trace" id="trace-1"/></svg>
+      <div class="flex flex-col items-center gap-1"><div class="led" id="led-2"></div><span class="text-[10px] font-mono text-[var(--text-mid)]">分批檢索</span></div>
+      <svg width="20" height="2" class="opacity-40"><line x1="0" y1="1" x2="20" y2="1" class="trace" id="trace-2"/></svg>
+      <div class="flex flex-col items-center gap-1"><div class="led" id="led-3"></div><span class="text-[10px] font-mono text-[var(--text-mid)]">合併去重</span></div>
+      <svg width="20" height="2" class="opacity-40"><line x1="0" y1="1" x2="20" y2="1" class="trace" id="trace-3"/></svg>
+      <div class="flex flex-col items-center gap-1"><div class="led" id="led-4"></div><span class="text-[10px] font-mono text-[var(--text-mid)]">輸出</span></div>
+    </div>
+  </header>
+
+  <div class="grid grid-cols-1 lg:grid-cols-[360px_1fr] gap-6">
+    <div class="space-y-4">
+      <div class="panel p-5">
+        <label class="block text-xs font-mono text-[var(--text-mid)] mb-2">搜尋目標（行政區／工業區／路名）</label>
+        <input type="text" id="region-input" placeholder="例：台南新吉工業區">
+
+        <div class="mt-3">
+          <label class="block text-[11px] font-mono text-[var(--text-mid)] mb-1">檢索深度（分批由系統自動跑完，中途不需確認）</label>
+          <select id="search-depth-select">
+            <option value="quick">快速：2 批（約 4 次 API 呼叫，省配額）</option>
+            <option value="full" selected>完整：5-6 批（約 10-12 次 API 呼叫）</option>
+          </select>
+        </div>
+
+        <div class="mt-3">
+          <label class="flex items-center gap-2 text-[11px] font-mono text-[var(--text-mid)]">
+            <input type="checkbox" id="road-name-toggle" checked style="width:auto">
+            啟用路名聚落擴散（E3，撈巷弄裡的小型盤廠）
+          </label>
+        </div>
+
+        <details class="mt-3">
+          <summary class="text-[11px] font-mono text-[var(--signal-cyan)]">▸ 既有／已知客戶名單（選填，比對後標註不隱藏）</summary>
+          <textarea id="existing-customers-input" class="mt-2 h-20" placeholder="一行一家公司名稱"></textarea>
+        </details>
+
+        <div class="mt-5 mb-4">
+          <div class="text-xs font-mono text-[var(--text-mid)] mb-2">運作模式</div>
+          <div class="rocker" id="mode-rocker" onclick="toggleMode()"><div class="rocker-knob" id="rocker-knob">A</div></div>
+          <div class="text-[11px] text-[var(--text-mid)] mt-2" id="mode-desc">模式 A：串接 Gemini API，自動分批跑完後一次產出</div>
+        </div>
+
+        <div id="mode-a-controls">
+          <label class="block text-xs font-mono text-[var(--text-mid)] mb-2">Gemini API Key（僅存於本次瀏覽階段）</label>
+          <input type="password" id="api-key-input" placeholder="AIza...">
+          <button class="btn-run w-full mt-4" id="run-btn" onclick="runModeA()">啟動檢索</button>
+          <div id="batch-progress" class="mt-3 hidden">
+            <div id="batch-dots"></div>
+            <div id="batch-label" class="text-[11px] font-mono text-[var(--text-mid)] mt-2"></div>
+          </div>
+        </div>
+
+        <div id="mode-b-controls" class="hidden">
+          <div class="text-[11px] text-[var(--text-mid)] mb-3 leading-relaxed">產生完整結構化指令，複製後貼到 Gemini 網頁版或 Google AI 模式執行。</div>
+          <button class="btn-run w-full" onclick="generateModeB()">產生指令</button>
+        </div>
+      </div>
+
+      <div class="panel p-5">
+        <details>
+          <summary class="text-xs font-mono text-[var(--signal-violet)] tracking-widest">▸ 關鍵詞管理（隨時增刪，存本機）</summary>
+          <div class="mt-3 space-y-3">
+            <div><div class="text-[11px] font-mono text-[var(--text-mid)] mb-1">R1-A 設備端</div><div id="chips-roleA"></div>
+              <input type="text" id="input-roleA" class="mt-1" placeholder="輸入後按 Enter 新增" onkeydown="if(event.key==='Enter')addKeyword('roleA')"></div>
+            <div><div class="text-[11px] font-mono text-[var(--text-mid)] mb-1">R1-B 工程端</div><div id="chips-roleB"></div>
+              <input type="text" id="input-roleB" class="mt-1" placeholder="輸入後按 Enter 新增" onkeydown="if(event.key==='Enter')addKeyword('roleB')"></div>
+            <div><div class="text-[11px] font-mono text-[var(--text-mid)] mb-1">R1-C 工業資訊端</div><div id="chips-roleC"></div>
+              <input type="text" id="input-roleC" class="mt-1" placeholder="輸入後按 Enter 新增" onkeydown="if(event.key==='Enter')addKeyword('roleC')"></div>
+            <div><div class="text-[11px] font-mono text-[var(--text-mid)] mb-1">Q3 剛需詞</div><div id="chips-need"></div>
+              <input type="text" id="input-need" class="mt-1" placeholder="輸入後按 Enter 新增" onkeydown="if(event.key==='Enter')addKeyword('need')"></div>
+            <div><div class="text-[11px] font-mono text-[var(--text-mid)] mb-1">X1 排除詞</div><div id="chips-exclude"></div>
+              <input type="text" id="input-exclude" class="mt-1" placeholder="輸入後按 Enter 新增" onkeydown="if(event.key==='Enter')addKeyword('exclude')"></div>
+            <div class="flex gap-2 pt-1">
+              <button class="btn-ghost flex-1" onclick="exportKeywords()">匯出備份</button>
+              <button class="btn-ghost flex-1" onclick="document.getElementById('kw-import').click()">匯入</button>
+              <button class="btn-ghost flex-1" onclick="resetKeywordsToDefault()">還原預設</button>
+            </div>
+            <input type="file" id="kw-import" accept=".json" class="hidden" onchange="importKeywords(event)">
+          </div>
+        </details>
+      </div>
+    </div>
+
+    <div class="space-y-4">
+      <div id="status-line" class="text-sm font-mono text-[var(--text-mid)]"></div>
+
+      <div id="restore-banner" class="panel p-4 hidden" style="border-color:rgba(55,196,255,.4)">
+        <div class="flex items-center justify-between gap-3 flex-wrap">
+          <div class="text-xs font-mono text-[var(--signal-cyan)]" id="restore-text"></div>
+          <div class="flex gap-2">
+            <button class="btn-ghost" onclick="restoreSavedResult()">還原</button>
+            <button class="btn-ghost" onclick="dismissRestoreBanner()">忽略</button>
+          </div>
+        </div>
+      </div>
+
+      <div id="mode-b-output" class="panel p-5 hidden">
+        <div class="flex items-center justify-between mb-3">
+          <div class="text-xs font-mono text-[var(--signal-amber)] tracking-widest">防幻覺外掛指令</div>
+          <button class="btn-ghost" onclick="copyInstruction()">一鍵複製</button>
+        </div>
+        <textarea id="instruction-output" readonly class="w-full h-64 p-3 text-xs resize-y"></textarea>
+      </div>
+
+      <div id="vanished-panel" class="panel p-5 hidden">
+        <div class="text-xs font-mono text-[var(--signal-red)] tracking-widest mb-2">消失名單（本次未再出現）</div>
+        <div id="vanished-list" class="text-xs font-mono text-[var(--text-mid)]"></div>
+      </div>
+
+      <div class="panel p-5">
+        <div class="flex items-center justify-between mb-3 flex-wrap gap-2">
+          <div class="text-xs font-mono text-[var(--signal-mint)] tracking-widest">候選名單<span id="result-count" class="text-[var(--text-mid)] ml-2"></span></div>
+          <div class="flex gap-2 flex-wrap">
+            <button class="btn-ghost" onclick="document.getElementById('xlsx-import').click()">匯入舊檔</button>
+            <button class="btn-ghost" onclick="copyForGoogleSheets()">複製到 Google 試算表</button>
+            <button class="btn-ghost" onclick="exportSelectedToExcel()">匯出 Excel</button>
+            <input type="file" id="xlsx-import" accept=".xlsx,.xls" class="hidden" onchange="importFromExcel(event)">
+          </div>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="data-table">
+            <thead><tr>
+              <th style="width:30px"><input type="checkbox" id="select-all-checkbox" onchange="toggleSelectAll(this.checked)"></th>
+              <th>公司名稱</th><th>統編</th><th>地址／聚落</th><th>電話／聯絡人</th>
+              <th>R1</th><th>產業型態</th><th>Q1/Q2/Q3</th><th>判斷理由</th><th>名單狀態</th><th>驗證</th><th>來源</th><th>操作</th>
+            </tr></thead>
+            <tbody id="candidates-body">
+              <tr><td colspan="13" class="text-[var(--text-mid)] font-mono text-xs py-6 text-center">尚無資料，請輸入區域並執行檢索</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="panel p-5">
+        <button class="text-xs font-mono text-[var(--signal-red)] tracking-widest flex items-center gap-2" onclick="toggleExcluded()">
+          <span id="excluded-toggle-icon">▸</span> 已排除清單（X1／Q1 透明度）
+        </button>
+        <div id="excluded-wrap" class="hidden mt-3">
+          <table class="data-table">
+            <thead><tr><th>公司名稱</th><th>排除理由</th></tr></thead>
+            <tbody id="excluded-body"><tr><td colspan="2" class="text-[var(--text-mid)] font-mono text-xs py-4 text-center">無</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <footer class="text-center text-[11px] font-mono text-[var(--text-mid)] mt-8 pb-4">
+    模型 gemini-2.5-flash-lite　·　範圍：台灣　·　關鍵詞與歷次名單存於本機瀏覽器
+  </footer>
+</div>
+
+<script>
+/* ============ 提示詞（與 API_System_Prompt.txt 同源，勿分別修改） ============ */
+const SYSTEM_INSTRUCTION = `你是「工控客群開發自動化工具」的檢索與過濾引擎，服務對象為台灣自動控制儀表供應商（主營溫控表、SCR/SSR、類比訊號整合模塊、Modbus RTU/TCP 通訊閘道），任務是針對使用者輸入的行政區、工業區或路名，找出真正值得業務拜訪的工控相關廠商。範圍僅限台灣，暫不處理大陸地區。
+
+【零幻覺鐵則 — 最高優先】
+- 你只能陳述有查證依據的事實。任何一筆公司名稱、統一編號、電話、地址，若不確定或找不到可靠來源，一律填「未查得」並在 status 註記「需人工查證」，不得捏造。
+- 寧可回傳空陣列，也不可以編造出「聽起來合理」的公司資料。
+- 若該區域查無工業聚落，直接誠實回報查無結果，不得為了填滿名單而生造。
+- 「查不到明確證據」不等於「不合格」。Q1/Q2/Q3 任一層證據不足但未觸發明確排除條件，一律保留並標「待查」，不得剔除。
+
+【名單數量原則】
+不設數量上限，也不設下限。查得到幾家就給幾家，嚴禁為了湊數而重複列出、拆分或生造公司。品質優先於數量。
+
+【R1 角色判定（含 R1-D）】
+- R1-A 設備需求源頭：機械設備商、專用機、非標設備、製程設備、整廠設備。此為正向條件，不得因「工程語言」描述不足而降權或排除。
+- R1-B 工程執行端：自動控制、系統整合、配電盤／盤廠、機電工程、儀電工程。
+- R1-C 工業資訊端：PLC、SCADA、MES、資料收集、工業通訊、OPC、Modbus、IIoT。
+- R1-D 待確認：有正向訊號但證據不足以歸類到 A/B/C，誠實標記為 D，不得硬套分類。
+
+【Q1／Q2／Q3／X1 四層判斷】
+Q1 營運存在：只有工商資料或公告「明確顯示歇業／解散／停業」才排除（excluded 標「Q1停業」）。沒徵才、資訊少、官網不更新，都不構成排除理由，一律視為通過或「未查得」。
+Q2 是否參與設備／工程決策：命中「電控、PLC、配線、盤體、工程師、系統整合、現場調試、設備電控設計、機電／儀電工程」任一即判「是」。查無資訊填「未查得」，不等於「否」，不構成排除理由。
+Q3 工控儀表適配（核心）：命中「量測、溫控、訊號轉換、資料採集、遠端監控」任一，或屬製程／機能設備（非純加工機）且有溫度／壓力／流量／液位／能耗需求，判「是」，視為高價值目標。無法確認但未觸發 X1，判「待查」，仍須保留在 candidates。
+X1 硬排除（唯一可直接剔除的判定層）：主要業務為 CNC、工具機、加工中心、車床、銑床、雷射切割、折彎、沖床、傳動元件、軸承、齒輪、皮帶輪，或純來料代工廠 → 放入 excluded 並註明命中的具體關鍵字。理由：此類廠商多使用特規 PCB 洗板或無標準儀表導入需求。
+
+【判斷優先順序】
+只有 X1 命中或 Q1 明確停業，才可將公司排除到 excluded。Q2／Q3 證據不足時一律保留在 candidates，用「未查得」或「待查」誠實標記，不得因證據不夠多就整筆刪除。
+
+【搜尋執行策略】
+- 你會收到一份具體查詢清單，請逐一確實執行，不要只憑地區名稱自由發揮。
+- 優先使用複合詞／職缺常用語（如「PLC工程師」「配電盤」），而非單一詞（如「PLC」）；複合詞較容易命中已被搜尋引擎索引、內文完整的頁面。
+- 人力銀行（104／1111／518）頁面多為 JS 動態渲染，你只能依賴搜尋引擎索引到的片段判斷，不代表資訊完整或即時，須誠實反映在 status。
+- 證據來源分工：人力銀行為時效訊號（未徵才不等於停業）；工業區名錄僅為起點不得當母體；路名為擴散觸手不是濾網；工商資料用於補齊地址統編；官網／Google 商家用於判斷 Q2／Q3 與聯絡方式；社群／FB 僅能作佐證，不可單獨作為唯一證據。
+- 同一家公司若在多批查詢中重複出現，視為交叉驗證、可信度提高，但輸出時只能列一筆。
+
+【物理防偽查核】
+- 統一編號：必須為 8 碼數字，格式不符填「未查得」並於 status 註記需人工查證。
+- 地址：須為可查證的實體門牌，不得只寫「XX工業區」等模糊地名；另於 locationCluster 標註所在行政區／工業區／路名聚落。
+- 電話：市話區碼須與所在區域相符（台南 06、嘉義 05、雲林 05）。若為 02 開頭但公司實際不在雙北，視為疑似虛擬外撥代表號，status 標記「需人工查證：電話區碼與地址不符」。
+
+【已知／既有名單規則】
+若使用者提供既有／已知客戶名單，撈到的公司比對相符者，listStatus 標記「已知/既有」，不得隱藏不列出。已知／既有仍須完整走過 R1／Q1／Q2／Q3／X1 判斷流程。`;
+const JSON_FORMAT_INSTRUCTION = `只能輸出純 JSON，不得包含 markdown code fence、開場白或結語文字。結構如下：
+{
+  "region": "使用者輸入的原始區域字串",
+  "candidates": [
+    {"company":"","taxId":"","address":"","locationCluster":"","phone":"","contactPerson":"","website":"",
+     "r1":"R1-A或R1-B或R1-C或R1-D","industryType":"",
+     "q1":"通過或未查得","q2":"是或未查得","q3":"是或待查",
+     "matchReason":"具體理由，需引用觸發的關鍵字或角色特徵，禁用「看起來」等模糊字眼",
+     "status":"已驗證或需人工查證或待查","source":"","listStatus":"新名單或已知/既有"}
+  ],
+  "excluded": [ {"company":"","x1Reason":"需對應 X1 具體關鍵字，或標明「Q1停業」"} ]
+}
+你只能重組、篩選、分類【原始查證資料】區塊中已出現的內容，絕對不可以補充該區塊未提及的任何新事實。`;
+
+/* ============ 關鍵詞 ============ */
+const DEFAULT_KEYWORDS = {
+  roleA:['機械設備','專用機','自動化設備','製程設備','整廠設備','非標設備'],
+  roleB:['PLC工程師','電控工程師','配電盤','系統整合','自動控制','控制箱','儀電工程','機電工程','HMI人機介面'],
+  roleC:['PLC HMI','SCADA','MES','資料收集','工業通訊','OPC','Modbus','IIoT'],
+  need:['溫度控制','訊號轉換','4-20mA','資料採集','PID','熱電偶','壓力','流量','液位','數位電表','遠端監控'],
+  exclude:['CNC','工具機','加工中心','車床','銑床','雷射切割','折彎','沖床','傳動元件','軸承','齒輪','皮帶輪']
+};
+const KEYWORD_STORAGE_KEY='leadgen_keywords_v3';
+const VANISHED_PREFIX='leadgen_history_v3_';
+
+function loadKeywords(){
+  try{ const raw=localStorage.getItem(KEYWORD_STORAGE_KEY); if(raw) return JSON.parse(raw); }catch(e){}
+  return JSON.parse(JSON.stringify(DEFAULT_KEYWORDS));
+}
+function saveKeywords(kw){ try{ localStorage.setItem(KEYWORD_STORAGE_KEY,JSON.stringify(kw)); }catch(e){} }
+let currentKeywords=loadKeywords();
+
+function esc(s){ return (s==null?'':String(s)).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+function renderKeywordChips(){
+  ['roleA','roleB','roleC','need','exclude'].forEach(cat=>{
+    document.getElementById('chips-'+cat).innerHTML=currentKeywords[cat].map((kw,i)=>
+      '<span class="chip">'+esc(kw)+'<button onclick="removeKeyword(\''+cat+'\','+i+')">×</button></span>').join('');
+  });
+}
+function addKeyword(cat){
+  const el=document.getElementById('input-'+cat), v=el.value.trim();
+  if(!v) return;
+  if(!currentKeywords[cat].includes(v)) currentKeywords[cat].push(v);
+  el.value=''; saveKeywords(currentKeywords); renderKeywordChips();
+}
+function removeKeyword(cat,i){ currentKeywords[cat].splice(i,1); saveKeywords(currentKeywords); renderKeywordChips(); }
+function resetKeywordsToDefault(){
+  currentKeywords=JSON.parse(JSON.stringify(DEFAULT_KEYWORDS));
+  saveKeywords(currentKeywords); renderKeywordChips();
+  setStatus('已還原為預設關鍵詞','var(--signal-mint)');
+}
+function exportKeywords(){
+  const blob=new Blob([JSON.stringify(currentKeywords,null,2)],{type:'application/json'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download='leadgen_keywords_'+new Date().toISOString().slice(0,10)+'.json';
+  a.click(); URL.revokeObjectURL(a.href);
+  setStatus('關鍵詞已匯出備份','var(--signal-mint)');
+}
+function importKeywords(ev){
+  const f=ev.target.files[0]; if(!f) return;
+  const r=new FileReader();
+  r.onload=()=>{
+    try{
+      const obj=JSON.parse(r.result);
+      ['roleA','roleB','roleC','need','exclude'].forEach(c=>{ if(Array.isArray(obj[c])) currentKeywords[c]=obj[c]; });
+      saveKeywords(currentKeywords); renderKeywordChips();
+      setStatus('關鍵詞已匯入','var(--signal-mint)');
+    }catch(e){ setStatus('匯入失敗：檔案格式不正確','var(--signal-red)'); }
+  };
+  r.readAsText(f); ev.target.value='';
+}
+
+/* ============ 公司名正規化（去重／消失名單／既有比對三處共用） ============ */
+const NAME_SUFFIXES=['股份有限公司','有限公司','企業有限公司','企業社','工業社','實業社','工程行','企業行','有限','公司','工廠','企業','實業','工程','科技'];
+const NAME_PREFIXES=['台灣','臺灣','台南','臺南','台中','臺中','台北','臺北','高雄','嘉義','雲林','新竹','桃園'];
+function normalizeCompany(name){
+  let n=(name||'').replace(/\s|股份|（|）|\(|\)/g,'');
+  for(let pass=0;pass<2;pass++){
+    for(const s of NAME_SUFFIXES){ if(n.length>s.length+1 && n.endsWith(s)){ n=n.slice(0,-s.length); break; } }
+  }
+  for(const p of NAME_PREFIXES){ if(n.length>p.length+1 && n.startsWith(p)){ n=n.slice(p.length); break; } }
+  return n;
+}
+/* 回傳 'exact' | 'suspect' | null */
+function matchExistingCustomer(companyName,existingList){
+  if(!companyName||!existingList.length) return null;
+  const a=normalizeCompany(companyName);
+  if(!a) return null;
+  let suspect=false;
+  for(const raw of existingList){
+    const b=normalizeCompany(raw);
+    if(!b) continue;
+    if(a===b) return 'exact';
+    if(a.length>=3 && b.includes(a)) return 'exact';
+    if(b.length>=3 && a.includes(b)) return 'exact';
+    if(a.slice(0,2) && a.slice(0,2)===b.slice(0,2)) suspect=true;
+  }
+  return suspect?'suspect':null;
+}
+
+/* ============ 狀態 ============ */
+let sessionApiKey='', currentMode='A', lastCandidates=[], selectedIdx=new Set();
+
+function toggleMode(){
+  currentMode=currentMode==='A'?'B':'A';
+  document.getElementById('mode-rocker').classList.toggle('modeB',currentMode==='B');
+  document.getElementById('rocker-knob').textContent=currentMode;
+  document.getElementById('mode-a-controls').classList.toggle('hidden',currentMode!=='A');
+  document.getElementById('mode-b-controls').classList.toggle('hidden',currentMode!=='B');
+  document.getElementById('mode-desc').textContent=currentMode==='A'
+    ?'模式 A：串接 Gemini API，自動分批跑完後一次產出'
+    :'模式 B：產生防幻覺指令，貼到 Gemini 網頁版手動執行';
+}
+function setLed(n,cls){
+  document.getElementById('led-'+n).className='led '+(cls||'');
+  if(n>1){ const t=document.getElementById('trace-'+(n-1)); if(t) t.classList.toggle('active',!!cls); }
+}
+function resetLeds(){ for(let i=1;i<=4;i++) setLed(i,''); }
+function setStatus(m,c){ const el=document.getElementById('status-line'); el.textContent=m; el.style.color=c||'var(--text-mid)'; }
+function sleep(ms){ return new Promise(r=>setTimeout(r,ms)); }
+
+/* ============ 分批定義（系統自動跑完，不需使用者確認） ============ */
+function buildBatches(region,depth){
+  const kw=currentKeywords, out=[];
+  out.push({name:'工程端角色詞',queries:kw.roleB.slice(0,5).map(k=>'104 '+region+' '+k)});
+  out.push({name:'Q3剛需需求詞',queries:kw.need.slice(0,5).map(k=>'104 '+region+' '+k)});
+  if(depth==='full'){
+    out.push({name:'工業資訊角色詞',queries:kw.roleC.slice(0,5).map(k=>'104 '+region+' '+k)});
+    out.push({name:'設備端角色詞',queries:kw.roleA.slice(0,5).map(k=>'104 '+region+' '+k+' 電控')});
+    if(document.getElementById('road-name-toggle').checked){
+      out.push({name:'E3路名聚落擴散',queries:[region+' 廠商 電控',region+' 廠商 自動化',region+' 工業區 廠商名錄']});
+    }
+    out.push({name:'E6社群時效線索',queries:['facebook '+region+' 自動化 PLC 徵才','facebook '+region+' 電控 接案']});
+  }
+  return out;
+}
+function renderBatchDots(total,states){
+  document.getElementById('batch-progress').classList.remove('hidden');
+  document.getElementById('batch-dots').innerHTML=
+    Array.from({length:total},(_,i)=>'<span class="batch-dot '+(states[i]||'')+'"></span>').join('');
+}
+
+/* ============ Gemini 呼叫（含 429/503 自動重試、maxOutputTokens 防截斷） ============ */
+const MODEL='gemini-2.5-flash-lite';
+async function callGemini(body,label,maxAttempts){
+  maxAttempts=maxAttempts||3;
+  for(let attempt=1;attempt<=maxAttempts;attempt++){
+    let resp;
+    try{
+      resp=await fetch('https://generativelanguage.googleapis.com/v1beta/models/'+MODEL+':generateContent?key='+encodeURIComponent(sessionApiKey),
+        {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    }catch(netErr){
+      if(attempt<maxAttempts){ await sleep(2000*attempt); continue; }
+      throw new Error(label+' 網路錯誤：'+netErr.message);
+    }
+    if(resp.ok) return await resp.json();
+    const errText=await resp.text();
+    if((resp.status===429||resp.status===503)&&attempt<maxAttempts){
+      const wait=3000*Math.pow(2,attempt-1);
+      setStatus(label+' 遇到 HTTP '+resp.status+'（配額或流量），'+(wait/1000)+' 秒後重試…','var(--signal-amber)');
+      await sleep(wait);
+      continue;
+    }
+    throw new Error(label+' 失敗 HTTP '+resp.status+'：'+errText.slice(0,180));
+  }
+}
+function extractText(data){
+  const parts=(data.candidates&&data.candidates[0]&&data.candidates[0].content&&data.candidates[0].content.parts)||[];
+  return parts.map(p=>p.text||'').join('');
+}
+
+async function groundBatch(region,batch,existingList){
+  const existingBlock=existingList.length?'\n\n【既有／已知客戶名單】\n'+existingList.join('\n'):'';
+  const body={
+    systemInstruction:{parts:[{text:SYSTEM_INSTRUCTION}]},
+    contents:[{role:'user',parts:[{text:
+      '請針對「'+region+'」執行本批次（'+batch.name+'）查詢，逐一用 Google Search 查證下列每一組關鍵字：\n'+
+      batch.queries.join('\n')+existingBlock+
+      '\n\n以條列文字列出查到的原始事實（公司名稱、統編、地址、電話、聯絡人、官網、來源網址），不需輸出 JSON。查不到就說查不到，不要生造。'}]}],
+    tools:[{googleSearch:{}}],
+    generationConfig:{maxOutputTokens:8192}
+  };
+  return extractText(await callGemini(body,'批次「'+batch.name+'」檢索'));
+}
+async function formatBatch(region,rawText,existingList){
+  const existingBlock=existingList.length?'\n\n【既有／已知客戶名單】\n'+existingList.join('\n'):'';
+  const body={
+    systemInstruction:{parts:[{text:SYSTEM_INSTRUCTION+'\n\n【輸出格式】\n'+JSON_FORMAT_INSTRUCTION}]},
+    contents:[{role:'user',parts:[{text:'【原始查證資料】\n'+rawText+existingBlock+
+      '\n\n請將以上「'+region+'」的查證資料，依系統指令規則分類並轉成指定 JSON 結構。'}]}],
+    generationConfig:{responseMimeType:'application/json',maxOutputTokens:8192}
+  };
+  let text=extractText(await callGemini(body,'批次結構化'));
+  text=text.replace(/```json|```/g,'').trim();
+  try{ return JSON.parse(text); }
+  catch(e){ throw new Error('JSON 解析失敗（可能被截斷），回應開頭：'+text.slice(0,120)); }
+}
+
+/* ============ 合併：跨批次去重＋交叉驗證計次 ============ */
+function mergeCandidates(batchResults){
+  const map=new Map();
+  batchResults.forEach(json=>{
+    (json.candidates||[]).forEach(c=>{
+      const key=normalizeCompany(c.company);
+      if(!key) return;
+      if(!map.has(key)){ c.hitCount=1; map.set(key,c); return; }
+      const prev=map.get(key);
+      prev.hitCount=(prev.hitCount||1)+1;
+      ['taxId','address','locationCluster','phone','contactPerson','website','source','industryType'].forEach(f=>{
+        const isEmpty=v=>!v||v==='未查得';
+        if(isEmpty(prev[f])&&!isEmpty(c[f])) prev[f]=c[f];
+      });
+      if(prev.q3!=='是'&&c.q3==='是'){ prev.q3='是'; prev.matchReason=c.matchReason||prev.matchReason; }
+      if(prev.r1==='R1-D'&&c.r1&&c.r1!=='R1-D') prev.r1=c.r1;
+    });
+  });
+  return Array.from(map.values());
+}
+function mergeExcluded(batchResults){
+  const map=new Map();
+  batchResults.forEach(json=>(json.excluded||[]).forEach(x=>{
+    const k=normalizeCompany(x.company); if(k&&!map.has(k)) map.set(k,x);
+  }));
+  return Array.from(map.values());
+}
+
+/* ============ 消失名單（正規化比對，不編造原因） ============ */
+function computeVanished(region,currentList){
+  const key=VANISHED_PREFIX+region;
+  let prev=[];
+  try{ const raw=localStorage.getItem(key); if(raw) prev=JSON.parse(raw).companies||[]; }catch(e){}
+  const nowKeys=new Set(currentList.map(c=>normalizeCompany(c.company)));
+  const vanished=prev.filter(p=>!nowKeys.has(normalizeCompany(p)));
+  try{ localStorage.setItem(key,JSON.stringify({timestamp:new Date().toISOString(),companies:currentList.map(c=>c.company)})); }catch(e){}
+  return vanished;
+}
+function renderVanished(v){
+  const panel=document.getElementById('vanished-panel');
+  if(!v.length){ panel.classList.add('hidden'); return; }
+  panel.classList.remove('hidden');
+  document.getElementById('vanished-list').innerHTML=
+    v.map(c=>'<div class="py-1 border-b border-[var(--panel-line)]">'+esc(c)+' — 需人工複查原因（機械式比對結果，非模型判斷）</div>').join('');
+}
+
+/* ============ 主流程 ============ */
+async function runModeA(){
+  const region=document.getElementById('region-input').value.trim();
+  sessionApiKey=document.getElementById('api-key-input').value.trim();
+  if(!region){ setStatus('請先輸入搜尋目標','var(--signal-amber)'); return; }
+  if(!sessionApiKey){ setStatus('請先輸入 Gemini API Key','var(--signal-amber)'); return; }
+
+  const btn=document.getElementById('run-btn');
+  btn.disabled=true; resetLeds(); setLed(1,'on-mint');
+
+  const depth=document.getElementById('search-depth-select').value;
+  const existingRaw=document.getElementById('existing-customers-input').value.trim();
+  const existingList=existingRaw?existingRaw.split('\n').map(s=>s.trim()).filter(Boolean):[];
+  const batches=buildBatches(region,depth);
+  const states=new Array(batches.length).fill('');
+  const results=[], failed=[];
+
+  setLed(2,'on-cyan');
+  try{
+    for(let i=0;i<batches.length;i++){
+      states[i]='active'; renderBatchDots(batches.length,states);
+      document.getElementById('batch-label').textContent='批次 '+(i+1)+'/'+batches.length+'：'+batches[i].name;
+      setStatus('自動分批執行中… 第 '+(i+1)+'/'+batches.length+' 批（'+batches[i].name+'）','var(--signal-cyan)');
+      try{
+        const raw=await groundBatch(region,batches[i],existingList);
+        const json=await formatBatch(region,raw,existingList);
+        results.push(json);
+        states[i]='done';
+      }catch(err){
+        states[i]='fail';
+        failed.push(batches[i].name+'（'+err.message.slice(0,60)+'）');
+      }
+      renderBatchDots(batches.length,states);
+      if(i<batches.length-1) await sleep(1500);
+    }
+
+    if(!results.length) throw new Error('所有批次皆失敗：'+failed.join('；'));
+
+    setLed(3,'on-cyan');
+    setStatus('合併去重與交叉驗證中…','var(--signal-cyan)');
+
+    let candidates=mergeCandidates(results);
+    const excluded=mergeExcluded(results);
+
+    if(existingList.length){
+      candidates.forEach(c=>{
+        const m=matchExistingCustomer(c.company,existingList);
+        if(m==='exact') c.listStatus='已知/既有';
+        else if(m==='suspect') c.listStatus='疑似既有(待確認)';
+        else if(!c.listStatus) c.listStatus='新名單';
+      });
+    } else {
+      candidates.forEach(c=>{ if(!c.listStatus) c.listStatus='新名單'; });
+    }
+
+    candidates.sort((a,b)=>{
+      const s=x=>(x.q3==='是'?0:1);
+      if(s(a)!==s(b)) return s(a)-s(b);
+      return (b.hitCount||1)-(a.hitCount||1);
+    });
+
+    renderVanished(computeVanished(region,candidates));
+    setLed(4,'on-mint');
+    let msg='完成：'+candidates.length+' 筆候選、'+excluded.length+' 筆排除（'+results.length+'/'+batches.length+' 批成功）';
+    if(failed.length) msg+='　⚠ 失敗批次：'+failed.join('；');
+    setStatus(msg,failed.length?'var(--signal-amber)':'var(--signal-mint)');
+    renderResults({candidates:candidates,excluded:excluded});
+    saveResult(region,candidates,excluded);
+  }catch(err){
+    setStatus('執行失敗：'+err.message,'var(--signal-red)');
+    resetLeds();
+  }finally{
+    btn.disabled=false;
+  }
+}
+
+/* ============ 渲染 ============ */
+function renderResults(json){
+  const body=document.getElementById('candidates-body');
+  const list=json.candidates||[];
+  lastCandidates=list; selectedIdx=new Set();
+  document.getElementById('select-all-checkbox').checked=false;
+  document.getElementById('result-count').textContent=list.length?'（共 '+list.length+' 筆，Q3剛需優先排序）':'';
+  if(!list.length){
+    body.innerHTML='<tr><td colspan="13" class="text-[var(--text-mid)] font-mono text-xs py-6 text-center">查無符合條件的候選廠商</td></tr>';
+  }else{
+    body.innerHTML=list.map((c,i)=>{
+      const statusCls=c.status==='已驗證'?'badge-mint':(c.status==='待查'?'badge-violet':'badge-amber');
+      const listCls=c.listStatus==='已知/既有'?'badge-cyan':(c.listStatus==='疑似既有(待確認)'?'badge-violet':'badge-mint');
+      const r1Cls=c.r1==='R1-D'?'badge-amber':'badge-cyan';
+      const q3Cls=c.q3==='是'?'badge-mint':'badge-violet';
+      const mapsUrl='https://www.google.com/maps/search/?api=1&query='+encodeURIComponent(c.address||c.company||'');
+      const searchUrl='https://www.google.com/search?q='+encodeURIComponent([c.company,c.address].filter(Boolean).join(' '));
+      const hit=(c.hitCount||1)>1?'<br><span class="badge badge-cyan">交叉驗證×'+c.hitCount+'</span>':'';
+      return '<tr>'
+        +'<td><input type="checkbox" class="row-checkbox" data-idx="'+i+'" onchange="toggleRow('+i+',this.checked)"></td>'
+        +'<td class="text-[var(--text-hi)] min-w-[110px]">'+esc(c.company)+hit+'</td>'
+        +'<td>'+esc(c.taxId)+'</td>'
+        +'<td class="text-[var(--text-mid)] min-w-[140px]">'+esc(c.address)+'<br><span class="text-[10px] opacity-70">'+esc(c.locationCluster)+'</span></td>'
+        +'<td class="min-w-[110px]">'+esc(c.phone)+'<br><span class="text-[10px] opacity-70">'+esc(c.contactPerson)+'</span></td>'
+        +'<td><span class="badge '+r1Cls+'">'+esc(c.r1)+'</span></td>'
+        +'<td class="text-[var(--text-mid)]">'+esc(c.industryType)+'</td>'
+        +'<td class="text-[10px] whitespace-nowrap">Q1 '+esc(c.q1||'—')+'<br>Q2 '+esc(c.q2||'—')+'<br><span class="badge '+q3Cls+'">Q3 '+esc(c.q3||'—')+'</span></td>'
+        +'<td class="text-[10.5px] text-[var(--text-mid)] min-w-[180px] leading-relaxed">'+esc(c.matchReason)+'</td>'
+        +'<td><span class="badge '+listCls+'">'+esc(c.listStatus)+'</span></td>'
+        +'<td><span class="badge '+statusCls+'">'+esc(c.status)+'</span></td>'
+        +'<td>'+(c.source&&c.source!=='未查得'?'<a href="'+esc(c.source)+'" target="_blank" class="text-[var(--signal-cyan)] underline">連結</a>':'<span class="text-[var(--text-mid)]">—</span>')+'</td>'
+        +'<td class="whitespace-nowrap"><a href="'+mapsUrl+'" target="_blank" class="btn-action btn-action-cyan">地圖</a>'
+        +'<a href="'+searchUrl+'" target="_blank" class="btn-action btn-action-amber">搜尋</a></td>'
+        +'</tr>';
+    }).join('');
+  }
+  const exBody=document.getElementById('excluded-body');
+  const ex=json.excluded||[];
+  exBody.innerHTML=ex.length
+    ?ex.map(x=>'<tr><td class="text-[var(--text-hi)]">'+esc(x.company)+'</td><td class="text-[var(--text-mid)]">'+esc(x.x1Reason)+'</td></tr>').join('')
+    :'<tr><td colspan="2" class="text-[var(--text-mid)] font-mono text-xs py-4 text-center">無</td></tr>';
+}
+
+function toggleRow(i,checked){
+  if(checked) selectedIdx.add(i); else selectedIdx.delete(i);
+  document.getElementById('select-all-checkbox').checked=lastCandidates.length>0&&selectedIdx.size===lastCandidates.length;
+}
+function toggleSelectAll(checked){
+  selectedIdx=new Set();
+  document.querySelectorAll('.row-checkbox').forEach(cb=>{ cb.checked=checked; if(checked) selectedIdx.add(parseInt(cb.dataset.idx)); });
+}
+/* ============ 結果保存與還原（避免關閉分頁／改版後資料消失） ============ */
+const RESULT_STORAGE_KEY='leadgen_last_result_v3';
+function saveResult(region,candidates,excluded){
+  try{
+    localStorage.setItem(RESULT_STORAGE_KEY,JSON.stringify({
+      region:region,savedAt:new Date().toISOString(),
+      candidates:candidates,excluded:excluded
+    }));
+  }catch(e){ /* 容量超限或隱私模式，靜默略過，不影響主流程 */ }
+}
+function loadSavedResult(){
+  try{ const raw=localStorage.getItem(RESULT_STORAGE_KEY); return raw?JSON.parse(raw):null; }catch(e){ return null; }
+}
+function checkRestoreBanner(){
+  const saved=loadSavedResult();
+  if(!saved||!saved.candidates||!saved.candidates.length) return;
+  const d=new Date(saved.savedAt);
+  const when=d.toLocaleString('zh-TW',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'});
+  document.getElementById('restore-banner').classList.remove('hidden');
+  document.getElementById('restore-text').textContent=
+    '偵測到上次結果：'+(saved.region||'未命名')+'　'+saved.candidates.length+' 筆　('+when+')';
+}
+function restoreSavedResult(){
+  const saved=loadSavedResult();
+  if(!saved) return;
+  if(saved.region) document.getElementById('region-input').value=saved.region;
+  renderResults({candidates:saved.candidates,excluded:saved.excluded||[]});
+  document.getElementById('restore-banner').classList.add('hidden');
+  setStatus('已還原上次結果（'+saved.candidates.length+' 筆）','var(--signal-mint)');
+}
+function dismissRestoreBanner(){ document.getElementById('restore-banner').classList.add('hidden'); }
+
+/* ============ 匯入先前匯出的 Excel（含舊版本檔案） ============ */
+const IMPORT_MAP={
+  '公司名稱':'company','統一編號':'taxId','地址':'address','所在聚落':'locationCluster',
+  '電話':'phone','聯絡人':'contactPerson','官網':'website','R1分類':'r1','產業型態':'industryType',
+  'Q1':'q1','Q2':'q2','Q3':'q3','交叉驗證次數':'hitCount','判斷理由':'matchReason',
+  '驗證狀態':'status','名單狀態':'listStatus','來源':'source'
+};
+function importFromExcel(ev){
+  const f=ev.target.files[0]; if(!f) return;
+  if(typeof XLSX==='undefined'){ setStatus('Excel 套件未載入，無法匯入','var(--signal-red)'); return; }
+  const reader=new FileReader();
+  reader.onload=e=>{
+    try{
+      const wb=XLSX.read(new Uint8Array(e.target.result),{type:'array'});
+      const ws=wb.Sheets[wb.SheetNames[0]];
+      const raw=XLSX.utils.sheet_to_json(ws,{defval:''});
+      if(!raw.length) throw new Error('檔案沒有資料列');
+      const candidates=raw.map(row=>{
+        const c={};
+        Object.keys(IMPORT_MAP).forEach(k=>{ if(row[k]!==undefined) c[IMPORT_MAP[k]]=row[k]; });
+        if(!c.company) return null;
+        c.hitCount=parseInt(c.hitCount)||1;
+        if(!c.listStatus) c.listStatus='新名單';
+        return c;
+      }).filter(Boolean);
+      if(!candidates.length) throw new Error('找不到「公司名稱」欄位，請確認是本工具匯出的檔案');
+      candidates.sort((a,b)=>{
+        const s=x=>(x.q3==='是'?0:1);
+        if(s(a)!==s(b)) return s(a)-s(b);
+        return (b.hitCount||1)-(a.hitCount||1);
+      });
+      renderResults({candidates:candidates,excluded:[]});
+      const region=document.getElementById('region-input').value.trim()||'匯入資料';
+      saveResult(region,candidates,[]);
+      document.getElementById('restore-banner').classList.add('hidden');
+      setStatus('已匯入 '+candidates.length+' 筆（連結欄位已依新版重新產生）','var(--signal-mint)');
+    }catch(err){
+      setStatus('匯入失敗：'+err.message,'var(--signal-red)');
+    }
+  };
+  reader.readAsArrayBuffer(f);
+  ev.target.value='';
+}
+
+/* ============ 匯出：共用資料組裝 ============ */
+function buildExportRows(){
+  const sel=lastCandidates.filter((c,i)=>selectedIdx.has(i));
+  // 依 Google Maps URLs 官方建議：query 用「地點名稱, 地址」可提高定位精準度
+  const linkOf=c=>{
+    const addr=(c.address&&c.address!=='未查得')?c.address:'';
+    const q=[c.company||'',addr].filter(Boolean).join(', ');
+    return {
+      map:'https://www.google.com/maps/search/?api=1&query='+encodeURIComponent(q||c.company||''),
+      search:'https://www.google.com/search?q='+encodeURIComponent([c.company,addr].filter(Boolean).join(' '))
+    };
+  };
+  const rows=sel.map(c=>({
+    '公司名稱':c.company||'','統一編號':c.taxId||'','地址':c.address||'','所在聚落':c.locationCluster||'',
+    '電話':c.phone||'','聯絡人':c.contactPerson||'','官網':c.website||'',
+    'R1分類':c.r1||'','產業型態':c.industryType||'','Q1':c.q1||'','Q2':c.q2||'','Q3':c.q3||'',
+    '交叉驗證次數':c.hitCount||1,'判斷理由':c.matchReason||'','驗證狀態':c.status||'','名單狀態':c.listStatus||'',
+    '來源':c.source||'','Google地圖':'','Google搜尋':''
+  }));
+  return {sel:sel,rows:rows,linkOf:linkOf};
+}
+
+function exportSelectedToExcel(){
+  if(typeof XLSX==='undefined'){ setStatus('Excel 套件載入失敗，請檢查網路','var(--signal-red)'); return; }
+  if(!selectedIdx.size){ setStatus('請先勾選要匯出的候選廠商','var(--signal-amber)'); return; }
+  const {sel,rows,linkOf}=buildExportRows();
+  const ws=XLSX.utils.json_to_sheet(rows);
+  const header=Object.keys(rows[0]);
+  const mapCol=header.indexOf('Google地圖'), searchCol=header.indexOf('Google搜尋');
+  // 顯示文字用好讀標籤，實際連結存在儲存格的 hyperlink 屬性中（收檔者點擊即跳轉）
+  sel.forEach((c,idx)=>{
+    const L=linkOf(c), r=idx+1;
+    ws[XLSX.utils.encode_cell({r:r,c:mapCol})]={t:'s',v:'開啟地圖',l:{Target:L.map,Tooltip:'Google 地圖（手機／電腦皆可開啟）'}};
+    ws[XLSX.utils.encode_cell({r:r,c:searchCol})]={t:'s',v:'跳轉搜尋',l:{Target:L.search,Tooltip:'Google 搜尋'}};
+  });
+  ws['!cols']=header.map(k=>({wch:(k==='Google地圖'||k==='Google搜尋')?12:(k==='判斷理由'?40:(k==='地址'?26:14))}));
+  const wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,ws,'候選名單');
+  const region=document.getElementById('region-input').value.trim()||'未命名區域';
+  XLSX.writeFile(wb,'工控客群開發_'+region+'_'+new Date().toISOString().slice(0,10)+'.xlsx');
+  setStatus('已匯出 '+rows.length+' 筆（含地圖／搜尋超連結）','var(--signal-mint)');
+}
+
+/* 複製為 TSV，直接貼進 Google 試算表即為可點連結（HYPERLINK 公式） */
+function copyForGoogleSheets(){
+  if(!selectedIdx.size){ setStatus('請先勾選要複製的候選廠商','var(--signal-amber)'); return; }
+  const {sel,rows,linkOf}=buildExportRows();
+  const header=Object.keys(rows[0]);
+  const clean=v=>String(v==null?'':v).replace(/[\t\r\n]/g,' ');
+  const lines=[header.join('\t')];
+  sel.forEach((c,idx)=>{
+    const L=linkOf(c);
+    const vals=header.map(k=>{
+      // 用 HYPERLINK 公式：貼進試算表後顯示為「開啟地圖」，分享給他人時對方點擊即跳轉
+      if(k==='Google地圖') return '=HYPERLINK("'+L.map+'","開啟地圖")';
+      if(k==='Google搜尋') return '=HYPERLINK("'+L.search+'","跳轉搜尋")';
+      return clean(rows[idx][k]);
+    });
+    lines.push(vals.join('\t'));
+  });
+  const tsv=lines.join('\n');
+  navigator.clipboard.writeText(tsv)
+    .then(()=>setStatus('已複製 '+sel.length+' 筆，直接貼到 Google 試算表即可（連結可點）','var(--signal-mint)'))
+    .catch(()=>{
+      const ta=document.createElement('textarea');
+      ta.value=tsv; document.body.appendChild(ta); ta.select();
+      document.execCommand('copy'); document.body.removeChild(ta);
+      setStatus('已複製 '+sel.length+' 筆，直接貼到 Google 試算表即可','var(--signal-mint)');
+    });
+}
+function toggleExcluded(){
+  const wrap=document.getElementById('excluded-wrap');
+  const hidden=wrap.classList.toggle('hidden');
+  document.getElementById('excluded-toggle-icon').textContent=hidden?'▸':'▾';
+}
+function generateModeB(){
+  const region=document.getElementById('region-input').value.trim();
+  if(!region){ setStatus('請先輸入搜尋目標','var(--signal-amber)'); return; }
+  const depth=document.getElementById('search-depth-select').value;
+  const batches=buildBatches(region,depth);
+  const existingRaw=document.getElementById('existing-customers-input').value.trim();
+  const existingBlock=existingRaw?'\n\n【既有／已知客戶名單】\n'+existingRaw:'';
+  const matrix=batches.map((b,i)=>'第'+(i+1)+'批（'+b.name+'）：\n'+b.queries.join('\n')).join('\n\n');
+  document.getElementById('instruction-output').value=
+    SYSTEM_INSTRUCTION+'\n\n【輸出格式】\n'+JSON_FORMAT_INSTRUCTION+
+    '\n\n請使用你的網頁搜尋能力，依下列分批查詢清單針對「'+region+'」完整執行檢索，全部跑完後再一次彙整輸出（不需中途詢問我）：\n\n'+matrix+existingBlock;
+  document.getElementById('mode-b-output').classList.remove('hidden');
+  setStatus('已產生指令，請點「一鍵複製」','var(--signal-mint)');
+}
+function copyInstruction(){
+  const ta=document.getElementById('instruction-output');
+  ta.select();
+  navigator.clipboard.writeText(ta.value)
+    .then(()=>setStatus('已複製到剪貼簿','var(--signal-mint)'))
+    .catch(()=>{ document.execCommand('copy'); setStatus('已複製到剪貼簿','var(--signal-mint)'); });
+}
+
+renderKeywordChips();
+checkRestoreBanner();
+</script>
+</body>
+</html>
