@@ -44,3 +44,28 @@
 教訓：GAS Web App 的前後端都跟著部署版本走，clasp push 只是更新程式碼，Web App 要吃到新版必須建新版本部署。沒有例外。
 
 制度修改：sales-visit-system 交接摘要已更新此規則。
+
+## [2026-07-28] Gemini grounding 與強制 JSON 模式不可並用
+情境：開發「開發系統」工具時，依規格要求同時啟用 googleSearch grounding 與 responseMimeType: application/json，實際呼叫直接回 HTTP 400。
+教訓：Gemini API 的 Google Search grounding 與 JSON/YAML/XML 強制輸出模式互斥，官方論壇與文件皆證實。正確做法是拆成兩段呼叫：第一段開 grounding 取得有依據的原始資料（不強制格式），第二段關閉 grounding、加 responseMimeType 做「只整理不新增」的收斂。這樣同時符合零幻覺原則（查證與格式化分離）。兩段呼叫都必須設 maxOutputTokens，否則長名單會被截斷、導致第二段 JSON.parse 失敗，錯誤訊息會誤導成「模型不聽話」。
+制度修改：無（屬工具實作層，已落實於 tools/prospect-leadgen-v3.html 與 API_System_Prompt.txt）。
+
+## [2026-07-28] AI Studio 新建金鑰一律繫結服務帳戶，與 HTTP referrer 限制互斥
+情境：為降低前端金鑰外洩風險，規劃為開發系統的金鑰加上「網站限制」（限定 darciachen.github.io/*）。實際操作發現 AI Studio 新建金鑰的應用程式限制中，「網站」選項被灰掉並提示「這個選項不適用於透過服務帳戶驗證的 API 金鑰」；改從 Cloud Console 建立亦然，Gemini API 選項提示「必須使用繫結至服務帳戶的 API 金鑰，才能驗證這個 API」。
+教訓：現行政策下，能呼叫 Gemini API 的金鑰強制繫結服務帳戶，而服務帳戶驗證與 browserKeyRestrictions（HTTP referrer）互斥，兩者無法並存。前端直接呼叫 Gemini 的架構「無法」用網站白名單防護，這是政策層限制，不是設定方式問題，不要再嘗試各種建立路徑繞它。替代風險控管：金鑰僅限 Gemini API（本來就是預設）、免費層無帳單風險、設定帳單預算快訊當預警、定期輪替金鑰、一個工具一把金鑰以縮小影響範圍。
+制度修改：無。
+
+## [2026-07-28] Standard API key 九月全面失效，判讀看 Bound account 欄位
+情境：查證金鑰狀態時發現 Google 分兩階段淘汰舊制金鑰：2026/6/19 起拒絕未設限制的 standard key，2026/9 起拒絕所有 standard key，須改用 auth key。
+教訓：判讀方法最快是看 Cloud Console「憑證」清單的 Bound account 欄位——有繫結服務帳戶者為 auth key（不受影響），顯示「—」者為 standard key（九月會失效）。注意：standard key 就算補設限制也擋不過九月那關，唯一解是改用新建的 auth key。另注意六月那關的實際執行有寬限落差（本案舊金鑰無限制卻仍可用），不可因「現在還能用」而推論安全。
+制度修改：無。
+
+## [2026-07-28] 自動化 workflow 只做 clasp push，未做 deploy，教訓未被制度化
+情境：sales-visit-system 的 GitHub Actions（clasp-push.yml）長期只執行 clasp push --force，沒有 clasp deploy。推送備用金鑰功能後 Actions 顯示成功，但 Web App 實際仍跑舊版程式碼，需人工進編輯器建版本。
+教訓：「clasp push ≠ 新版本部署」這條教訓早在 2026-07-23 就已記錄，但只寫進文件、沒有落實到自動化流程裡，等於教訓沒有被制度化，同一個坑再踩一次。凡是文件上的規則，都要回頭檢查對應的自動化腳本是否已實作；否則規則只在人記得時有效。修法：workflow 補上 clasp deploy -i <既有部署ID>，指定 ID 才會更新同一個網址，不指定會另建新部署產生新網址。
+制度修改：clasp-push.yml 已補上 deploy 步驟（commit 6d1d4e1）。
+
+## [2026-07-28] 部署 ID 就是 Web App 網址中的 AKfycby 那串
+情境：要為 workflow 補上 clasp deploy -i 時，向 Darcia 索取部署 ID，並誤稱網址裡的 AKfycby... 不是部署 ID、應另有一組短碼。
+教訓：clasp 的 deploymentId 與 Web App 網址中的識別字串就是同一個值（官方與社群設定檔範例皆為 deploymentId=AKfycb...）。此為憑印象作答導致的錯誤指路，害使用者多跑一趟。凡涉及識別碼、端點、規格格式的斷言，查證後再說；不確定時直接說不確定，比給一個看似合理的錯誤方向成本低。
+制度修改：無（judgment-rubrics 既有「不得憑記憶斷言規格」原則之實例）。
