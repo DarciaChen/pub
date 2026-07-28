@@ -125,6 +125,111 @@
     width:100%;
     accent-color:var(--amber);
   }
+  .importRow{
+    display:flex;
+    align-items:center;
+    gap:10px;
+    margin:0 2px 14px;
+  }
+  #importBtn{
+    background:var(--panel);
+    border:1px solid var(--line);
+    color:var(--paper);
+    border-radius:8px;
+    padding:10px 14px;
+    font-size:14px;
+    font-family:inherit;
+    cursor:pointer;
+    white-space:nowrap;
+  }
+  #importBtn:active{transform:scale(0.98);}
+  .fileName{
+    font-size:12px;
+    color:var(--paper-dim);
+    overflow:hidden;
+    text-overflow:ellipsis;
+    white-space:nowrap;
+  }
+  .book{
+    background:var(--panel);
+    border:1px solid var(--line);
+    border-radius:10px;
+    margin-bottom:14px;
+    overflow:hidden;
+  }
+  .bookHeader{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    padding:10px 14px;
+    border-bottom:1px solid var(--line);
+  }
+  .bookTitle{
+    font-family:Georgia, "Noto Serif TC", serif;
+    font-size:15px;
+    color:var(--amber);
+    overflow:hidden;
+    text-overflow:ellipsis;
+    white-space:nowrap;
+  }
+  .closeBook{
+    background:transparent;
+    border:none;
+    color:var(--paper-dim);
+    font-size:13px;
+    cursor:pointer;
+    padding:4px 6px;
+  }
+  .bookContent{
+    max-height:280px;
+    overflow-y:auto;
+    padding:16px 18px;
+    font-family:Georgia, "Noto Serif TC", serif;
+    line-height:1.85;
+    font-size:16px;
+  }
+  .bookContent h1, .bookContent h2, .bookContent h3{
+    color:var(--amber);
+    margin:0.8em 0 0.4em;
+    line-height:1.4;
+  }
+  .bookContent h1{font-size:1.3em;}
+  .bookContent h2{font-size:1.15em;}
+  .bookContent h3{font-size:1.05em;}
+  .bookContent p{margin:0 0 0.9em;}
+  .bookContent li{margin-bottom:0.4em;}
+  .bookContent .para{
+    border-radius:6px;
+    padding:2px 6px;
+    margin:0 -6px;
+    transition:background 0.25s ease;
+  }
+  .bookContent .para.active{
+    background:rgba(214,162,78,0.18);
+  }
+  .bookNav{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:10px;
+    padding:10px 14px;
+    border-top:1px solid var(--line);
+  }
+  .bookNav button{
+    background:transparent;
+    border:1px solid var(--line);
+    color:var(--paper);
+    border-radius:8px;
+    padding:8px 12px;
+    font-size:13px;
+    font-family:inherit;
+    cursor:pointer;
+  }
+  .bookNav button:disabled{opacity:0.35; cursor:not-allowed;}
+  .paraCount{
+    font-size:12px;
+    color:var(--paper-dim);
+  }
   .actions{
     display:flex;
     gap:10px;
@@ -175,7 +280,26 @@
     <span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span>
   </div>
 
-  <textarea id="text" placeholder="貼上或輸入想要朗讀的文字……"></textarea>
+  <div class="importRow">
+    <button id="importBtn" type="button">📄 匯入 MD 檔</button>
+    <input type="file" id="fileInput" accept=".md,.markdown,text/markdown,text/plain" hidden>
+    <span class="fileName" id="fileName"></span>
+  </div>
+
+  <div class="book" id="book" hidden>
+    <div class="bookHeader">
+      <span class="bookTitle" id="bookTitle"></span>
+      <button id="closeBook" type="button" class="closeBook">✕ 關閉</button>
+    </div>
+    <div class="bookContent" id="bookContent"></div>
+    <div class="bookNav">
+      <button id="prevPara" type="button">‹ 上一段</button>
+      <span class="paraCount" id="paraCount"></span>
+      <button id="nextPara" type="button">下一段 ›</button>
+    </div>
+  </div>
+
+  <textarea id="text" placeholder="貼上或輸入想要朗讀的文字……，或匯入 MD 檔"></textarea>
 
   <div class="row">
     <select id="voice"></select>
@@ -300,6 +424,163 @@ function jitter(value, amount){
   return Math.max(0.5, Math.min(2, value + delta));
 }
 
+// ===== MD 匯入 · 電子書閱讀區 =====
+const importBtn = document.getElementById('importBtn');
+const fileInput = document.getElementById('fileInput');
+const fileNameEl = document.getElementById('fileName');
+const bookEl = document.getElementById('book');
+const bookTitleEl = document.getElementById('bookTitle');
+const bookContentEl = document.getElementById('bookContent');
+const closeBookBtn = document.getElementById('closeBook');
+const prevParaBtn = document.getElementById('prevPara');
+const nextParaBtn = document.getElementById('nextPara');
+const paraCountEl = document.getElementById('paraCount');
+
+// 書本模式狀態：段落陣列（純文字，供朗讀用）與目前段落索引
+let bookParas = [];      // [{ text, el }]
+let bookIndex = 0;
+let bookMode = false;
+
+// 極簡 Markdown 解析：只處理標題(#)、清單(-/*)、粗體/斜體、其餘視為段落
+// 目的是排版呈現，不追求完整 CommonMark 相容
+function parseMarkdown(md){
+  const lines = md.replace(/\r\n/g, '\n').split('\n');
+  const blocks = []; // { type: 'h1'|'h2'|'h3'|'p'|'li', text }
+  let paragraphBuf = [];
+
+  function flushParagraph(){
+    if (paragraphBuf.length){
+      blocks.push({ type: 'p', text: paragraphBuf.join(' ').trim() });
+      paragraphBuf = [];
+    }
+  }
+
+  lines.forEach(raw => {
+    const line = raw.trim();
+    if (!line){ flushParagraph(); return; }
+    const h = line.match(/^(#{1,3})\s+(.*)$/);
+    if (h){
+      flushParagraph();
+      blocks.push({ type: 'h' + h[1].length, text: h[2].trim() });
+      return;
+    }
+    const li = line.match(/^[-*]\s+(.*)$/);
+    if (li){
+      flushParagraph();
+      blocks.push({ type: 'li', text: li[1].trim() });
+      return;
+    }
+    paragraphBuf.push(line);
+  });
+  flushParagraph();
+  return blocks;
+}
+
+// 去除殘留的 md 語法標記（粗體/斜體/行內程式碼/連結），只留下純文字給朗讀與顯示用
+function stripInline(text){
+  return text
+    .replace(/`([^`]+)`/g, '$1')
+    .replace(/\*\*([^*]+)\*\*/g, '$1')
+    .replace(/\*([^*]+)\*/g, '$1')
+    .replace(/__([^_]+)__/g, '$1')
+    .replace(/_([^_]+)_/g, '$1')
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1');
+}
+
+function renderBook(filename, md){
+  const blocks = parseMarkdown(md);
+  bookTitleEl.textContent = filename;
+  bookContentEl.innerHTML = '';
+  bookParas = [];
+
+  let listBuf = null;
+  function flushList(){
+    if (listBuf){ bookContentEl.appendChild(listBuf); listBuf = null; }
+  }
+
+  blocks.forEach(b => {
+    const clean = stripInline(b.text);
+    if (!clean) return;
+
+    if (b.type === 'li'){
+      if (!listBuf){ listBuf = document.createElement('ul'); }
+      const li = document.createElement('li');
+      li.className = 'para';
+      li.textContent = clean;
+      listBuf.appendChild(li);
+      bookParas.push({ text: clean, el: li });
+      return;
+    }
+    flushList();
+
+    const tag = (b.type === 'h1' || b.type === 'h2' || b.type === 'h3') ? b.type : 'p';
+    const el = document.createElement(tag);
+    el.className = 'para';
+    el.textContent = clean;
+    bookContentEl.appendChild(el);
+    bookParas.push({ text: clean, el });
+  });
+  flushList();
+
+  bookMode = true;
+  bookIndex = 0;
+  bookEl.hidden = false;
+  updateBookNav();
+  highlightPara(bookIndex);
+}
+
+function highlightPara(i){
+  bookParas.forEach((p, idx) => p.el.classList.toggle('active', idx === i));
+  if (bookParas[i]) bookParas[i].el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+}
+
+function updateBookNav(){
+  paraCountEl.textContent = bookParas.length ? `第 ${bookIndex + 1} / ${bookParas.length} 段` : '';
+  prevParaBtn.disabled = bookIndex <= 0;
+  nextParaBtn.disabled = bookIndex >= bookParas.length - 1;
+}
+
+importBtn.addEventListener('click', () => fileInput.click());
+
+fileInput.addEventListener('change', () => {
+  const file = fileInput.files[0];
+  if (!file) return;
+  fileNameEl.textContent = file.name;
+  const reader = new FileReader();
+  reader.onload = () => {
+    renderBook(file.name.replace(/\.(md|markdown|txt)$/i, ''), reader.result);
+    statusEl.textContent = `已匯入《${file.name}》，共 ${bookParas.length} 段，可逐段朗讀`;
+  };
+  reader.onerror = () => {
+    statusEl.textContent = '讀取檔案失敗，請確認檔案格式';
+  };
+  reader.readAsText(file, 'UTF-8');
+});
+
+closeBookBtn.addEventListener('click', () => {
+  bookMode = false;
+  bookEl.hidden = true;
+  bookParas = [];
+  fileNameEl.textContent = '';
+  fileInput.value = '';
+});
+
+function speakBookPara(i){
+  if (i < 0 || i >= bookParas.length) return;
+  bookIndex = i;
+  updateBookNav();
+  highlightPara(i);
+  synth.cancel();
+  queue = splitIntoClauses(bookParas[i].text);
+  queueIndex = 0;
+  playToken++;
+  speakNext(playToken);
+  setTimeout(() => { if (synth.paused) synth.resume(); }, 100);
+}
+
+prevParaBtn.addEventListener('click', () => speakBookPara(bookIndex - 1));
+nextParaBtn.addEventListener('click', () => speakBookPara(bookIndex + 1));
+
 let queue = [];
 let queueIndex = 0;
 let playToken = 0;
@@ -330,6 +611,11 @@ function speakNext(token){
   };
   utter.onend = () => {
     queueIndex++;
+    if (queueIndex >= queue.length && bookMode && bookIndex < bookParas.length - 1){
+      // 書本模式：這一段唸完，自動接續下一段
+      setTimeout(() => speakBookPara(bookIndex + 1), clause.pause + 200);
+      return;
+    }
     setTimeout(() => speakNext(token), clause.pause);
   };
 
@@ -337,9 +623,13 @@ function speakNext(token){
 }
 
 speakBtn.addEventListener('click', () => {
+  if (bookMode && bookParas.length){
+    speakBookPara(bookIndex);
+    return;
+  }
   const text = textEl.value.trim();
   if (!text){
-    statusEl.textContent = '請先輸入文字';
+    statusEl.textContent = '請先輸入文字，或匯入 MD 檔';
     return;
   }
   synth.cancel();
