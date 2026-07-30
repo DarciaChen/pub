@@ -69,3 +69,12 @@
 情境：要為 workflow 補上 clasp deploy -i 時，向 Darcia 索取部署 ID，並誤稱網址裡的 AKfycby... 不是部署 ID、應另有一組短碼。
 教訓：clasp 的 deploymentId 與 Web App 網址中的識別字串就是同一個值（官方與社群設定檔範例皆為 deploymentId=AKfycb...）。此為憑印象作答導致的錯誤指路，害使用者多跑一趟。凡涉及識別碼、端點、規格格式的斷言，查證後再說；不確定時直接說不確定，比給一個看似合理的錯誤方向成本低。
 制度修改：無（judgment-rubrics 既有「不得憑記憶斷言規格」原則之實例）。
+
+## [2026-07-28] 金鑰格式 AIza→AQ.，且備援判斷漏掉 401
+情境：為使用者整理待辦清單時，寫「新金鑰開頭 AIza」，被使用者指出實際是 AQ 開頭。查證後確認：舊制 Standard key 開頭 `AIza`，新制 Auth key 開頭 `AQ.Ab`，AI Studio 現在核發一律為後者。
+教訓：
+1. 判讀金鑰類型看開頭最快（AIza=standard、AQ.Ab=auth），比翻 Cloud Console 的 Bound account 欄位省事。
+2. **連帶發現今天寫的備援邏輯有漏洞**：`isKeyInvalidError` / `_isGeminiKeyInvalid` 只判斷 400/403，但已有回報 AQ. 金鑰在原生端點回 **401 ACCESS_TOKEN_TYPE_UNSUPPORTED**。判斷條件須加入 401，否則九月主鑰失效若回 401，備援不會觸發。錯誤碼屬於外部規格，同樣不得憑常見情況推測。
+3. AQ. 金鑰在原生端點（generativelanguage.googleapis.com + `?key=`）可正常運作，在 OpenAI 相容路徑會回 401。三個系統均走原生端點，不受影響。
+4. 更深層的教訓（社群共識）：不要在程式裡驗證金鑰的「形狀」（如 regex 檢查 AIza 開頭），憑證格式是供應商可隨時更換的不透明字串，寫死格式等於埋下未來的故障點。本次僅將格式寫在 placeholder 提示文字（不參與驗證），屬可接受用法。
+制度修改：待辦清單已列為第 3-0 項待修；tools/prospect-leadgen-v3.html 的 placeholder 已改（commit cf76a937）。
