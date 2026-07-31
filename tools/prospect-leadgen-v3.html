@@ -431,7 +431,7 @@ function renderBatchDots(total,states){
 }
 
 /* ============ Gemini 呼叫（含 429/503 自動重試、maxOutputTokens 防截斷） ============ */
-const MODEL='gemini-2.5-flash-lite';
+const MODEL='gemini-3.5-flash-lite';
 async function callGemini(body,label,maxAttempts){
   maxAttempts=maxAttempts||3;
   for(let attempt=1;attempt<=maxAttempts;attempt++){
