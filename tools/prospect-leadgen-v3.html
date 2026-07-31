@@ -240,7 +240,7 @@
   </div>
 
   <footer class="text-center text-[11px] font-mono text-[var(--text-mid)] mt-8 pb-4">
-    模型 gemini-3.5-flash-lite　·　範圍：台灣　·　關鍵詞與歷次名單存於本機瀏覽器
+    模型 <span id="model-footer-label"></span>　·　範圍：台灣　·　關鍵詞與歷次名單存於本機瀏覽器
   </footer>
 </div>
 
@@ -880,6 +880,7 @@ function copyInstruction(){
 }
 
 renderKeywordChips();
+document.getElementById("model-footer-label").textContent = MODEL;
 checkRestoreBanner();
 initApiKey();
 </script>
