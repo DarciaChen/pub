@@ -76,7 +76,7 @@
   <header class="panel px-6 py-5 mb-6 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
     <div>
       <div class="text-xs font-mono tracking-widest text-[var(--signal-cyan)] mb-1">MODEL&nbsp;&nbsp;IC-LEADGEN&nbsp;&nbsp;v3&nbsp;&nbsp;/&nbsp;&nbsp;工控儀表業務開發</div>
-      <div class="text-[10px] font-mono text-[var(--text-mid)] mb-1">部署版本：<span id="build-stamp">2026-08-03 15:46（台灣時間）</span>　·　若您看到的時間不是最新一次改版時間，代表快取還沒更新，請強制重新整理</div>
+      <div class="text-[10px] font-mono text-[var(--text-mid)] mb-1">部署版本：<span id="build-stamp">2026-08-03 15:54（台灣時間）</span>　·　若您看到的時間不是最新一次改版時間，代表快取還沒更新，請強制重新整理</div>
       <h1 class="font-display text-2xl md:text-3xl font-bold">工控客群開發自動化工具</h1>
       <div class="text-sm text-[var(--text-mid)] mt-1">自動分批檢索　·　Q1/Q2/Q3/X1 四層判斷　·　交叉驗證計次　·　零幻覺輸出</div>
     </div>
@@ -241,7 +241,7 @@
   </div>
 
   <footer class="text-center text-[11px] font-mono text-[var(--text-mid)] mt-8 pb-4">
-    模型 <span id="model-footer-label"></span>　·　範圍：台灣　·　關鍵詞與歷次名單存於本機瀏覽器
+    查證模型 <span id="ground-model-label"></span>　·　格式化模型 <span id="format-model-label"></span>　·　範圍：台灣　·　關鍵詞與歷次名單存於本機瀏覽器
   </footer>
 </div>
 
@@ -432,13 +432,18 @@ function renderBatchDots(total,states){
 }
 
 /* ============ Gemini 呼叫（含 429/503 自動重試、maxOutputTokens 防截斷） ============ */
-const MODEL='gemini-3.5-flash-lite';
-async function callGemini(body,label,maxAttempts){
+// 兩段呼叫刻意用不同模型：
+// GROUND_MODEL 負責 Google Search grounding 查證 —— 免費層下 Gemini 3 系列（含3.5）的
+// grounding 工具額度是 0/0，完全不可用（非額度不足，是政策性關閉），故固定用 2.5 系列。
+// FORMAT_MODEL 負責 JSON 格式化 —— 不使用 grounding 工具，用 3.5-flash-lite 換取較高的 RPD（500 vs 20）。
+const GROUND_MODEL='gemini-2.5-flash';
+const FORMAT_MODEL='gemini-3.5-flash-lite';
+async function callGemini(body,label,model,maxAttempts){
   maxAttempts=maxAttempts||3;
   for(let attempt=1;attempt<=maxAttempts;attempt++){
     let resp;
     try{
-      resp=await fetch('https://generativelanguage.googleapis.com/v1beta/models/'+MODEL+':generateContent?key='+encodeURIComponent(sessionApiKey),
+      resp=await fetch('https://generativelanguage.googleapis.com/v1beta/models/'+model+':generateContent?key='+encodeURIComponent(sessionApiKey),
         {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
     }catch(netErr){
       if(attempt<maxAttempts){ await sleep(2000*attempt); continue; }
@@ -492,7 +497,7 @@ async function groundBatch(region,batch,existingList){
     tools:[{googleSearch:{}}],
     generationConfig:{maxOutputTokens:8192}
   };
-  return extractText(await callGemini(body,'批次「'+batch.name+'」檢索'));
+  return extractText(await callGemini(body,'批次「'+batch.name+'」檢索',GROUND_MODEL));
 }
 async function formatBatch(region,rawText,existingList){
   const existingBlock=existingList.length?'\n\n【既有／已知客戶名單】\n'+existingList.join('\n'):'';
@@ -502,7 +507,7 @@ async function formatBatch(region,rawText,existingList){
       '\n\n請將以上「'+region+'」的查證資料，依系統指令規則分類並轉成指定 JSON 結構。'}]}],
     generationConfig:{responseMimeType:'application/json',maxOutputTokens:8192}
   };
-  let text=extractText(await callGemini(body,'批次結構化'));
+  let text=extractText(await callGemini(body,'批次結構化',FORMAT_MODEL));
   text=text.replace(/```json|```/g,'').trim();
   try{ return JSON.parse(text); }
   catch(e){ throw new Error('JSON 解析失敗（可能被截斷），回應開頭：'+text.slice(0,120)); }
@@ -902,7 +907,8 @@ function copyInstruction(){
 }
 
 renderKeywordChips();
-document.getElementById("model-footer-label").textContent = MODEL;
+document.getElementById("ground-model-label").textContent = GROUND_MODEL;
+document.getElementById("format-model-label").textContent = FORMAT_MODEL;
 checkRestoreBanner();
 initApiKey();
 </script>
