@@ -451,7 +451,28 @@ async function callGemini(body,label,maxAttempts){
       await sleep(wait);
       continue;
     }
-    throw new Error(label+' 失敗 HTTP '+resp.status+'：'+errText.slice(0,180));
+    throw new Error(label+' 失敗 HTTP '+resp.status+'：'+describeGeminiError(errText));
+  }
+}
+// 從錯誤回應中解析出關鍵欄位(message + quotaId/quotaMetric)，而非單純截斷前N字
+// 因為 429 錯誤最有診斷價值的 quotaId 常常出現在 message 之後，簡單截斷會把它切掉
+function describeGeminiError(errText){
+  try{
+    const j=JSON.parse(errText);
+    const err=j.error||{};
+    let out=err.message||'（無訊息）';
+    const details=err.details||[];
+    for(const d of details){
+      const violations=d.violations||[];
+      for(const v of violations){
+        if(v.quotaId) out+='｜quotaId='+v.quotaId;
+        if(v.quotaMetric) out+='｜quotaMetric='+v.quotaMetric;
+        if(v.quotaValue) out+='｜quotaValue='+v.quotaValue;
+      }
+    }
+    return out;
+  }catch(e){
+    return errText.slice(0,400); // 解析失敗才退回截斷，且放寬到400字
   }
 }
 function extractText(data){
