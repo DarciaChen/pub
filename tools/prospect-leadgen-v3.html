@@ -76,7 +76,7 @@
   <header class="panel px-6 py-5 mb-6 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
     <div>
       <div class="text-xs font-mono tracking-widest text-[var(--signal-cyan)] mb-1">MODEL&nbsp;&nbsp;IC-LEADGEN&nbsp;&nbsp;v3&nbsp;&nbsp;/&nbsp;&nbsp;工控儀表業務開發</div>
-      <div class="text-[10px] font-mono text-[var(--text-mid)] mb-1">部署版本：<span id="build-stamp">2026-08-03 16:02（台灣時間）</span>　·　若您看到的時間不是最新一次改版時間，代表快取還沒更新，請強制重新整理</div>
+      <div class="text-[10px] font-mono text-[var(--text-mid)] mb-1">部署版本：<span id="build-stamp">2026-08-03 16:15（台灣時間）</span>　·　若您看到的時間不是最新一次改版時間，代表快取還沒更新，請強制重新整理</div>
       <h1 class="font-display text-2xl md:text-3xl font-bold">工控客群開發自動化工具</h1>
       <div class="text-sm text-[var(--text-mid)] mt-1">自動分批檢索　·　Q1/Q2/Q3/X1 四層判斷　·　交叉驗證計次　·　零幻覺輸出</div>
     </div>
@@ -436,7 +436,12 @@ function renderBatchDots(total,states){
 // GROUND_MODEL 負責 Google Search grounding 查證 —— 免費層下 Gemini 3 系列（含3.5）的
 // grounding 工具額度是 0/0，完全不可用（非額度不足，是政策性關閉），故固定用 2.5 系列。
 // FORMAT_MODEL 負責 JSON 格式化 —— 不使用 grounding 工具，用 3.5-flash-lite 換取較高的 RPD（500 vs 20）。
-const GROUND_MODEL='gemini-2.5-flash';
+// GROUND_MODELS 輪流清單：免費層下 Gemini 3 系列（含3.5）的 grounding 工具額度是 0/0，
+// 完全不可用（政策性關閉，非用完），可用且支援 grounding 的只有 gemini-2.5-flash 與
+// gemini-2.5-flash-lite 兩支，各自每日 20 次獨立額度。批次間輪流使用，把單支20次
+// 的天花板變成兩支合計最多40次，每日可完整跑（6批）的次數大致從3次提升到6次。
+const GROUND_MODELS=['gemini-2.5-flash','gemini-2.5-flash-lite'];
+function pickGroundModel(batchIndex){ return GROUND_MODELS[batchIndex % GROUND_MODELS.length]; }
 const FORMAT_MODEL='gemini-3.5-flash-lite';
 async function callGemini(body,label,model,maxAttempts){
   maxAttempts=maxAttempts||3;
@@ -486,7 +491,8 @@ function extractText(data){
   return parts.map(p=>p.text||'').join('');
 }
 
-async function groundBatch(region,batch,existingList){
+async function groundBatch(region,batch,existingList,batchIndex){
+  const groundModel=pickGroundModel(batchIndex);
   const existingBlock=existingList.length?'\n\n【既有／已知客戶名單】\n'+existingList.join('\n'):'';
   const body={
     systemInstruction:{parts:[{text:SYSTEM_INSTRUCTION}]},
@@ -497,7 +503,7 @@ async function groundBatch(region,batch,existingList){
     tools:[{googleSearch:{}}],
     generationConfig:{maxOutputTokens:8192}
   };
-  return extractText(await callGemini(body,'批次「'+batch.name+'」檢索',GROUND_MODEL));
+  return extractText(await callGemini(body,'批次「'+batch.name+'」檢索（'+groundModel+'）',groundModel));
 }
 async function formatBatch(region,rawText,existingList){
   const existingBlock=existingList.length?'\n\n【既有／已知客戶名單】\n'+existingList.join('\n'):'';
@@ -584,7 +590,7 @@ async function runModeA(){
       document.getElementById('batch-label').textContent='批次 '+(i+1)+'/'+batches.length+'：'+batches[i].name;
       setStatus('自動分批執行中… 第 '+(i+1)+'/'+batches.length+' 批（'+batches[i].name+'）','var(--signal-cyan)');
       try{
-        const raw=await groundBatch(region,batches[i],existingList);
+        const raw=await groundBatch(region,batches[i],existingList,i);
         const json=await formatBatch(region,raw,existingList);
         results.push(json);
         states[i]='done';
@@ -907,7 +913,7 @@ function copyInstruction(){
 }
 
 renderKeywordChips();
-document.getElementById("ground-model-label").textContent = GROUND_MODEL;
+document.getElementById("ground-model-label").textContent = GROUND_MODELS.join(' / ') + '（輪流）';
 document.getElementById("format-model-label").textContent = FORMAT_MODEL;
 checkRestoreBanner();
 initApiKey();
