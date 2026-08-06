@@ -222,8 +222,8 @@
           <table class="data-table">
             <thead><tr>
               <th style="width:30px"><input type="checkbox" id="select-all-checkbox" onchange="toggleSelectAll(this.checked)"></th>
-              <th>公司名稱</th><th>統編</th><th>地址／聚落</th><th>電話／聯絡人</th>
-              <th>R1</th><th>產業型態</th><th>Q1/Q2/Q3</th><th>判斷理由</th><th>名單狀態</th><th>驗證</th><th>來源</th><th>操作</th>
+              <th>公司名稱</th><th>操作</th><th>判斷理由</th><th>Q1/Q2/Q3</th>
+              <th>R1</th><th>產業型態</th><th>地址／聚落</th><th>電話／聯絡人</th><th>統編</th><th>名單狀態</th><th>驗證</th><th>來源</th>
             </tr></thead>
             <tbody id="candidates-body">
               <tr><td colspan="13" class="text-[var(--text-mid)] font-mono text-xs py-6 text-center">尚無資料，請輸入區域並執行檢索</td></tr>
@@ -669,18 +669,18 @@ function renderResults(json){
       return '<tr>'
         +'<td><input type="checkbox" class="row-checkbox" data-idx="'+i+'" onchange="toggleRow('+i+',this.checked)"></td>'
         +'<td class="text-[var(--text-hi)] min-w-[110px]">'+esc(c.company)+hit+'</td>'
-        +'<td>'+esc(c.taxId)+'</td>'
-        +'<td class="text-[var(--text-mid)] min-w-[140px]">'+esc(c.address)+'<br><span class="text-[10px] opacity-70">'+esc(c.locationCluster)+'</span></td>'
-        +'<td class="min-w-[110px]">'+esc(c.phone)+'<br><span class="text-[10px] opacity-70">'+esc(c.contactPerson)+'</span></td>'
+        +'<td class="whitespace-nowrap"><a href="'+mapsUrl+'" target="_blank" class="btn-action btn-action-cyan">地圖</a>'
+        +'<a href="'+searchUrl+'" target="_blank" class="btn-action btn-action-amber">搜尋</a></td>'
+        +'<td class="text-[10.5px] text-[var(--text-mid)] min-w-[180px] leading-relaxed">'+esc(c.matchReason)+'</td>'
+        +'<td class="text-[10px] whitespace-nowrap">Q1 '+esc(c.q1||'—')+'<br>Q2 '+esc(c.q2||'—')+'<br><span class="badge '+q3Cls+'">Q3 '+esc(c.q3||'—')+'</span></td>'
         +'<td><span class="badge '+r1Cls+'">'+esc(c.r1)+'</span></td>'
         +'<td class="text-[var(--text-mid)]">'+esc(c.industryType)+'</td>'
-        +'<td class="text-[10px] whitespace-nowrap">Q1 '+esc(c.q1||'—')+'<br>Q2 '+esc(c.q2||'—')+'<br><span class="badge '+q3Cls+'">Q3 '+esc(c.q3||'—')+'</span></td>'
-        +'<td class="text-[10.5px] text-[var(--text-mid)] min-w-[180px] leading-relaxed">'+esc(c.matchReason)+'</td>'
+        +'<td class="text-[var(--text-mid)] min-w-[140px]">'+esc(c.address)+'<br><span class="text-[10px] opacity-70">'+esc(c.locationCluster)+'</span></td>'
+        +'<td class="min-w-[110px]">'+esc(c.phone)+'<br><span class="text-[10px] opacity-70">'+esc(c.contactPerson)+'</span></td>'
+        +'<td>'+esc(c.taxId)+'</td>'
         +'<td><span class="badge '+listCls+'">'+esc(c.listStatus)+'</span></td>'
         +'<td><span class="badge '+statusCls+'">'+esc(c.status)+'</span></td>'
         +'<td>'+(c.source&&c.source!=='未查得'?'<a href="'+esc(c.source)+'" target="_blank" class="text-[var(--signal-cyan)] underline">連結</a>':'<span class="text-[var(--text-mid)]">—</span>')+'</td>'
-        +'<td class="whitespace-nowrap"><a href="'+mapsUrl+'" target="_blank" class="btn-action btn-action-cyan">地圖</a>'
-        +'<a href="'+searchUrl+'" target="_blank" class="btn-action btn-action-amber">搜尋</a></td>'
         +'</tr>';
     }).join('');
   }
