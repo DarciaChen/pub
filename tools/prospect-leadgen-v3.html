@@ -215,9 +215,17 @@
             <button class="btn-ghost" onclick="document.getElementById('xlsx-import').click()">匯入舊檔</button>
             <button class="btn-ghost" onclick="copyForGoogleSheets()">複製到 Google 試算表</button>
             <button class="btn-ghost" onclick="exportSelectedToExcel()">匯出 Excel</button>
+            <button class="btn-ghost" style="color:var(--signal-cyan);border-color:var(--signal-cyan)" onclick="saveRoute()">📍 儲存為路線</button>
             <input type="file" id="xlsx-import" accept=".xlsx,.xls" class="hidden" onchange="importFromExcel(event)">
           </div>
         </div>
+
+        <!-- 我的路線 -->
+        <div id="my-routes-section" style="display:none;margin-bottom:16px;background:var(--bg-card);border:1px solid var(--border);border-radius:10px;padding:12px">
+          <div style="font-size:11px;font-family:monospace;color:var(--signal-cyan);letter-spacing:.1em;margin-bottom:8px">我的路線</div>
+          <div id="routes-list"></div>
+        </div>
+
         <div class="overflow-x-auto">
           <table class="data-table">
             <thead><tr>
@@ -324,6 +332,7 @@ function loadKeywords(){
 }
 function saveKeywords(kw){ try{ localStorage.setItem(KEYWORD_STORAGE_KEY,JSON.stringify(kw)); }catch(e){} }
 let currentKeywords=loadKeywords();
+renderRoutes();
 
 function esc(s){ return (s==null?'':String(s)).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
@@ -862,6 +871,62 @@ function exportSelectedToExcel(){
   const region=document.getElementById('region-input').value.trim()||'未命名區域';
   XLSX.writeFile(wb,'工控客群開發_'+region+'_'+new Date().toISOString().slice(0,10)+'.xlsx');
   setStatus('已匯出 '+rows.length+' 筆（含地圖／搜尋超連結）','var(--signal-mint)');
+}
+
+/* ============ 路線儲存與導航 ============ */
+const ROUTES_KEY = 'prospect_routes_v1';
+
+function loadRoutes() {
+  try { return JSON.parse(localStorage.getItem(ROUTES_KEY) || '[]'); } catch(e) { return []; }
+}
+
+function saveRoutes(routes) {
+  localStorage.setItem(ROUTES_KEY, JSON.stringify(routes));
+}
+
+function saveRoute() {
+  if (!selectedIdx.size) { setStatus('請先勾選要加入路線的廠商', 'var(--signal-amber)'); return; }
+  const sel = lastCandidates.filter((c, i) => selectedIdx.has(i));
+  const name = prompt('請輸入路線名稱（例如：嘉義北區）', '');
+  if (!name || !name.trim()) return;
+  const routes = loadRoutes();
+  const points = sel.map(c => ({ company: c.company, address: c.address || c.company }));
+  routes.unshift({ name: name.trim(), points, createdAt: new Date().toISOString() });
+  saveRoutes(routes);
+  renderRoutes();
+  setStatus('已儲存路線「' + name.trim() + '」（' + points.length + ' 個點）', 'var(--signal-mint)');
+}
+
+function buildMapsUrl(points) {
+  const encoded = points.map(p => encodeURIComponent(p.address || p.company));
+  return 'https://www.google.com/maps/dir/' + encoded.join('/');
+}
+
+function renderRoutes() {
+  const routes = loadRoutes();
+  const section = document.getElementById('my-routes-section');
+  const list = document.getElementById('routes-list');
+  if (!routes.length) { section.style.display = 'none'; return; }
+  section.style.display = 'block';
+  list.innerHTML = routes.map((r, i) => {
+    const date = new Date(r.createdAt).toLocaleDateString('zh-TW');
+    return '<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border)">'
+      + '<div style="flex:1;min-width:0">'
+      + '<div style="font-size:13px;color:var(--text-hi)">' + esc(r.name) + '</div>'
+      + '<div style="font-size:10px;color:var(--text-mid)">' + r.points.length + ' 個點　' + date + '</div>'
+      + '</div>'
+      + '<a href="' + buildMapsUrl(r.points) + '" target="_blank" style="padding:4px 10px;background:var(--signal-cyan);color:#fff;border-radius:6px;font-size:12px;text-decoration:none;white-space:nowrap">導航</a>'
+      + '<button onclick="deleteRoute(' + i + ')" style="padding:4px 8px;background:none;border:1px solid var(--border);border-radius:6px;font-size:12px;color:var(--text-mid);cursor:pointer">刪除</button>'
+      + '</div>';
+  }).join('');
+}
+
+function deleteRoute(i) {
+  const routes = loadRoutes();
+  if (!confirm('確定刪除路線「' + routes[i].name + '」？')) return;
+  routes.splice(i, 1);
+  saveRoutes(routes);
+  renderRoutes();
 }
 
 /* 複製為 TSV，直接貼進 Google 試算表即為可點連結（HYPERLINK 公式） */
