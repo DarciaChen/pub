@@ -82,7 +82,7 @@
   <header class="panel px-6 py-5 mb-6 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
     <div>
       <div class="text-xs font-mono tracking-widest text-[var(--signal-cyan)] mb-1">MODEL&nbsp;&nbsp;IC-LEADGEN&nbsp;&nbsp;v3&nbsp;&nbsp;/&nbsp;&nbsp;工控儀表業務開發</div>
-      <div class="text-[10px] font-mono text-[var(--text-mid)] mb-1">部署版本：<span id="build-stamp">2026-08-07 13:16（台灣時間）</span>　·　若您看到的時間不是最新一次改版時間，代表快取還沒更新，請強制重新整理</div>
+      <div class="text-[10px] font-mono text-[var(--text-mid)] mb-1">部署版本：<span id="build-stamp">2026-08-07 13:25（台灣時間）</span>　·　若您看到的時間不是最新一次改版時間，代表快取還沒更新，請強制重新整理</div>
       <h1 class="font-display text-2xl md:text-3xl font-bold">工控客群開發自動化工具</h1>
       <div class="text-sm text-[var(--text-mid)] mt-1">自動分批檢索　·　Q1/Q2/Q3/X1 四層判斷　·　交叉驗證計次　·　零幻覺輸出</div>
     </div>
@@ -469,7 +469,23 @@ function buildBatches(region,depth){
     if(document.getElementById('road-name-toggle').checked){
       out.push({name:'E3路名聚落擴散',queries:[region+' 廠商 電控',region+' 廠商 自動化',region+' 工業區 廠商名錄']});
     }
-    out.push({name:'E6社群時效線索',queries:['facebook '+region+' 自動化 PLC 徵才','facebook '+region+' 電控 接案']});
+    // 社群批次刻意加重：104等正式求職網覆蓋率已經夠廣，重複問1111/518邊際效益低；
+    // 真正查不到的是「非正式管道」——巷弄小型工程行、接案性質的機電師傅，這類多半
+    // 不會上求職網徵才，只會在社群發文。四平台 × 多種語氣交叉查詢，涵蓋徵才/接案/
+    // 工程行/維修/找廠商 這幾種不同貼文動機。額度以「批次」計算（固定2次API呼叫），
+    // 批次內查詢筆數增加不會多耗任何額度，故盡量問全，不用省。
+    out.push({name:'E6社群時效線索',queries:[
+      'facebook '+region+' 自動化 PLC 徵才',
+      'facebook '+region+' 電控 接案',
+      'facebook '+region+' 機電 工程行',
+      'facebook '+region+' 自動控制 維修',
+      'dcard '+region+' 自動控制 工作',
+      'dcard '+region+' 電控 師傅',
+      'ptt '+region+' 自動化 維修',
+      'ptt '+region+' 機電 工程',
+      'threads '+region+' 電控 案件',
+      'threads '+region+' 自動化 徵才'
+    ]});
   }
   return out;
 }
