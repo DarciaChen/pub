@@ -82,7 +82,7 @@
   <header class="panel px-6 py-5 mb-6 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
     <div>
       <div class="text-xs font-mono tracking-widest text-[var(--signal-cyan)] mb-1">MODEL&nbsp;&nbsp;IC-LEADGEN&nbsp;&nbsp;v3&nbsp;&nbsp;/&nbsp;&nbsp;工控儀表業務開發</div>
-      <div class="text-[10px] font-mono text-[var(--text-mid)] mb-1">部署版本：<span id="build-stamp">2026-08-07 13:25（台灣時間）</span>　·　若您看到的時間不是最新一次改版時間，代表快取還沒更新，請強制重新整理</div>
+      <div class="text-[10px] font-mono text-[var(--text-mid)] mb-1">部署版本：<span id="build-stamp">2026-08-07 13:38（台灣時間）</span>　·　若您看到的時間不是最新一次改版時間，代表快取還沒更新，請強制重新整理</div>
       <h1 class="font-display text-2xl md:text-3xl font-bold">工控客群開發自動化工具</h1>
       <div class="text-sm text-[var(--text-mid)] mt-1">自動分批檢索　·　Q1/Q2/Q3/X1 四層判斷　·　交叉驗證計次　·　零幻覺輸出</div>
     </div>
@@ -217,6 +217,11 @@
       <div id="vanished-panel" class="panel p-5 hidden">
         <div class="text-xs font-mono text-[var(--signal-red)] tracking-widest mb-2">消失名單（本次未再出現）</div>
         <div id="vanished-list" class="text-xs font-mono text-[var(--text-mid)]"></div>
+      </div>
+
+      <div id="coverage-panel" class="panel p-5 hidden">
+        <div class="text-xs font-mono text-[var(--signal-violet)] tracking-widest mb-2">查詢覆蓋率核實（模型自主決定執行幾條，非我方能強制）</div>
+        <div id="coverage-list" class="font-mono"></div>
       </div>
 
       <div class="panel p-5">
@@ -556,15 +561,12 @@ function extractText(data){
 }
 // 從 API 回傳的 groundingMetadata.groundingChunks 取出「真正被搜尋引擎驗證過」的網址，
 // 這是 API 自己回傳的結構化資料，不是模型自己打字寫出來的，不會有幻覺網址的問題。
-function extractGroundingSources(data){
+// 從 groundingMetadata.webSearchQueries 取出模型「實際真正執行」的搜尋字串。
+// 官方文件明確指出：模型是自主決定要下幾條搜尋，不是機械式逐條照我們給的清單執行，
+// 所以這個欄位是唯一能核實「我們要求的清單，模型真的做了多少」的依據，不能用猜的。
+function extractActualQueries(data){
   const gm=data.candidates&&data.candidates[0]&&data.candidates[0].groundingMetadata;
-  const chunks=(gm&&gm.groundingChunks)||[];
-  const seen=new Set(), out=[];
-  chunks.forEach(c=>{
-    const uri=c.web&&c.web.uri, title=c.web&&c.web.title;
-    if(uri&&!seen.has(uri)){ seen.add(uri); out.push({uri:uri,title:title||''}); }
-  });
-  return out;
+  return (gm&&gm.webSearchQueries)||[];
 }
 
 async function groundBatch(region,batch,existingList,batchIndex){
@@ -580,7 +582,14 @@ async function groundBatch(region,batch,existingList,batchIndex){
     generationConfig:{maxOutputTokens:8192}
   };
   const data=await callGemini(body,'批次「'+batch.name+'」檢索（'+groundModel+'）',groundModel);
-  return { text: extractText(data), sources: extractGroundingSources(data) };
+  const actualQueries=extractActualQueries(data);
+  return {
+    text: extractText(data),
+    sources: extractGroundingSources(data),
+    requestedCount: batch.queries.length,
+    actualCount: actualQueries.length,
+    actualQueries: actualQueries
+  };
 }
 async function formatBatch(region,rawText,existingList,realSources){
   const existingBlock=existingList.length?'\n\n【既有／已知客戶名單】\n'+existingList.join('\n'):'';
@@ -646,6 +655,27 @@ function renderVanished(v){
     v.map(c=>'<div class="py-1 border-b border-[var(--panel-line)]">'+esc(c)+' — 需人工複查原因（機械式比對結果，非模型判斷）</div>').join('');
 }
 
+// 查詢覆蓋率核實：模型是自主決定要下幾條搜尋，不是機械式照我們給的清單逐條執行，
+// 這裡用 API 回傳的 webSearchQueries 欄位如實顯示每批「要求 vs 實際」的落差，
+// 不做任何美化或推測，覆蓋率低不代表程式有 bug，是模型自主判斷的真實結果。
+function renderCoverage(stats){
+  const panel=document.getElementById('coverage-panel');
+  if(!stats||!stats.length){ panel.classList.add('hidden'); return; }
+  panel.classList.remove('hidden');
+  document.getElementById('coverage-list').innerHTML=stats.map(s=>{
+    const ratio=s.requested>0?Math.round(s.actual/s.requested*100):0;
+    const cls=ratio>=70?'badge-mint':(ratio>=30?'badge-amber':'badge-red');
+    const queriesDetail=s.queries.length
+      ? '<div class="text-[10px] text-[var(--text-mid)] mt-1 leading-relaxed">實際查詢：'+s.queries.map(esc).join('、')+'</div>'
+      : '<div class="text-[10px] text-[var(--text-mid)] mt-1">（API 未回傳任何實際查詢字串）</div>';
+    return '<div class="py-2 border-b border-[var(--panel-line)]">'
+      +'<div class="flex items-center justify-between">'
+      +'<span class="text-xs">'+esc(s.name)+'</span>'
+      +'<span class="badge '+cls+'">要求'+s.requested+'條 / 實際'+s.actual+'條（'+ratio+'%）</span>'
+      +'</div>'+queriesDetail+'</div>';
+  }).join('');
+}
+
 /* ============ 主流程 ============ */
 async function runModeA(){
   const region=document.getElementById('region-input').value.trim();
@@ -662,7 +692,7 @@ async function runModeA(){
   const existingList=existingRaw?existingRaw.split('\n').map(s=>s.trim()).filter(Boolean):[];
   const batches=buildBatches(region,depth);
   const states=new Array(batches.length).fill('');
-  const results=[], failed=[];
+  const results=[], failed=[], coverageStats=[];
 
   setLed(2,'on-cyan');
   try{
@@ -674,6 +704,10 @@ async function runModeA(){
         const ground=await groundBatch(region,batches[i],existingList,i);
         const json=await formatBatch(region,ground.text,existingList,ground.sources);
         results.push(json);
+        coverageStats.push({name:batches[i].name,requested:ground.requestedCount,actual:ground.actualCount,queries:ground.actualQueries});
+        document.getElementById('batch-label').textContent=
+          '批次 '+(i+1)+'/'+batches.length+'：'+batches[i].name+
+          '（要求'+ground.requestedCount+'條，模型實際執行'+ground.actualCount+'條）';
         states[i]='done';
       }catch(err){
         states[i]='fail';
@@ -709,8 +743,11 @@ async function runModeA(){
     });
 
     renderVanished(computeVanished(region,candidates));
+    renderCoverage(coverageStats);
     setLed(4,'on-mint');
-    let msg='完成：'+candidates.length+' 筆候選、'+excluded.length+' 筆排除（'+results.length+'/'+batches.length+' 批成功）';
+    const totalRequested=coverageStats.reduce((s,c)=>s+c.requested,0);
+    const totalActual=coverageStats.reduce((s,c)=>s+c.actual,0);
+    let msg='完成：'+candidates.length+' 筆候選、'+excluded.length+' 筆排除（'+results.length+'/'+batches.length+' 批成功，查詢覆蓋率 '+totalActual+'/'+totalRequested+'）';
     if(failed.length) msg+='　⚠ 失敗批次：'+failed.join('；');
     setStatus(msg,failed.length?'var(--signal-amber)':'var(--signal-mint)');
     renderResults({candidates:candidates,excluded:excluded});
