@@ -501,7 +501,14 @@ async function createRoom(){
     log: {}
   };
   applyPatch(fresh, pushLog(`房間開張，等雙方選好隊長再開始。`));
-  await NET.write(id, fresh);
+  try{
+    await NET.write(id, fresh);
+  }catch(err){
+    console.error(err);
+    const msg = (err && err.message) ? err.message : String(err);
+    alert(`建立房間失敗：${msg}\n\n如果訊息裡有 permission_denied，代表 Firebase 資料庫規則擋住了寫入，要去 Firebase Console 調整 Realtime Database 的規則。`);
+    return;
+  }
   enterRoom(id);
 }
 
@@ -804,7 +811,18 @@ async function enterRoom(id){
     if(!Array.isArray(state.board)) state.board = Object.values(state.board || {});
     render();
   });
-  const first = await NET.get(id);
+  let first;
+  try{
+    first = await NET.get(id);
+  }catch(err){
+    console.error(err);
+    const msg = (err && err.message) ? err.message : String(err);
+    $("game").classList.add("hidden");
+    $("home").classList.remove("hidden");
+    $("homeHint").textContent = `連線失敗：${msg}${msg.includes("permission_denied") ? "（Firebase 資料庫規則擋住了讀取，要去 Console 調整規則）" : ""}`;
+    roomId = null;
+    return;
+  }
   if(!first){
     $("game").classList.add("hidden");
     $("home").classList.remove("hidden");
