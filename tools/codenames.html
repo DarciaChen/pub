@@ -1,0 +1,796 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>機密代號 · 連線版</title>
+<style>
+/* ============================================================
+   設計代碼（牛皮紙實體桌遊風）
+   紙底 #E6D5BC / 卡面 #F6EEDC / 墨 #241F1A
+   紅隊 #A2382F / 藍隊 #2C4A6E / 路人 #C0A87E / 刺客 #1B1815
+   ============================================================ */
+:root{
+  --paper:#E6D5BC;
+  --paper-dark:#D8C3A2;
+  --card:#F6EEDC;
+  --ink:#241F1A;
+  --ink-soft:#6B5B47;
+  --red:#A2382F;
+  --blue:#2C4A6E;
+  --neutral:#C0A87E;
+  --black:#1B1815;
+  --line:rgba(36,31,26,.22);
+  --serif:"Noto Serif TC","Songti TC","Source Han Serif TC","PMingLiU","MingLiU",serif;
+  --sans:"Noto Sans TC","PingFang TC","Microsoft JhengHei",system-ui,sans-serif;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{
+  background-color:var(--paper);
+  background-image:
+    radial-gradient(circle at 20% 15%, rgba(255,255,255,.28), transparent 45%),
+    radial-gradient(circle at 80% 80%, rgba(120,90,50,.14), transparent 50%),
+    repeating-linear-gradient(92deg, rgba(150,120,80,.05) 0 2px, transparent 2px 5px);
+  color:var(--ink);
+  font-family:var(--sans);
+  -webkit-text-size-adjust:100%;
+  min-height:100vh;
+}
+.wrap{max-width:1080px;margin:0 auto;padding:14px 14px 48px}
+
+/* ---------- 標題 ---------- */
+.masthead{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;
+  border-bottom:2px solid var(--ink);padding-bottom:8px;margin-bottom:14px;flex-wrap:wrap}
+.masthead h1{font-family:var(--serif);font-size:26px;letter-spacing:.22em;margin:0;font-weight:700}
+.masthead .sub{font-size:11px;letter-spacing:.35em;color:var(--ink-soft);text-transform:uppercase}
+.mode-chip{font-size:11px;letter-spacing:.1em;border:1px solid var(--line);border-radius:999px;
+  padding:3px 10px;background:rgba(255,255,255,.35);color:var(--ink-soft);white-space:nowrap}
+
+/* ---------- 通用控制項 ---------- */
+button{font-family:var(--sans);cursor:pointer}
+.btn{background:var(--card);border:1px solid var(--ink);border-radius:4px;padding:9px 16px;
+  font-size:14px;letter-spacing:.06em;color:var(--ink);box-shadow:2px 2px 0 rgba(36,31,26,.28);
+  transition:transform .08s ease, box-shadow .08s ease}
+.btn:hover{transform:translate(1px,1px);box-shadow:1px 1px 0 rgba(36,31,26,.28)}
+.btn:active{transform:translate(2px,2px);box-shadow:none}
+.btn[disabled]{opacity:.4;cursor:not-allowed;transform:none;box-shadow:2px 2px 0 rgba(36,31,26,.15)}
+.btn--red{background:var(--red);color:#F7E9DC;border-color:#5E1F19}
+.btn--blue{background:var(--blue);color:#E8EFF7;border-color:#1A2E45}
+.btn--ghost{background:transparent;box-shadow:none;border-style:dashed}
+.btn--sm{padding:5px 11px;font-size:12.5px}
+input[type=text],input[type=number],textarea{
+  font-family:var(--sans);background:#FBF5E7;border:1px solid var(--line);border-radius:3px;
+  padding:9px 11px;font-size:15px;color:var(--ink);width:100%}
+input:focus,textarea:focus,button:focus-visible{outline:2px solid var(--red);outline-offset:2px}
+label.field{display:block;font-size:12px;letter-spacing:.14em;color:var(--ink-soft);margin:0 0 5px}
+
+/* ---------- 首頁 ---------- */
+.panel{background:rgba(255,255,255,.34);border:1px solid var(--line);border-radius:6px;
+  padding:18px;margin-bottom:14px}
+.panel h2{font-family:var(--serif);font-size:17px;margin:0 0 12px;letter-spacing:.12em}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end}
+.row > .grow{flex:1 1 180px}
+.hint{font-size:12.5px;color:var(--ink-soft);line-height:1.7;margin:10px 0 0}
+.rules{font-size:13px;line-height:1.85;color:var(--ink-soft);margin:0;padding-left:1.1em}
+
+/* ---------- 記分板 ---------- */
+.scoreboard{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px}
+.score{font-family:var(--serif);font-size:26px;line-height:1;padding:8px 14px;border-radius:4px;
+  border:1px solid var(--ink);min-width:64px;text-align:center}
+.score small{display:block;font-family:var(--sans);font-size:10px;letter-spacing:.24em;margin-top:4px;opacity:.85}
+.score--red{background:var(--red);color:#F7E9DC;border-color:#5E1F19}
+.score--blue{background:var(--blue);color:#E8EFF7;border-color:#1A2E45}
+.score.dim{opacity:.42}
+.turnbar{flex:1 1 200px;text-align:center;font-family:var(--serif);font-size:15px;letter-spacing:.1em}
+.timer{font-family:var(--serif);font-size:22px;letter-spacing:.06em;padding:6px 12px;border:1px dashed var(--line);border-radius:4px}
+.timer.low{color:var(--red);border-color:var(--red)}
+
+/* ---------- 線索帶 ---------- */
+.cluebar{border:1px solid var(--ink);border-left-width:6px;background:rgba(255,255,255,.5);
+  padding:10px 14px;border-radius:3px;margin-bottom:12px;display:flex;gap:12px;
+  align-items:baseline;flex-wrap:wrap}
+.cluebar.red{border-left-color:var(--red)}
+.cluebar.blue{border-left-color:var(--blue)}
+.cluebar .word{font-family:var(--serif);font-size:22px;letter-spacing:.18em}
+.cluebar .num{font-family:var(--serif);font-size:22px}
+.cluebar .meta{font-size:12px;color:var(--ink-soft);letter-spacing:.1em}
+
+/* ---------- 牌桌 ---------- */
+.board{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-bottom:14px}
+.card{
+  position:relative;aspect-ratio:1/.72;border:1px solid rgba(36,31,26,.35);border-radius:7px;
+  background:var(--card);
+  background-image:radial-gradient(circle at 30% 20%, rgba(255,255,255,.7), transparent 60%);
+  box-shadow:0 2px 0 rgba(36,31,26,.25), inset 0 0 0 3px rgba(255,255,255,.45);
+  display:flex;align-items:center;justify-content:center;padding:4px;
+  transition:transform .1s ease, box-shadow .1s ease;
+}
+.card:not([disabled]):hover{transform:translateY(-2px);box-shadow:0 4px 0 rgba(36,31,26,.25), inset 0 0 0 3px rgba(255,255,255,.45)}
+.card[disabled]{cursor:default}
+.card .band{
+  width:100%;background:#FDF8EC;border-top:1px solid rgba(36,31,26,.18);
+  border-bottom:1px solid rgba(36,31,26,.18);padding:7px 2px;text-align:center}
+.card .word{font-family:var(--serif);font-weight:700;font-size:clamp(11px,2.5vw,19px);
+  letter-spacing:.05em;line-height:1.2;word-break:keep-all}
+/* 隊長視角：卡面染色 + 角標 */
+.card.key-red{background:#EDC9C2}
+.card.key-blue{background:#C4D3E4}
+.card.key-neutral{background:#E4D6B8}
+.card.key-assassin{background:#9A928A}
+.card.key-assassin .band{background:#2A2622;color:#F0E7D6}
+.card .corner{position:absolute;top:5px;right:6px;width:9px;height:9px;border-radius:2px;
+  border:1px solid rgba(0,0,0,.35)}
+.corner.red{background:var(--red)} .corner.blue{background:var(--blue)}
+.corner.neutral{background:var(--neutral)} .corner.assassin{background:var(--black)}
+/* 已翻開 */
+.card.rev{box-shadow:inset 0 2px 6px rgba(0,0,0,.35);transform:none}
+.card.rev .band{background:transparent;border:0}
+.card.rev .corner{display:none}
+.card.rev-red{background:var(--red);border-color:#5E1F19}
+.card.rev-blue{background:var(--blue);border-color:#1A2E45}
+.card.rev-neutral{background:var(--neutral);border-color:#8A7550}
+.card.rev-assassin{background:var(--black);border-color:#000}
+.card.rev-red .word,.card.rev-blue .word,.card.rev-assassin .word{color:#F3E8D6;opacity:.92}
+.card.rev-neutral .word{color:#4A3D28;opacity:.85}
+.card.rev .word{font-size:clamp(10px,2.1vw,15px);font-weight:400;letter-spacing:.12em}
+
+/* ---------- 角色列 / 面板 ---------- */
+.roles{display:flex;gap:7px;flex-wrap:wrap;margin-bottom:12px}
+.role{border:1px solid var(--line);background:rgba(255,255,255,.4);border-radius:999px;
+  padding:6px 13px;font-size:13px;color:var(--ink)}
+.role.on{background:var(--ink);color:var(--paper);border-color:var(--ink)}
+.role.on.red{background:var(--red);border-color:var(--red);color:#F7E9DC}
+.role.on.blue{background:var(--blue);border-color:var(--blue);color:#E8EFF7}
+.log{font-size:13px;line-height:1.8;color:var(--ink-soft);max-height:170px;overflow:auto;
+  border-top:1px dashed var(--line);padding-top:8px}
+.log b{color:var(--ink)}
+
+/* ---------- 對話框 ---------- */
+.modal{position:fixed;inset:0;background:rgba(30,24,18,.55);display:flex;align-items:center;
+  justify-content:center;padding:16px;z-index:50}
+.modal .box{background:var(--paper);border:1px solid var(--ink);border-radius:6px;
+  box-shadow:6px 6px 0 rgba(36,31,26,.35);max-width:620px;width:100%;max-height:88vh;
+  overflow:auto;padding:20px}
+.modal h2{font-family:var(--serif);margin:0 0 12px;font-size:19px;letter-spacing:.1em}
+.banner{text-align:center;padding:18px;border:2px solid var(--ink);border-radius:6px;
+  margin-bottom:14px;font-family:var(--serif);font-size:22px;letter-spacing:.14em}
+.banner.red{background:var(--red);color:#F7E9DC} .banner.blue{background:var(--blue);color:#E8EFF7}
+.hidden{display:none !important}
+@media (max-width:520px){
+  .wrap{padding:10px 8px 40px}
+  .board{gap:5px}
+  .score{font-size:21px;min-width:54px;padding:6px 10px}
+  .masthead h1{font-size:20px}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none !important}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="masthead">
+    <div>
+      <h1>機密代號</h1>
+      <div class="sub">Codenames · 遠端連線版</div>
+    </div>
+    <div id="modeChip" class="mode-chip">連線模式偵測中…</div>
+  </header>
+
+  <!-- ============ 首頁 ============ -->
+  <section id="home">
+    <div class="panel">
+      <h2>開新局</h2>
+      <div class="row">
+        <button class="btn btn--red" id="btnCreate">建立房間</button>
+        <div class="grow">
+          <label class="field" for="joinId">已有房號？輸入後加入</label>
+          <input type="text" id="joinId" placeholder="例：K7M2" maxlength="8" autocomplete="off">
+        </div>
+        <button class="btn" id="btnJoin">加入房間</button>
+      </div>
+      <div class="row" style="margin-top:14px">
+        <label style="display:flex;align-items:center;gap:7px;font-size:14px">
+          <input type="checkbox" id="timerOn" style="width:auto"> 啟用回合計時器
+        </label>
+        <div style="width:120px">
+          <label class="field" for="timerSec">每回合秒數</label>
+          <input type="number" id="timerSec" value="90" min="15" max="600" step="15">
+        </div>
+        <button class="btn btn--ghost" id="btnBank">詞庫管理（<span id="bankCount">280</span> 詞）</button>
+      </div>
+      <p class="hint" id="homeHint"></p>
+    </div>
+
+    <div class="panel">
+      <h2>怎麼玩</h2>
+      <ul class="rules">
+        <li>25 張代碼卡：先攻隊 9 張、後攻隊 8 張、路人 7 張、刺客 1 張。</li>
+        <li>隊長看得到全部身分，只能給「一個線索詞 + 一個數字」。</li>
+        <li>隊員可猜的次數是數字 +1；猜到路人或敵方卡立刻換邊，猜到刺客當場落敗。</li>
+        <li>數字填 0 代表無限次猜測（進階玩法）。</li>
+        <li>先翻完自己所有卡的隊伍獲勝。</li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- ============ 遊戲畫面 ============ -->
+  <section id="game" class="hidden">
+    <div id="winBanner" class="banner hidden"></div>
+
+    <div class="scoreboard">
+      <div class="score score--red" id="scoreRed">9<small>紅隊</small></div>
+      <div class="turnbar" id="turnBar">—</div>
+      <div class="score score--blue" id="scoreBlue">8<small>藍隊</small></div>
+      <div class="timer hidden" id="timer">--:--</div>
+    </div>
+
+    <div class="roles" id="roleBar"></div>
+
+    <div id="clueBar" class="cluebar hidden">
+      <span class="word" id="clueWord"></span>
+      <span class="num" id="clueNum"></span>
+      <span class="meta" id="clueMeta"></span>
+    </div>
+
+    <div class="board" id="board"></div>
+
+    <div class="panel" id="actionPanel"></div>
+
+    <div class="panel">
+      <div class="row" style="justify-content:space-between">
+        <div style="font-size:13px;color:var(--ink-soft)">房號 <b id="roomLabel"></b></div>
+        <div class="row" style="gap:7px">
+          <button class="btn btn--sm" id="btnShare">複製邀請連結</button>
+          <button class="btn btn--sm btn--ghost" id="btnNewGame">重新開局</button>
+          <button class="btn btn--sm btn--ghost" id="btnLeave">離開房間</button>
+        </div>
+      </div>
+      <div class="log" id="log"></div>
+    </div>
+  </section>
+</div>
+
+<!-- ============ 詞庫管理 ============ -->
+<div id="bankModal" class="modal hidden">
+  <div class="box">
+    <h2>詞庫管理</h2>
+    <p class="hint" style="margin-top:0">勾選要納入抽牌的主題，或直接在下方編輯清單（一行一詞，或用逗號分隔）。至少要有 25 個詞。</p>
+    <div id="catList" class="row" style="gap:12px;margin:12px 0"></div>
+    <label class="field" for="bankText">目前牌堆</label>
+    <textarea id="bankText" rows="10" spellcheck="false"></textarea>
+    <div class="row" style="margin-top:12px;justify-content:flex-end">
+      <span class="hint" id="bankStat" style="margin:0;flex:1"></span>
+      <button class="btn btn--sm btn--ghost" id="bankReset">還原預設 280 詞</button>
+      <button class="btn btn--sm" id="bankCancel">取消</button>
+      <button class="btn btn--sm btn--red" id="bankSave">儲存詞庫</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ 角色選擇 ============ -->
+<div id="roleModal" class="modal hidden">
+  <div class="box" style="max-width:420px">
+    <h2>你是誰？</h2>
+    <p class="hint" style="margin-top:0">隊長看得到答案，隊員只看得到詞。選錯可以隨時在上方切換。</p>
+    <div class="row" style="margin-top:14px">
+      <button class="btn btn--red" data-role="red-captain">紅隊隊長</button>
+      <button class="btn" data-role="red-agent">紅隊特務</button>
+    </div>
+    <div class="row" style="margin-top:8px">
+      <button class="btn btn--blue" data-role="blue-captain">藍隊隊長</button>
+      <button class="btn" data-role="blue-agent">藍隊特務</button>
+    </div>
+    <div class="row" style="margin-top:8px">
+      <button class="btn btn--ghost" data-role="spectator">只是路過（觀戰）</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ==========================================================================
+   1. Firebase 設定 —— 部署時填入你自己的專案金鑰
+   Firebase Console → 專案設定 → 網頁應用程式 → firebaseConfig
+   Realtime Database → 規則 暫時設為 {".read": true, ".write": true}
+   databaseURL 留空時，本檔自動切換成「本機測試模式」（同一瀏覽器多分頁可對戰）。
+   ========================================================================== */
+const FIREBASE_CONFIG = {
+  apiKey:       "",
+  authDomain:   "",
+  databaseURL:  "",   // 例：https://your-app-default-rtdb.asia-southeast1.firebasedatabase.app
+  projectId:    "",
+  appId:        ""
+};
+const FB_VERSION = "10.12.5";
+
+/* ==========================================================================
+   2. 預設詞庫（280 詞，7 主題，已去重與修正錯字）
+   ========================================================================== */
+const CATEGORIES = {
+  "人物身份": ["總統","間諜","海盜","小偷","法官","醫生","律師","忍者","騎士","巫師","首長","特務","記者","明星","教練","保母","保全","機長","廚師","魔術師","小丑","富豪","乞丐","偵探","科學家","太空人","軍官","護士","網紅","司機","翻譯","機車行老闆","校長","模特兒","導演","水電工","外交官","外送員","會計師","設計師"],
+  "虛實角色": ["公主","國王","吸血鬼","狼人","殭屍","幽靈","機器人","外星人","超人","惡魔","天使","精靈","美人魚","神仙","聖誕老人","怪獸","英雄","反派","分身","影子","木偶","木乃伊","死神","雅典娜","美杜莎","悟空","唐僧","豬八戒","沙僧","織女","牛郎","法老王","木蘭","福爾摩斯","華生","哈利波特","佛地魔","泰山","白雪公主","灰姑娘"],
+  "國家地標": ["台灣","日本","美國","法國","埃及","巴西","倫敦","東京","巴黎","紐約","台北","羅馬","北京","長城","金字塔","富士山","鐵塔","自由女神","威尼斯","好萊塢","雪梨","曼谷","杜拜","莫斯科","柏林","冰島","希臘","亞馬遜","撒哈拉","百慕達","迪士尼","羅浮宮","故宮","大峽谷","好望角","白宮","克里姆林宮","大笨鐘","比薩斜塔","喜馬拉雅"],
+  "電影文化": ["奧斯卡","科幻","恐怖片","喜劇","動作片","紀錄片","動畫","續集","爆米花","特效","彩蛋","穿幫","劇透","配音","首映","票房","海報","膠卷","螢幕","導演椅","劇本","特技","替身","金馬獎","漫威","DC","星際大戰","侏羅紀","鐵達尼號","阿凡達","駭客任務","獅子王","教父","全面啟動","神鬼奇航","魔戒","黑客","紅毯","影評","預告片"],
+  "情緒動作": ["憤怒","悲傷","嫉妒","恐懼","驚喜","尷尬","絕望","得意","狂喜","疲憊","迷茫","緊張","害羞","傲慢","崩潰","擁抱","逃跑","微笑","哭泣","尖叫","跳躍","隱形","飛翔","游泳","睡覺","發呆","偷看","乾杯","拍照","唱歌","跳舞","決鬥","投降","談判","背叛","祈禱","爭吵","打呼","迷路","大笑"],
+  "器物工具": ["鑰匙","鎖頭","鏡子","梳子","香水","口紅","手錶","眼鏡","背包","錢包","鋼琴","吉他","電腦","手機","相機","電視","冰箱","微波爐","洗衣機","吸塵器","吹風機","手電筒","雨傘","時鐘","日曆","地圖","指南針","剪刀","美工刀","膠帶","訂書機","鉛筆","鋼筆","筆記本","橡皮擦","信封","郵票","放大鏡","顯微鏡","望遠鏡"],
+  "生活雜項": ["水杯","盤子","筷子","湯匙","叉子","平底鍋","開瓶器","保溫瓶","馬克杯","牙刷","毛巾","肥皂","洗髮精","沐浴乳","面紙","棉花棒","指甲剪","剃刀","枕頭","棉被","床單","窗簾","地毯","拖鞋","高跟鞋","球鞋","襪子","領帶","皮帶","戒指","項鍊","手鍊","耳環","口罩","圍巾","手套","帽子","外套","雨衣","安全帽"]
+};
+const DEFAULT_BANK = Object.values(CATEGORIES).flat();
+
+/* ==========================================================================
+   3. 連線層：Firebase 與本機（BroadcastChannel）共用同一組 API
+   ========================================================================== */
+const $ = (id) => document.getElementById(id);
+const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+const clone = (o) => JSON.parse(JSON.stringify(o));
+
+function applyPatch(obj, patch){            // 支援 "board/3/f" 這種路徑鍵
+  for(const key in patch){
+    const parts = key.split("/");
+    let node = obj;
+    for(let i=0;i<parts.length-1;i++){
+      if(node[parts[i]] === undefined || node[parts[i]] === null) node[parts[i]] = {};
+      node = node[parts[i]];
+    }
+    const last = parts[parts.length-1];
+    if(patch[key] === null) delete node[last]; else node[last] = patch[key];
+  }
+}
+
+const FirebaseNet = {
+  mode:"firebase", label:"Firebase 連線",
+  async init(){
+    const appMod = await import(`https://www.gstatic.com/firebasejs/${FB_VERSION}/firebase-app.js`);
+    const dbMod  = await import(`https://www.gstatic.com/firebasejs/${FB_VERSION}/firebase-database.js`);
+    this.m  = dbMod;
+    this.db = dbMod.getDatabase(appMod.initializeApp(FIREBASE_CONFIG));
+  },
+  ref(id){ return this.m.ref(this.db, "rooms/" + id); },
+  async write(id, state){ await this.m.set(this.ref(id), state); },
+  async update(id, patch){ await this.m.update(this.ref(id), patch); },
+  async get(id){ const s = await this.m.get(this.ref(id)); return s.exists() ? s.val() : null; },
+  subscribe(id, cb){ this.m.onValue(this.ref(id), s => cb(s.val())); }
+};
+
+const LocalNet = {
+  mode:"local", label:"本機測試模式（同一瀏覽器分頁可對戰）",
+  rooms:{}, cbs:{},
+  async init(){
+    this.ch = new BroadcastChannel("codenames-local-v1");
+    this.ch.onmessage = (e) => {
+      const d = e.data;
+      if(d.t === "state"){ this.rooms[d.room] = d.state; this.emit(d.room); }
+      else if(d.t === "ask" && this.rooms[d.room]){
+        this.ch.postMessage({ t:"state", room:d.room, state:this.rooms[d.room] });
+      }
+    };
+  },
+  emit(id){ (this.cbs[id]||[]).forEach(f => f(this.rooms[id] || null)); },
+  bcast(id){ this.ch.postMessage({ t:"state", room:id, state:this.rooms[id] }); },
+  async write(id, state){ this.rooms[id] = clone(state); this.emit(id); this.bcast(id); },
+  async update(id, patch){
+    if(!this.rooms[id]) return;
+    applyPatch(this.rooms[id], patch); this.emit(id); this.bcast(id);
+  },
+  async get(id){
+    if(this.rooms[id]) return this.rooms[id];
+    this.ch.postMessage({ t:"ask", room:id });
+    await sleep(450);
+    return this.rooms[id] || null;
+  },
+  subscribe(id, cb){ (this.cbs[id] = this.cbs[id] || []).push(cb); cb(this.rooms[id] || null); }
+};
+
+/* ==========================================================================
+   4. 全域狀態
+   ========================================================================== */
+let NET = null;
+let state = null;          // 房間狀態（連線同步）
+let roomId = null;
+let myRole = null;         // red-captain / red-agent / blue-captain / blue-agent / spectator
+let bank = DEFAULT_BANK.slice();
+let autoEndSeq = -1;       // 計時器自動換邊的防重複標記
+
+const other = (t) => t === "red" ? "blue" : "red";
+const teamName = (t) => t === "red" ? "紅隊" : "藍隊";
+const myTeam = () => myRole && myRole !== "spectator" ? myRole.split("-")[0] : null;
+const isCaptain = () => !!myRole && myRole.endsWith("captain");
+
+function shuffle(a){
+  for(let i=a.length-1;i>0;i--){ const j = Math.floor(Math.random()*(i+1)); [a[i],a[j]] = [a[j],a[i]]; }
+  return a;
+}
+function makeRoomId(){
+  const s = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  return Array.from({length:4}, () => s[Math.floor(Math.random()*s.length)]).join("");
+}
+/* 25 = 先攻 9 + 後攻 8 + 路人 7 + 刺客 1 */
+function buildBoard(words, starter){
+  const picked = shuffle(words.slice()).slice(0,25);
+  const ids = [];
+  for(let i=0;i<9;i++) ids.push(starter);
+  for(let i=0;i<8;i++) ids.push(other(starter));
+  for(let i=0;i<7;i++) ids.push("neutral");
+  ids.push("assassin");
+  shuffle(ids);
+  return picked.map((w,i) => ({ w, id: ids[i], f:false }));
+}
+function remaining(team){
+  if(!state || !state.board) return 0;
+  return state.board.filter(c => c.id === team && !c.f).length;
+}
+function winner(){
+  if(!state) return null;
+  if(state.winner) return state.winner;
+  if(remaining("red") === 0) return "red";
+  if(remaining("blue") === 0) return "blue";
+  return null;
+}
+function pushLog(text){
+  const key = Date.now() + "_" + Math.floor(Math.random()*1000);
+  return { ["log/" + key]: { t: Date.now(), m: text } };
+}
+function logList(){
+  if(!state || !state.log) return [];
+  return Object.values(state.log).sort((a,b) => b.t - a.t).slice(0,30);
+}
+
+/* ==========================================================================
+   5. 遊戲動作
+   ========================================================================== */
+function turnPatch(nextTeam, extra){
+  const secs = state.settings && state.settings.timerEnabled ? (state.settings.timerSeconds || 90) : 0;
+  return Object.assign({
+    turn: nextTeam,
+    clue: null,
+    guessesLeft: 0,
+    turnSeq: (state.turnSeq || 0) + 1,
+    turnEndsAt: secs ? Date.now() + secs*1000 : null
+  }, extra || {});
+}
+
+async function createRoom(){
+  if(bank.length < 25){ alert("詞庫至少要有 25 個詞。"); return; }
+  const id = makeRoomId();
+  const starter = Math.random() < 0.5 ? "red" : "blue";
+  const timerEnabled = $("timerOn").checked;
+  const timerSeconds = Math.max(15, Math.min(600, parseInt($("timerSec").value,10) || 90));
+  const fresh = {
+    createdAt: Date.now(),
+    settings: { timerEnabled, timerSeconds },
+    bank: bank.slice(),
+    board: buildBoard(bank, starter),
+    starter,
+    turn: starter,
+    turnSeq: 1,
+    guessesLeft: 0,
+    clue: null,
+    winner: null,
+    turnEndsAt: timerEnabled ? Date.now() + timerSeconds*1000 : null,
+    log: {}
+  };
+  applyPatch(fresh, pushLog(`房間開張，${teamName(starter)}先攻。`));
+  await NET.write(id, fresh);
+  enterRoom(id);
+}
+
+async function newGame(){
+  if(!state) return;
+  const starter = other(state.starter || "red");
+  const words = (state.bank && state.bank.length >= 25) ? state.bank : bank;
+  const patch = {
+    board: buildBoard(words, starter),
+    starter, turn: starter, turnSeq: (state.turnSeq||0)+1,
+    guessesLeft: 0, clue: null, winner: null,
+    turnEndsAt: state.settings && state.settings.timerEnabled
+      ? Date.now() + (state.settings.timerSeconds||90)*1000 : null
+  };
+  Object.assign(patch, pushLog(`新的一局開始，${teamName(starter)}先攻。`));
+  await NET.update(roomId, patch);
+}
+
+async function giveClue(){
+  const word = $("clueInput").value.trim();
+  const numRaw = $("countInput").value;
+  const count = Math.max(0, Math.min(9, parseInt(numRaw,10)));
+  if(!word){ alert("請輸入線索詞。"); return; }
+  if(Number.isNaN(count)){ alert("請輸入數字。"); return; }
+  const team = myTeam();
+  const patch = {
+    clue: { word, count, team },
+    guessesLeft: count === 0 ? 99 : count + 1,
+    turnSeq: (state.turnSeq||0) + 1
+  };
+  const secs = state.settings && state.settings.timerEnabled ? (state.settings.timerSeconds||90) : 0;
+  patch.turnEndsAt = secs ? Date.now() + secs*1000 : null;
+  Object.assign(patch, pushLog(`${teamName(team)}隊長給出線索：${word} ${count === 0 ? "∞" : count}`));
+  await NET.update(roomId, patch);
+  $("clueInput").value = ""; $("countInput").value = "";
+}
+
+async function flipCard(i){
+  const card = state.board[i];
+  if(!card || card.f || winner()) return;
+  if(isCaptain() || myTeam() !== state.turn) return;
+  if(!state.clue){ alert("等隊長給線索之後才能翻牌。"); return; }
+
+  const team = state.turn;
+  const patch = { ["board/" + i + "/f"]: true };
+
+  if(card.id === "assassin"){
+    Object.assign(patch, { winner: other(team), turnEndsAt: null, clue: null },
+      pushLog(`💀 ${teamName(team)}翻到刺客「${card.w}」，${teamName(other(team))}獲勝！`));
+  } else if(card.id === team){
+    const left = (state.guessesLeft || 1) - 1;
+    const willClear = remaining(team) - 1 === 0;
+    Object.assign(patch, pushLog(`${teamName(team)}翻開「${card.w}」— 猜中自己人。`));
+    if(willClear){
+      Object.assign(patch, { guessesLeft: 0, clue: null, turnEndsAt: null });
+    } else if(left <= 0){
+      Object.assign(patch, turnPatch(other(team)), pushLog(`${teamName(team)}猜測次數用完，換${teamName(other(team))}。`));
+    } else {
+      patch.guessesLeft = left;
+    }
+  } else {
+    const what = card.id === "neutral" ? "路人" : `${teamName(card.id)}的人`;
+    Object.assign(patch, pushLog(`${teamName(team)}翻開「${card.w}」— 是${what}，換邊。`),
+      turnPatch(other(team)));
+  }
+  await NET.update(roomId, patch);
+}
+
+async function endTurn(auto){
+  if(!state || winner()) return;
+  const team = state.turn;
+  const patch = turnPatch(other(team));
+  Object.assign(patch, pushLog(auto ? `⏱ ${teamName(team)}時間到，換${teamName(other(team))}。`
+                                    : `${teamName(team)}結束回合。`));
+  await NET.update(roomId, patch);
+}
+
+/* ==========================================================================
+   6. 畫面繪製
+   ========================================================================== */
+function render(){
+  if(!state){ return; }
+  const w = winner();
+
+  // 記分板
+  $("scoreRed").innerHTML = remaining("red") + "<small>紅隊</small>";
+  $("scoreBlue").innerHTML = remaining("blue") + "<small>藍隊</small>";
+  $("scoreRed").classList.toggle("dim", state.turn !== "red" || !!w);
+  $("scoreBlue").classList.toggle("dim", state.turn !== "blue" || !!w);
+  $("turnBar").textContent = w ? "本局結束" :
+    `輪到 ${teamName(state.turn)}${state.clue ? `　剩餘猜測 ${state.guessesLeft >= 99 ? "∞" : state.guessesLeft}` : "　等待隊長給線索"}`;
+
+  // 勝負橫幅
+  const banner = $("winBanner");
+  banner.classList.toggle("hidden", !w);
+  if(w){ banner.className = "banner " + w; banner.textContent = `${teamName(w)}獲勝`; }
+
+  // 線索帶
+  const cb = $("clueBar");
+  if(state.clue && !w){
+    cb.className = "cluebar " + state.clue.team;
+    $("clueWord").textContent = state.clue.word;
+    $("clueNum").textContent = state.clue.count === 0 ? "∞" : state.clue.count;
+    $("clueMeta").textContent = `by ${teamName(state.clue.team)}隊長`;
+  } else { cb.className = "cluebar hidden"; }
+
+  renderRoles();
+  renderBoard(w);
+  renderActions(w);
+  $("roomLabel").textContent = roomId;
+  $("log").innerHTML = logList().map(e => `<div>${escapeHtml(e.m)}</div>`).join("");
+}
+
+function escapeHtml(s){
+  return String(s).replace(/[&<>"']/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]));
+}
+
+function renderRoles(){
+  const defs = [["red-captain","紅隊隊長","red"],["red-agent","紅隊特務","red"],
+                ["blue-captain","藍隊隊長","blue"],["blue-agent","藍隊特務","blue"],
+                ["spectator","觀戰",""]];
+  $("roleBar").innerHTML = defs.map(([v,label,team]) =>
+    `<button class="role ${myRole===v?"on "+team:""}" data-role="${v}">${label}</button>`).join("");
+  $("roleBar").querySelectorAll("[data-role]").forEach(b =>
+    b.addEventListener("click", () => setRole(b.dataset.role)));
+}
+
+function renderBoard(w){
+  const showKey = isCaptain() || !!w;
+  const canClick = !w && !isCaptain() && myTeam() === state.turn && !!state.clue;
+  $("board").innerHTML = state.board.map((c,i) => {
+    const cls = ["card"];
+    if(c.f){ cls.push("rev", "rev-" + c.id); }
+    else if(showKey){ cls.push("key-" + c.id); }
+    const corner = (!c.f && showKey) ? `<span class="corner ${c.id}"></span>` : "";
+    const dis = (c.f || !canClick) ? "disabled" : "";
+    return `<button class="${cls.join(" ")}" data-i="${i}" ${dis}>
+      ${corner}<span class="band"><span class="word">${escapeHtml(c.w)}</span></span></button>`;
+  }).join("");
+  $("board").querySelectorAll("button:not([disabled])").forEach(b =>
+    b.addEventListener("click", () => flipCard(parseInt(b.dataset.i,10))));
+}
+
+function renderActions(w){
+  const p = $("actionPanel");
+  if(w){
+    p.innerHTML = `<div class="row"><button class="btn btn--red" id="btnAgain">再玩一局</button>
+      <span class="hint" style="margin:0">下一局由${teamName(other(state.starter))}先攻。</span></div>`;
+    $("btnAgain").addEventListener("click", newGame);
+    return;
+  }
+  if(!myRole || myRole === "spectator"){
+    p.innerHTML = `<span class="hint" style="margin:0">觀戰中。點上方角色列加入其中一隊。</span>`;
+    return;
+  }
+  const mine = myTeam() === state.turn;
+  if(isCaptain()){
+    if(!mine){ p.innerHTML = `<span class="hint" style="margin:0">對方回合，靜候。你看到的顏色就是答案，別說溜嘴。</span>`; return; }
+    if(state.clue){
+      p.innerHTML = `<div class="row"><span class="hint" style="margin:0;flex:1">線索已送出，等隊員翻牌。</span>
+        <button class="btn btn--sm" id="btnEnd">替隊員結束回合</button></div>`;
+      $("btnEnd").addEventListener("click", () => endTurn(false));
+      return;
+    }
+    p.innerHTML = `<div class="row">
+        <div class="grow"><label class="field" for="clueInput">線索詞（一個詞）</label>
+          <input type="text" id="clueInput" autocomplete="off"></div>
+        <div style="width:110px"><label class="field" for="countInput">數量</label>
+          <input type="number" id="countInput" min="0" max="9" placeholder="0=無限"></div>
+        <button class="btn btn--${myTeam()}" id="btnClue">送出線索</button></div>`;
+    $("btnClue").addEventListener("click", giveClue);
+    $("clueInput").addEventListener("keydown", e => { if(e.key === "Enter") $("countInput").focus(); });
+    $("countInput").addEventListener("keydown", e => { if(e.key === "Enter") giveClue(); });
+    return;
+  }
+  // 隊員
+  if(!mine){ p.innerHTML = `<span class="hint" style="margin:0">對方回合，先想想哪些詞可能是你們的。</span>`; return; }
+  if(!state.clue){ p.innerHTML = `<span class="hint" style="margin:0">等你們隊長給線索。</span>`; return; }
+  p.innerHTML = `<div class="row"><span class="hint" style="margin:0;flex:1">點卡片翻牌，見好就收。</span>
+    <button class="btn btn--sm" id="btnEnd">結束猜測</button></div>`;
+  $("btnEnd").addEventListener("click", () => endTurn(false));
+}
+
+/* 計時器 —— 每 250ms 更新，時間到由任一在線客戶端寫回換邊（用 turnSeq 防重複） */
+setInterval(async () => {
+  const el = $("timer");
+  if(!state || !state.settings || !state.settings.timerEnabled || winner() || !state.turnEndsAt){
+    el.classList.add("hidden"); return;
+  }
+  el.classList.remove("hidden");
+  const left = Math.max(0, state.turnEndsAt - Date.now());
+  const s = Math.ceil(left/1000);
+  el.textContent = String(Math.floor(s/60)).padStart(2,"0") + ":" + String(s%60).padStart(2,"0");
+  el.classList.toggle("low", s <= 15);
+  if(left === 0 && autoEndSeq !== state.turnSeq){
+    const seq = state.turnSeq;
+    autoEndSeq = seq;
+    await sleep(150 + Math.random()*500);          // 錯開多客戶端同時寫入
+    if(state && state.turnSeq === seq && !winner()) endTurn(true);
+  }
+}, 250);
+
+/* ==========================================================================
+   7. 房間進出與角色
+   ========================================================================== */
+function setRole(role){
+  myRole = role;
+  const u = new URL(location.href);
+  u.searchParams.set("room", roomId);
+  u.searchParams.set("role", role);
+  history.replaceState(null, "", u);
+  $("roleModal").classList.add("hidden");
+  render();
+}
+
+async function enterRoom(id){
+  roomId = id;
+  const u = new URL(location.href);
+  u.searchParams.set("room", id);
+  if(myRole) u.searchParams.set("role", myRole);
+  history.replaceState(null, "", u);
+  $("home").classList.add("hidden");
+  $("game").classList.remove("hidden");
+  NET.subscribe(id, s => {
+    if(!s){ return; }
+    state = s;
+    if(!Array.isArray(state.board)) state.board = Object.values(state.board || {});
+    render();
+  });
+  const first = await NET.get(id);
+  if(!first){
+    $("game").classList.add("hidden");
+    $("home").classList.remove("hidden");
+    $("homeHint").textContent = `找不到房間 ${id}。若是本機測試模式，房間只存在於開房的那個瀏覽器分頁，該分頁必須保持開著。`;
+    roomId = null;
+    return;
+  }
+  if(!myRole) $("roleModal").classList.remove("hidden");
+}
+
+function leaveRoom(){
+  location.href = location.pathname;
+}
+
+/* ==========================================================================
+   8. 詞庫管理
+   ========================================================================== */
+function parseBank(text){
+  return Array.from(new Set(text.split(/[\s,，、\n]+/).map(s => s.trim()).filter(Boolean)));
+}
+function openBank(){
+  $("catList").innerHTML = Object.keys(CATEGORIES).map(k =>
+    `<label style="display:flex;align-items:center;gap:6px;font-size:13px">
+      <input type="checkbox" data-cat="${k}" checked style="width:auto"> ${k}</label>`).join("");
+  $("catList").querySelectorAll("[data-cat]").forEach(cb => cb.addEventListener("change", () => {
+    const picked = [...$("catList").querySelectorAll("[data-cat]")].filter(x => x.checked)
+      .flatMap(x => CATEGORIES[x.dataset.cat]);
+    $("bankText").value = picked.join("\n");
+    updateBankStat();
+  }));
+  $("bankText").value = bank.join("\n");
+  updateBankStat();
+  $("bankModal").classList.remove("hidden");
+}
+function updateBankStat(){
+  const n = parseBank($("bankText").value).length;
+  $("bankStat").textContent = `${n} 個詞${n < 25 ? "（不足 25，無法開局）" : ""}`;
+}
+
+/* ==========================================================================
+   9. 啟動
+   ========================================================================== */
+async function boot(){
+  const useFirebase = !!(FIREBASE_CONFIG.databaseURL && FIREBASE_CONFIG.apiKey);
+  NET = useFirebase ? FirebaseNet : LocalNet;
+  try{
+    await NET.init();
+  }catch(err){
+    console.error(err);
+    NET = LocalNet; await NET.init();
+    $("homeHint").textContent = "Firebase 載入失敗，已切換到本機測試模式。請確認金鑰與網路。";
+  }
+  $("modeChip").textContent = NET.label;
+
+  const p = new URLSearchParams(location.search);
+  if(p.get("role")) myRole = p.get("role");
+  const r = p.get("room");
+  if(r) await enterRoom(r.toUpperCase());
+
+  $("btnCreate").addEventListener("click", createRoom);
+  $("btnJoin").addEventListener("click", () => {
+    const id = $("joinId").value.trim().toUpperCase();
+    if(id) enterRoom(id);
+  });
+  $("joinId").addEventListener("keydown", e => { if(e.key === "Enter") $("btnJoin").click(); });
+  $("btnBank").addEventListener("click", openBank);
+  $("bankText").addEventListener("input", updateBankStat);
+  $("bankCancel").addEventListener("click", () => $("bankModal").classList.add("hidden"));
+  $("bankReset").addEventListener("click", () => { $("bankText").value = DEFAULT_BANK.join("\n"); updateBankStat(); });
+  $("bankSave").addEventListener("click", () => {
+    const words = parseBank($("bankText").value);
+    if(words.length < 25){ alert("至少要 25 個詞才能組成牌桌。"); return; }
+    bank = words;
+    $("bankCount").textContent = words.length;
+    $("bankModal").classList.add("hidden");
+  });
+  $("roleModal").querySelectorAll("[data-role]").forEach(b =>
+    b.addEventListener("click", () => setRole(b.dataset.role)));
+  $("btnNewGame").addEventListener("click", () => { if(confirm("重新洗牌開新局？目前進度會清空。")) newGame(); });
+  $("btnLeave").addEventListener("click", leaveRoom);
+  $("btnShare").addEventListener("click", async () => {
+    const link = location.origin + location.pathname + "?room=" + roomId;
+    try{
+      await navigator.clipboard.writeText(link);
+      $("btnShare").textContent = "已複製 ✓";
+      setTimeout(() => $("btnShare").textContent = "複製邀請連結", 1600);
+    }catch(e){ prompt("複製這條連結給隊友：", link); }
+  });
+  $("bankCount").textContent = bank.length;
+}
+boot();
+</script>
+</body>
+</html>
