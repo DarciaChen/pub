@@ -217,24 +217,38 @@ label.field{display:block;font-size:12px;letter-spacing:.14em;color:var(--ink-so
   <section id="game" class="hidden">
     <div id="winBanner" class="banner hidden"></div>
 
-    <div class="scoreboard">
-      <div class="score score--red" id="scoreRed">9<small>紅隊</small></div>
-      <div class="turnbar" id="turnBar">—</div>
-      <div class="score score--blue" id="scoreBlue">8<small>藍隊</small></div>
-      <div class="timer hidden" id="timer">--:--</div>
+    <!-- 大廳：選角色（遊戲開始後這整塊會收起來，避免中途切換偷看） -->
+    <div id="lobbyPanel" class="panel hidden">
+      <h2>揪團中</h2>
+      <p class="hint" style="margin-top:0">先選好雙方隊長，選完角色再按「開始遊戲」——遊戲一開始，這個角色選擇畫面就會消失，中途不能再切換身分。</p>
+      <div class="roles" id="roleBar"></div>
+      <div class="row" style="margin-top:14px">
+        <button class="btn btn--red" id="btnStartGame" disabled>開始遊戲</button>
+        <span class="hint" id="lobbyReadyHint" style="margin:0"></span>
+      </div>
     </div>
 
-    <div class="roles" id="roleBar"></div>
+    <!-- 遊戲進行中 -->
+    <div id="playArea" class="hidden">
+      <div class="scoreboard">
+        <div class="score score--red" id="scoreRed">9<small>紅隊</small></div>
+        <div class="turnbar" id="turnBar">—</div>
+        <div class="score score--blue" id="scoreBlue">8<small>藍隊</small></div>
+        <div class="timer hidden" id="timer">--:--</div>
+      </div>
 
-    <div id="clueBar" class="cluebar hidden">
-      <span class="word" id="clueWord"></span>
-      <span class="num" id="clueNum"></span>
-      <span class="meta" id="clueMeta"></span>
+      <div class="hint" id="myRoleTag" style="margin:0 0 10px"></div>
+
+      <div id="clueBar" class="cluebar hidden">
+        <span class="word" id="clueWord"></span>
+        <span class="num" id="clueNum"></span>
+        <span class="meta" id="clueMeta"></span>
+      </div>
+
+      <div class="board" id="board"></div>
+
+      <div class="panel" id="actionPanel"></div>
     </div>
-
-    <div class="board" id="board"></div>
-
-    <div class="panel" id="actionPanel"></div>
 
     <div class="panel">
       <div class="row" style="justify-content:space-between">
@@ -467,27 +481,49 @@ function turnPatch(nextTeam, extra){
 async function createRoom(){
   if(bank.length < 25){ alert("詞庫至少要有 25 個詞。"); return; }
   const id = makeRoomId();
-  const starter = Math.random() < 0.5 ? "red" : "blue";
   const timerEnabled = $("timerOn").checked;
   const timerSeconds = Math.max(15, Math.min(600, parseInt($("timerSec").value,10) || 90));
   const fresh = {
     createdAt: Date.now(),
+    phase: "lobby",
     settings: { timerEnabled, timerSeconds },
     bank: bank.slice(),
-    board: buildBoard(bank, starter),
-    starter,
-    turn: starter,
-    turnSeq: 1,
+    board: [],
+    starter: null,
+    turn: null,
+    turnSeq: 0,
     guessesLeft: 0,
     clue: null,
     winner: null,
-    turnEndsAt: timerEnabled ? Date.now() + timerSeconds*1000 : null,
+    turnEndsAt: null,
     roles: { "red-captain": null, "blue-captain": null },
     log: {}
   };
-  applyPatch(fresh, pushLog(`房間開張，${teamName(starter)}先攻。`));
+  applyPatch(fresh, pushLog(`房間開張，等雙方選好隊長再開始。`));
   await NET.write(id, fresh);
   enterRoom(id);
+}
+
+async function startGame(){
+  if(!state || roomId === null) return;
+  const roles = state.roles || {};
+  if(!roles["red-captain"] || !roles["blue-captain"]){
+    alert("紅、藍兩隊都要先選好隊長，才能開始遊戲。");
+    return;
+  }
+  const words = (state.bank && state.bank.length >= 25) ? state.bank : bank;
+  const starter = Math.random() < 0.5 ? "red" : "blue";
+  const timerEnabled = state.settings && state.settings.timerEnabled;
+  const timerSeconds = state.settings ? state.settings.timerSeconds : 90;
+  const patch = {
+    phase: "playing",
+    board: buildBoard(words, starter),
+    starter, turn: starter, turnSeq: 1,
+    guessesLeft: 0, clue: null, winner: null,
+    turnEndsAt: timerEnabled ? Date.now() + (timerSeconds||90)*1000 : null
+  };
+  Object.assign(patch, pushLog(`遊戲開始，${teamName(starter)}先攻。`));
+  await NET.update(roomId, patch);
 }
 
 async function newGame(){
@@ -569,6 +605,23 @@ async function endTurn(auto){
    ========================================================================== */
 function render(){
   if(!state){ return; }
+  const inLobby = state.phase === "lobby";
+  $("lobbyPanel").classList.toggle("hidden", !inLobby);
+  $("playArea").classList.toggle("hidden", inLobby);
+  $("roomLabel").textContent = roomId;
+  $("log").innerHTML = logList().map(e => `<div>${escapeHtml(e.m)}</div>`).join("");
+
+  if(inLobby){
+    renderRoles();
+    const roles = state.roles || {};
+    const missing = [];
+    if(!roles["red-captain"]) missing.push("紅隊隊長");
+    if(!roles["blue-captain"]) missing.push("藍隊隊長");
+    $("lobbyReadyHint").textContent = missing.length ? `還缺：${missing.join("、")}` : "雙方隊長都選好了，可以開始！";
+    $("btnStartGame").disabled = missing.length > 0;
+    return;
+  }
+
   const w = winner();
 
   // 記分板
@@ -593,11 +646,15 @@ function render(){
     $("clueMeta").textContent = `by ${teamName(state.clue.team)}隊長`;
   } else { cb.className = "cluebar hidden"; }
 
-  renderRoles();
+  $("myRoleTag").textContent = roleLabelText(myRole);
   renderBoard(w);
   renderActions(w);
-  $("roomLabel").textContent = roomId;
-  $("log").innerHTML = logList().map(e => `<div>${escapeHtml(e.m)}</div>`).join("");
+}
+
+function roleLabelText(role){
+  const map = { "red-captain":"紅隊隊長", "red-agent":"紅隊特務",
+                "blue-captain":"藍隊隊長", "blue-agent":"藍隊特務", "spectator":"觀戰中" };
+  return "你的身分：" + (map[role] || "觀戰中");
 }
 
 function escapeHtml(s){
@@ -697,6 +754,10 @@ setInterval(async () => {
    7. 房間進出與角色
    ========================================================================== */
 async function setRole(role){
+  if(state && state.phase === "playing"){
+    alert("遊戲已經開始，身分沒辦法中途更換——這是刻意設計，避免有人臨時切換去偷看牌底。");
+    return;
+  }
   const isCap = role.endsWith("captain");
   if(isCap){
     const occupant = state && state.roles ? state.roles[role] : null;
@@ -750,7 +811,13 @@ async function enterRoom(id){
     roomId = null;
     return;
   }
-  if(!myRole) $("roleModal").classList.remove("hidden");
+  if(!myRole){
+    if(first.phase === "playing"){
+      myRole = "spectator";   // 遊戲已經開始，晚到只能觀戰，不能空降當隊長偷看牌底
+    } else {
+      $("roleModal").classList.remove("hidden");
+    }
+  }
 }
 
 function leaveRoom(){
@@ -803,6 +870,7 @@ async function boot(){
   if(r) await enterRoom(r.toUpperCase());
 
   $("btnCreate").addEventListener("click", createRoom);
+  $("btnStartGame").addEventListener("click", startGame);
   $("btnJoin").addEventListener("click", () => {
     const id = $("joinId").value.trim().toUpperCase();
     if(id) enterRoom(id);
