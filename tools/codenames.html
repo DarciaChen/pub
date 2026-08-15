@@ -390,6 +390,22 @@ let myRole = null;         // red-captain / red-agent / blue-captain / blue-agen
 let bank = DEFAULT_BANK.slice();
 let autoEndSeq = -1;       // 計時器自動換邊的防重複標記
 
+/* 每個瀏覽器一組持久 ID，用來判斷「隊長」這個席位是不是本人佔用的。
+   這不是身分驗證，擋不了刻意開 devtools 看資料的人，只防「不小心點錯角色」。 */
+function getPlayerId(){
+  try{
+    let id = localStorage.getItem("cn_playerId");
+    if(!id){
+      id = (crypto.randomUUID ? crypto.randomUUID() : "p_" + Date.now() + "_" + Math.random().toString(36).slice(2));
+      localStorage.setItem("cn_playerId", id);
+    }
+    return id;
+  }catch(e){
+    return "p_" + Date.now() + "_" + Math.random().toString(36).slice(2);
+  }
+}
+const myPlayerId = getPlayerId();
+
 const other = (t) => t === "red" ? "blue" : "red";
 const teamName = (t) => t === "red" ? "紅隊" : "藍隊";
 const myTeam = () => myRole && myRole !== "spectator" ? myRole.split("-")[0] : null;
@@ -466,6 +482,7 @@ async function createRoom(){
     clue: null,
     winner: null,
     turnEndsAt: timerEnabled ? Date.now() + timerSeconds*1000 : null,
+    roles: { "red-captain": null, "blue-captain": null },
     log: {}
   };
   applyPatch(fresh, pushLog(`房間開張，${teamName(starter)}先攻。`));
@@ -588,11 +605,15 @@ function escapeHtml(s){
 }
 
 function renderRoles(){
+  const roles = (state && state.roles) || {};
   const defs = [["red-captain","紅隊隊長","red"],["red-agent","紅隊特務","red"],
                 ["blue-captain","藍隊隊長","blue"],["blue-agent","藍隊特務","blue"],
                 ["spectator","觀戰",""]];
-  $("roleBar").innerHTML = defs.map(([v,label,team]) =>
-    `<button class="role ${myRole===v?"on "+team:""}" data-role="${v}">${label}</button>`).join("");
+  $("roleBar").innerHTML = defs.map(([v,label,team]) => {
+    const taken = v.endsWith("captain") && roles[v] && roles[v] !== myPlayerId;
+    const cls = ["role"]; if(myRole===v) cls.push("on", team);
+    return `<button class="${cls.join(" ")}" data-role="${v}">${label}${taken?" 🔒":""}</button>`;
+  }).join("");
   $("roleBar").querySelectorAll("[data-role]").forEach(b =>
     b.addEventListener("click", () => setRole(b.dataset.role)));
 }
@@ -675,7 +696,29 @@ setInterval(async () => {
 /* ==========================================================================
    7. 房間進出與角色
    ========================================================================== */
-function setRole(role){
+async function setRole(role){
+  const isCap = role.endsWith("captain");
+  if(isCap){
+    const occupant = state && state.roles ? state.roles[role] : null;
+    if(occupant && occupant !== myPlayerId){
+      const takeOver = confirm(
+        `${teamName(role.split("-")[0])}隊長已經有人了。\n` +
+        `如果對方只是斷線或跑錯分頁，可以接管；但如果對方還在，接管會讓你們同時看到牌底答案。\n` +
+        `確定要接管嗎？`);
+      if(!takeOver) return;
+    }
+  }
+  const prevRole = myRole;
+  const patch = {};
+  if(prevRole && prevRole.endsWith("captain") && prevRole !== role){
+    patch["roles/" + prevRole] = null;   // 離開隊長席位時釋放，讓別人能接手
+  }
+  if(isCap){
+    patch["roles/" + role] = myPlayerId;
+  }
+  if(Object.keys(patch).length && roomId){
+    await NET.update(roomId, patch);
+  }
   myRole = role;
   const u = new URL(location.href);
   u.searchParams.set("room", roomId);
