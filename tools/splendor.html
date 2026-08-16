@@ -225,6 +225,7 @@ input[type=text]{
   <div class="playersStrip" id="playersStrip"></div>
 
   <div class="board" id="board">
+    <div style="text-align:center;font-size:11px;color:var(--cream-dim);padding-top:6px;">🏆 貴族：集滿圖示顏色的永久獎勵數量會自動 +3分</div>
     <div class="nobleRow" id="nobleRow"></div>
     <div class="levelRow" id="row3"></div>
     <div class="levelRow" id="row2"></div>
@@ -240,6 +241,7 @@ input[type=text]{
       <div class="pts">分數：<span id="myPts">0</span></div>
     </div>
     <div class="myGems" id="myGems"></div>
+    <div id="myNobles" style="font-size:13px;margin-top:4px;"></div>
     <div class="reservedRow" id="myReserved"></div>
   </div>
 
@@ -422,6 +424,7 @@ function checkNobles(state, pIdx){
     state.nobles = state.nobles.filter(x=>x!==ni);
     p.nobles.push(ni);
     state.log.push(p.name+" 獲得貴族造訪（+3分）");
+    toast("🏆 "+p.name+" 獲得貴族造訪，+3分！");
   } else if(eligible.length>1){
     state.pendingNoble = {playerIdx:pIdx, options:eligible};
   }
@@ -786,7 +789,7 @@ function renderGame(){
       '<div class="nm"><span>'+p.name+(i===MY_INDEX?'（你）':'')+'</span><span>'+playerPoints(p)+'分</span></div>'+
       '<div class="bonuses">'+COLORS.map(c=>'<span class="b">'+gemDot(c,10)+bon[c]+'</span>').join('')+'</div>'+
       '<div class="gems">'+COLORS.concat(['G']).filter(c=>p.gems[c]>0).map(c=>'<span class="gem mini '+c+'">'+p.gems[c]+'</span>').join('')+'</div>'+
-      '<div style="margin-top:3px;color:var(--cream-dim)">預購 '+p.reserved.length+'/3 · 貴族 '+p.nobles.length+'</div>'+
+      '<div style="margin-top:3px;color:var(--cream-dim)">預購 '+p.reserved.length+'/3'+(p.nobles.length?' · 貴族 '+p.nobles.map(()=>'👑').join(''):'')+'</div>'+
       '</div>';
   }).join('');
 
@@ -840,6 +843,7 @@ function renderGame(){
   document.getElementById('myGems').innerHTML = COLORS.concat(['G']).map(c=>
     '<div class="gem '+c+'">'+ (c==='G'?'★':'') +'<span class="gemCount">'+me.gems[c]+'</span></div>'
   ).join('');
+  document.getElementById('myNobles').innerHTML = me.nobles.length ? ('👑 已獲得貴族：'+me.nobles.map(()=>'👑').join('')+'（+'+(me.nobles.length*3)+'分）') : '';
   document.getElementById('myReserved').innerHTML = me.reserved.map((cid,idx)=>{
     const card = CARDS[cid];
     const afford = isMyTurn() && MODE==='buy' && canAfford(card, me);
@@ -867,6 +871,8 @@ function renderGame(){
 
   // 丟棄寶石浮層
   renderDiscardModal();
+  // 貴族多選一浮層
+  renderNobleChoiceModal();
   // 遊戲結束畫面
   renderEndScreen();
 }
@@ -935,6 +941,27 @@ function renderDiscardModal(){
     if((DISCARD_SEL[c]||0)>0){ DISCARD_SEL[c]--; renderGame(); }
   });
   wrap.querySelector('#discardOk').onclick = confirmDiscard;
+}
+
+function renderNobleChoiceModal(){
+  const existing = document.getElementById('nobleChoiceModal');
+  if(existing) existing.remove();
+  const state = GAME_STATE;
+  if(!state || !state.pendingNoble || state.pendingNoble.playerIdx!==MY_INDEX) return;
+  const wrap = document.createElement('div');
+  wrap.id='nobleChoiceModal'; wrap.className='modalWrap';
+  const optsHtml = state.pendingNoble.options.map(ni=>{
+    const nb = NOBLES[ni];
+    const reqHtml = Object.keys(nb.req).map(c=>'<span style="display:inline-flex;align-items:center;gap:3px;margin-right:8px;">'+gemDot(c,12)+nb.req[c]+'</span>').join('');
+    return '<button class="btn" data-choosenoble="'+ni+'" style="width:100%;text-align:left;display:flex;align-items:center;justify-content:space-between;">'+
+      '<span>👑 +'+nb.pt+'分</span><span>'+reqHtml+'</span></button>';
+  }).join('<div style="height:8px"></div>');
+  wrap.innerHTML = '<div class="modal"><h3>🏆 貴族來訪！你同時符合多位貴族的條件，請選一位</h3>'+
+    '<div class="opts">'+optsHtml+'</div></div>';
+  document.body.appendChild(wrap);
+  wrap.querySelectorAll('[data-choosenoble]').forEach(btn=>{
+    btn.onclick = ()=>chooseNoble(parseInt(btn.dataset.choosenoble));
+  });
 }
 
 function renderEndScreen(){
