@@ -124,6 +124,10 @@ label.field{display:block;font-size:12px;letter-spacing:.14em;color:var(--ink-so
   border:1px solid rgba(0,0,0,.35)}
 .corner.red{background:var(--red)} .corner.blue{background:var(--blue)}
 .corner.neutral{background:var(--neutral)} .corner.assassin{background:var(--black)}
+.card .votecount{position:absolute;top:5px;left:6px;font-size:10px;line-height:1;
+  background:rgba(36,31,26,.78);color:#F6EEDC;border-radius:999px;padding:3px 6px;
+  font-family:var(--sans);letter-spacing:0}
+.card .votecount.mine{background:var(--red);color:#F7E9DC}
 /* 已翻開 */
 .card.rev{box-shadow:inset 0 2px 6px rgba(0,0,0,.35);transform:none}
 .card.rev .band{background:transparent;border:0}
@@ -197,6 +201,11 @@ label.field{display:block;font-size:12px;letter-spacing:.14em;color:var(--ink-so
           <label class="field" for="timerSec">每回合秒數</label>
           <input type="number" id="timerSec" value="90" min="15" max="600" step="15">
         </div>
+      </div>
+      <div class="row" style="margin-top:10px">
+        <label style="display:flex;align-items:center;gap:7px;font-size:14px">
+          <input type="checkbox" id="voteOn" style="width:auto"> 特務翻牌需過半同意（防新手誤觸）
+        </label>
         <button class="btn btn--ghost" id="btnBank">詞庫管理（<span id="bankCount">280</span> 詞）</button>
       </div>
       <p class="hint" id="homeHint"></p>
@@ -221,8 +230,9 @@ label.field{display:block;font-size:12px;letter-spacing:.14em;color:var(--ink-so
     <!-- 大廳：選角色（遊戲開始後這整塊會收起來，避免中途切換偷看） -->
     <div id="lobbyPanel" class="panel hidden">
       <h2>揪團中</h2>
-      <p class="hint" style="margin-top:0">先選好雙方隊長，選完角色再按「開始遊戲」——遊戲一開始，這個角色選擇畫面就會消失，中途不能再切換身分。</p>
+      <p class="hint" style="margin-top:0">先選好雙方隊長，選完角色再按「開始遊戲」——遊戲一開始，跨隊或變觀戰就鎖死了，只能在自己那隊裡換手。</p>
       <div class="roles" id="roleBar"></div>
+      <p class="hint" id="lobbyStats" style="margin:10px 0 0"></p>
       <div class="row" style="margin-top:14px">
         <button class="btn btn--red" id="btnStartGame" disabled>開始遊戲</button>
         <span class="hint" id="lobbyReadyHint" style="margin:0"></span>
@@ -465,6 +475,61 @@ function logList(){
   return Object.values(state.log).sort((a,b) => b.t - a.t).slice(0,30);
 }
 
+/* ---- 角色登記表（state.players: {playerId: role}）相關查詢 ----
+   取代舊版只記隊長的 state.roles；特務身分現在也記在共用資料裡，
+   這樣重新整理、換連結進來都找得回身分，而不是只靠網址參數。 */
+function captainOf(team){
+  if(!state || !state.players) return null;
+  for(const pid in state.players){
+    if(state.players[pid] === team + "-captain") return pid;
+  }
+  return null;
+}
+function countAgents(team){
+  if(!state || !state.players) return 0;
+  let n = 0;
+  for(const pid in state.players){ if(state.players[pid] === team + "-agent") n++; }
+  return n;
+}
+function teamCounts(){
+  const c = { "red-captain":0, "red-agent":0, "blue-captain":0, "blue-agent":0, "spectator":0 };
+  if(state && state.players){
+    for(const pid in state.players){
+      const r = state.players[pid];
+      if(c[r] !== undefined) c[r]++;
+    }
+  }
+  return c;
+}
+
+const CAPTAIN_AWAY_MS = 60000;   // 隊長超過這麼久沒回報心跳，同隊才能申請接管
+function isCaptainAway(playerId){
+  if(!state || !state.heartbeats) return true;
+  const last = state.heartbeats[playerId];
+  if(!last) return true;
+  return (Date.now() - last) > CAPTAIN_AWAY_MS;
+}
+
+/* ---- 投票翻牌：查自己目前投給哪張卡（-1 代表沒投） ---- */
+function myVotedCardIndex(){
+  if(!state || !state.votes) return -1;
+  for(const idx in state.votes){
+    if(state.votes[idx] && state.votes[idx][myPlayerId]) return parseInt(idx, 10);
+  }
+  return -1;
+}
+
+/* ---- 防爆詞：線索詞跟牌桌任何一張牌互相包含（不分陣營、不分翻開沒翻開）就算違規 ---- */
+function findBoardWordConflict(word){
+  if(!state || !state.board) return null;
+  const w = (word || "").trim();
+  if(!w) return null;
+  for(const c of state.board){
+    if(w === c.w || w.includes(c.w) || c.w.includes(w)) return c.w;
+  }
+  return null;
+}
+
 /* ==========================================================================
    5. 遊戲動作
    ========================================================================== */
@@ -474,6 +539,7 @@ function turnPatch(nextTeam, extra){
     turn: nextTeam,
     clue: null,
     guessesLeft: 0,
+    votes: null,
     turnSeq: (state.turnSeq || 0) + 1,
     turnEndsAt: secs ? Date.now() + secs*1000 : null
   }, extra || {});
@@ -484,10 +550,11 @@ async function createRoom(){
   const id = makeRoomId();
   const timerEnabled = $("timerOn").checked;
   const timerSeconds = Math.max(15, Math.min(600, parseInt($("timerSec").value,10) || 90));
+  const votingEnabled = $("voteOn").checked;
   const fresh = {
     createdAt: Date.now(),
     phase: "lobby",
-    settings: { timerEnabled, timerSeconds },
+    settings: { timerEnabled, timerSeconds, votingEnabled },
     bank: bank.slice(),
     board: [],
     starter: null,
@@ -497,7 +564,9 @@ async function createRoom(){
     clue: null,
     winner: null,
     turnEndsAt: null,
-    roles: { "red-captain": null, "blue-captain": null },
+    players: {},
+    heartbeats: {},
+    votes: {},
     log: {}
   };
   applyPatch(fresh, pushLog(`房間開張，等雙方選好隊長再開始。`));
@@ -514,8 +583,7 @@ async function createRoom(){
 
 async function startGame(){
   if(!state || roomId === null) return;
-  const roles = state.roles || {};
-  if(!roles["red-captain"] || !roles["blue-captain"]){
+  if(!captainOf("red") || !captainOf("blue")){
     alert("紅、藍兩隊都要先選好隊長，才能開始遊戲。");
     return;
   }
@@ -526,8 +594,8 @@ async function startGame(){
   const patch = {
     phase: "playing",
     board: buildBoard(words, starter),
-    starter, turn: starter, turnSeq: 1,
-    guessesLeft: 0, clue: null, winner: null,
+    starter, turn: starter, turnSeq: (state.turnSeq || 0) + 1,
+    guessesLeft: 0, clue: null, winner: null, votes: null,
     turnEndsAt: timerEnabled ? Date.now() + (timerSeconds||90)*1000 : null
   };
   Object.assign(patch, pushLog(`遊戲開始，${teamName(starter)}先攻。`));
@@ -536,16 +604,14 @@ async function startGame(){
 
 async function newGame(){
   if(!state) return;
-  const starter = other(state.starter || "red");
-  const words = (state.bank && state.bank.length >= 25) ? state.bank : bank;
   const patch = {
-    board: buildBoard(words, starter),
-    starter, turn: starter, turnSeq: (state.turnSeq||0)+1,
-    guessesLeft: 0, clue: null, winner: null,
-    turnEndsAt: state.settings && state.settings.timerEnabled
-      ? Date.now() + (state.settings.timerSeconds||90)*1000 : null
+    phase: "lobby",
+    board: [], starter: null, turn: null,
+    turnSeq: (state.turnSeq||0)+1,
+    guessesLeft: 0, clue: null, winner: null, votes: null,
+    turnEndsAt: null
   };
-  Object.assign(patch, pushLog(`新的一局開始，${teamName(starter)}先攻。`));
+  Object.assign(patch, pushLog(`回到大廳，可以重新選隊長跟隊員，選好後再開始。`));
   await NET.update(roomId, patch);
 }
 
@@ -555,10 +621,18 @@ async function giveClue(){
   const count = Math.max(0, Math.min(9, parseInt(numRaw,10)));
   if(!word){ alert("請輸入線索詞。"); return; }
   if(Number.isNaN(count)){ alert("請輸入數字。"); return; }
+
+  const hit = findBoardWordConflict(word);
+  if(hit){
+    alert(`「${word}」跟牌桌上的「${hit}」重複或有包含關係，正版規則不能用這個詞，請換一個。`);
+    return;   // 不清空輸入框，讓他直接修改
+  }
+
   const team = myTeam();
   const patch = {
     clue: { word, count, team },
     guessesLeft: count === 0 ? 99 : count + 1,
+    votes: null,
     turnSeq: (state.turnSeq||0) + 1
   };
   const secs = state.settings && state.settings.timerEnabled ? (state.settings.timerSeconds||90) : 0;
@@ -568,14 +642,12 @@ async function giveClue(){
   $("clueInput").value = ""; $("countInput").value = "";
 }
 
-async function flipCard(i){
+/* 翻牌的核心邏輯抽成純函式，回傳 patch 而不直接送出——
+   直接點擊翻牌（投票模式關閉時）跟投票過半（投票模式開啟時）都靠這個組 patch。 */
+function buildFlipPatch(i){
   const card = state.board[i];
-  if(!card || card.f || winner()) return;
-  if(isCaptain() || myTeam() !== state.turn) return;
-  if(!state.clue){ alert("等隊長給線索之後才能翻牌。"); return; }
-
   const team = state.turn;
-  const patch = { ["board/" + i + "/f"]: true };
+  const patch = { ["board/" + i + "/f"]: true, votes: null };
 
   if(card.id === "assassin"){
     Object.assign(patch, { winner: other(team), turnEndsAt: null, clue: null },
@@ -596,6 +668,46 @@ async function flipCard(i){
     Object.assign(patch, pushLog(`${teamName(team)}翻開「${card.w}」— 是${what}，換邊。`),
       turnPatch(other(team)));
   }
+  return patch;
+}
+
+async function flipCard(i){
+  const card = state.board[i];
+  if(!card || card.f || winner()) return;
+  if(isCaptain() || myTeam() !== state.turn) return;
+  if(!state.clue){ alert("等隊長給線索之後才能翻牌。"); return; }
+  await NET.update(roomId, buildFlipPatch(i));
+}
+
+/* 投票翻牌模式：點卡片＝投票，不是直接翻。
+   同一人同時只能有一票在場上，改投別張會自動把舊票收回。
+   嚴格過半（該隊目前特務人數的一半以上，不含隊長）才會真的翻牌。 */
+async function voteCard(i){
+  if(!state || !roomId) return;
+  const card = state.board[i];
+  if(!card || card.f || winner()) return;
+  if(isCaptain() || myTeam() !== state.turn || !state.clue) return;
+
+  const currentVotes = (state.votes && state.votes[i]) ? Object.assign({}, state.votes[i]) : {};
+  const myPrev = myVotedCardIndex();
+  if(myPrev === i){
+    delete currentVotes[myPlayerId];
+  } else {
+    currentVotes[myPlayerId] = true;
+  }
+
+  const agentCount = countAgents(state.turn);
+  const need = Math.floor(agentCount / 2) + 1;
+  const got = Object.keys(currentVotes).length;
+
+  if(agentCount > 0 && got >= need){
+    await NET.update(roomId, buildFlipPatch(i));   // 過半，直接翻牌，順便整個清空 votes
+    return;
+  }
+
+  const patch = {};
+  if(myPrev !== -1 && myPrev !== i) patch["votes/" + myPrev + "/" + myPlayerId] = null;
+  patch["votes/" + i + "/" + myPlayerId] = (myPrev === i) ? null : true;
   await NET.update(roomId, patch);
 }
 
@@ -621,12 +733,15 @@ function render(){
 
   if(inLobby){
     renderRoles();
-    const roles = state.roles || {};
     const missing = [];
-    if(!roles["red-captain"]) missing.push("紅隊隊長");
-    if(!roles["blue-captain"]) missing.push("藍隊隊長");
+    if(!captainOf("red")) missing.push("紅隊隊長");
+    if(!captainOf("blue")) missing.push("藍隊隊長");
     $("lobbyReadyHint").textContent = missing.length ? `還缺：${missing.join("、")}` : "雙方隊長都選好了，可以開始！";
     $("btnStartGame").disabled = missing.length > 0;
+    const c = teamCounts();
+    $("lobbyStats").textContent =
+      `紅隊 ${c["red-captain"]+c["red-agent"]} 人（含隊長）／藍隊 ${c["blue-captain"]+c["blue-agent"]} 人（含隊長）`
+      + (c.spectator ? `／觀戰 ${c.spectator} 人` : "");
     return;
   }
 
@@ -654,7 +769,7 @@ function render(){
     $("clueMeta").textContent = `by ${teamName(state.clue.team)}隊長`;
   } else { cb.className = "cluebar hidden"; }
 
-  $("myRoleTag").textContent = roleLabelText(myRole);
+  renderMyRoleTag();
   renderBoard(w);
   renderActions(w);
 }
@@ -665,17 +780,38 @@ function roleLabelText(role){
   return "你的身分：" + (map[role] || "觀戰中");
 }
 
+/* 遊戲進行中的身分標籤。隊長會看到「讓出隊長」；特務只有在隊長席位空著
+   或隊長心跳逾時（可能斷線）才會看到「接管隊長」，平常不會顯示，避免亂點。 */
+function renderMyRoleTag(){
+  const team = myRole ? myRole.split("-")[0] : null;
+  let html = escapeHtml(roleLabelText(myRole));
+  if(team && myRole === team + "-captain"){
+    html += ` <button class="btn btn--sm btn--ghost" data-action="stepdown" type="button">讓出隊長</button>`;
+  } else if(team && myRole === team + "-agent"){
+    const occupant = captainOf(team);
+    if(!occupant || isCaptainAway(occupant)){
+      html += ` <button class="btn btn--sm btn--ghost" data-action="takeover" type="button">接管隊長</button>`;
+    }
+  }
+  $("myRoleTag").innerHTML = html;
+  $("myRoleTag").querySelectorAll('[data-action="stepdown"]').forEach(b =>
+    b.addEventListener("click", () => {
+      if(confirm("確定要讓出隊長身分嗎？之後隊友可以接手。")) setRole(team + "-agent");
+    }));
+  $("myRoleTag").querySelectorAll('[data-action="takeover"]').forEach(b =>
+    b.addEventListener("click", () => setRole(team + "-captain")));
+}
+
 function escapeHtml(s){
   return String(s).replace(/[&<>"']/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]));
 }
 
 function renderRoles(){
-  const roles = (state && state.roles) || {};
   const defs = [["red-captain","紅隊隊長","red"],["red-agent","紅隊特務","red"],
                 ["blue-captain","藍隊隊長","blue"],["blue-agent","藍隊特務","blue"],
                 ["spectator","觀戰",""]];
   $("roleBar").innerHTML = defs.map(([v,label,team]) => {
-    const taken = v.endsWith("captain") && roles[v] && roles[v] !== myPlayerId;
+    const taken = v.endsWith("captain") && captainOf(team) && captainOf(team) !== myPlayerId;
     const cls = ["role"]; if(myRole===v) cls.push("on", team);
     return `<button class="${cls.join(" ")}" data-role="${v}">${label}${taken?" 🔒":""}</button>`;
   }).join("");
@@ -685,25 +821,35 @@ function renderRoles(){
 
 function renderBoard(w){
   const showKey = isCaptain() || !!w;
-  const canClick = !w && !isCaptain() && myTeam() === state.turn && !!state.clue;
+  const votingOn = !!(state.settings && state.settings.votingEnabled);
+  const canAct = !w && !isCaptain() && myTeam() === state.turn && !!state.clue;
+  const myVote = votingOn ? myVotedCardIndex() : -1;
   $("board").innerHTML = state.board.map((c,i) => {
     const cls = ["card"];
     if(c.f){ cls.push("rev", "rev-" + c.id); }
     else if(showKey){ cls.push("key-" + c.id); }
     const corner = (!c.f && showKey) ? `<span class="corner ${c.id}"></span>` : "";
-    const dis = (c.f || !canClick) ? "disabled" : "";
+    let voteBadge = "";
+    if(votingOn && !c.f && !isCaptain()){
+      const n = (state.votes && state.votes[i]) ? Object.keys(state.votes[i]).length : 0;
+      if(n > 0 || myVote === i){
+        voteBadge = `<span class="votecount${myVote===i?" mine":""}">${n}票</span>`;
+      }
+    }
+    const dis = (c.f || !canAct) ? "disabled" : "";
     return `<button class="${cls.join(" ")}" data-i="${i}" ${dis}>
-      ${corner}<span class="band"><span class="word">${escapeHtml(c.w)}</span></span></button>`;
+      ${corner}${voteBadge}<span class="band"><span class="word">${escapeHtml(c.w)}</span></span></button>`;
   }).join("");
+  const handler = votingOn ? voteCard : flipCard;
   $("board").querySelectorAll("button:not([disabled])").forEach(b =>
-    b.addEventListener("click", () => flipCard(parseInt(b.dataset.i,10))));
+    b.addEventListener("click", () => handler(parseInt(b.dataset.i,10))));
 }
 
 function renderActions(w){
   const p = $("actionPanel");
   if(w){
     p.innerHTML = `<div class="row"><button class="btn btn--red" id="btnAgain">再玩一局</button>
-      <span class="hint" style="margin:0">下一局由${teamName(other(state.starter))}先攻。</span></div>`;
+      <span class="hint" style="margin:0">會回到大廳，可以重選隊長跟隊員。</span></div>`;
     $("btnAgain").addEventListener("click", newGame);
     return;
   }
@@ -758,36 +904,51 @@ setInterval(async () => {
   }
 }, 250);
 
+/* 心跳 —— 每 20 秒回報一次「我還在」，只有隊長逾時（見 CAPTAIN_AWAY_MS）才會被同隊申請接管 */
+setInterval(() => {
+  if(roomId && myRole && myRole !== "spectator" && NET){
+    NET.update(roomId, { ["heartbeats/" + myPlayerId]: Date.now() }).catch(()=>{});
+  }
+}, 20000);
+
 /* ==========================================================================
    7. 房間進出與角色
    ========================================================================== */
 async function setRole(role){
-  if(state && state.phase === "playing"){
-    alert("遊戲已經開始，身分沒辦法中途更換——這是刻意設計，避免有人臨時切換去偷看牌底。");
-    return;
-  }
+  const targetTeam = role.split("-")[0];   // 'red' / 'blue' / 'spectator'
   const isCap = role.endsWith("captain");
-  if(isCap){
-    const occupant = state && state.roles ? state.roles[role] : null;
+
+  if(state && state.phase === "playing"){
+    const myTeamNow = myRole ? myRole.split("-")[0] : null;
+    if(targetTeam !== myTeamNow){
+      alert("遊戲進行中不能切換隊伍或變成觀戰，只能在原本那隊裡切換隊員／隊長。");
+      return;
+    }
+    if(isCap){
+      const occupant = captainOf(targetTeam);
+      if(occupant && occupant !== myPlayerId){
+        if(!isCaptainAway(occupant)){
+          alert(`${teamName(targetTeam)}隊長還在線上，沒辦法接管。如果需要離開，請本人切成隊員讓出位置。`);
+          return;
+        }
+        const ok = confirm(`${teamName(targetTeam)}隊長超過一段時間沒有回應，可能斷線了。確定要接管嗎？`);
+        if(!ok) return;
+      }
+    }
+  } else if(isCap){
+    // 大廳階段：門檻較低，牌桌還不存在，接管不會曝光任何秘密資訊
+    const occupant = captainOf(targetTeam);
     if(occupant && occupant !== myPlayerId){
-      const takeOver = confirm(
-        `${teamName(role.split("-")[0])}隊長已經有人了。\n` +
+      const ok = confirm(
+        `${teamName(targetTeam)}隊長已經有人了。\n` +
         `如果對方只是斷線或跑錯分頁，可以接管；但如果對方還在，接管會讓你們同時看到牌底答案。\n` +
         `確定要接管嗎？`);
-      if(!takeOver) return;
+      if(!ok) return;
     }
   }
-  const prevRole = myRole;
-  const patch = {};
-  if(prevRole && prevRole.endsWith("captain") && prevRole !== role){
-    patch["roles/" + prevRole] = null;   // 離開隊長席位時釋放，讓別人能接手
-  }
-  if(isCap){
-    patch["roles/" + role] = myPlayerId;
-  }
-  if(Object.keys(patch).length && roomId){
-    await NET.update(roomId, patch);
-  }
+
+  const patch = { ["players/" + myPlayerId]: role, ["heartbeats/" + myPlayerId]: Date.now() };
+  if(roomId){ await NET.update(roomId, patch); }
   myRole = role;
   const u = new URL(location.href);
   u.searchParams.set("room", roomId);
@@ -830,13 +991,23 @@ async function enterRoom(id){
     roomId = null;
     return;
   }
-  if(!myRole){
+  // 身分還原：房間紀錄（players 登記表）最權威，其次才看網址參數。
+  // 這樣同一支手機重新整理、關掉分頁重開、甚至換一條連結進來，都認得回原本的身分。
+  const recorded = first.players ? first.players[myPlayerId] : null;
+  if(recorded){
+    myRole = recorded;
+    NET.update(id, { ["heartbeats/" + myPlayerId]: Date.now() }).catch(()=>{});
+  } else if(!myRole){
     if(first.phase === "playing"){
       myRole = "spectator";   // 遊戲已經開始，晚到只能觀戰，不能空降當隊長偷看牌底
     } else {
       $("roleModal").classList.remove("hidden");
     }
+  } else {
+    // 網址帶了身分，但房間紀錄裡還沒有這個人——補寫一次，之後才找得到
+    NET.update(id, { ["players/" + myPlayerId]: myRole, ["heartbeats/" + myPlayerId]: Date.now() }).catch(()=>{});
   }
+  render();
 }
 
 function leaveRoom(){
@@ -908,7 +1079,7 @@ async function boot(){
   });
   $("roleModal").querySelectorAll("[data-role]").forEach(b =>
     b.addEventListener("click", () => setRole(b.dataset.role)));
-  $("btnNewGame").addEventListener("click", () => { if(confirm("重新洗牌開新局？目前進度會清空。")) newGame(); });
+  $("btnNewGame").addEventListener("click", () => { if(confirm("重新開局？會回到大廳讓大家重選角色，目前這局進度會清空。")) newGame(); });
   $("btnLeave").addEventListener("click", leaveRoom);
   $("btnShare").addEventListener("click", async () => {
     const link = location.origin + location.pathname + "?room=" + roomId;
