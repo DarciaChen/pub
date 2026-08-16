@@ -792,6 +792,9 @@ function renderMyRoleTag(){
     if(!occupant || isCaptainAway(occupant)){
       html += ` <button class="btn btn--sm btn--ghost" data-action="takeover" type="button">接管隊長</button>`;
     }
+  } else if(!myRole || myRole === "spectator"){
+    html += ` <button class="btn btn--sm btn--ghost" data-action="join-red" type="button">加入紅隊</button>` +
+             ` <button class="btn btn--sm btn--ghost" data-action="join-blue" type="button">加入藍隊</button>`;
   }
   $("myRoleTag").innerHTML = html;
   $("myRoleTag").querySelectorAll('[data-action="stepdown"]').forEach(b =>
@@ -800,6 +803,10 @@ function renderMyRoleTag(){
     }));
   $("myRoleTag").querySelectorAll('[data-action="takeover"]').forEach(b =>
     b.addEventListener("click", () => setRole(team + "-captain")));
+  $("myRoleTag").querySelectorAll('[data-action="join-red"]').forEach(b =>
+    b.addEventListener("click", () => setRole("red-agent")));
+  $("myRoleTag").querySelectorAll('[data-action="join-blue"]').forEach(b =>
+    b.addEventListener("click", () => setRole("blue-agent")));
 }
 
 function escapeHtml(s){
@@ -934,37 +941,43 @@ setInterval(() => {
 async function setRole(role){
   const targetTeam = role.split("-")[0];   // 'red' / 'blue' / 'spectator'
   const isCap = role.endsWith("captain");
+  let ousted = null;   // 如果這次是接管隊長，記下被取代那個人的 id，等下順便清掉他的舊登記
 
-  if(state && state.phase === "playing"){
-    const myTeamNow = myRole ? myRole.split("-")[0] : null;
-    if(targetTeam !== myTeamNow){
-      alert("遊戲進行中不能切換隊伍或變成觀戰，只能在原本那隊裡切換隊員／隊長。");
-      return;
+  if(isCap){
+    // 只有「當隊長」會碰到秘密資訊，才需要把關；特務／觀戰之間的切換不受這裡限制。
+    if(state && state.phase === "playing"){
+      const myTeamNow = myRole ? myRole.split("-")[0] : null;
+      if(targetTeam !== myTeamNow){
+        alert(`要先加入${teamName(targetTeam)}當特務，才能申請當隊長。`);
+        return;
+      }
     }
-    if(isCap){
-      const occupant = captainOf(targetTeam);
-      if(occupant && occupant !== myPlayerId){
+    const occupant = captainOf(targetTeam);
+    if(occupant && occupant !== myPlayerId){
+      if(state && state.phase === "playing"){
         if(!isCaptainAway(occupant)){
           alert(`${teamName(targetTeam)}隊長還在線上，沒辦法接管。如果需要離開，請本人切成隊員讓出位置。`);
           return;
         }
         const ok = confirm(`${teamName(targetTeam)}隊長超過一段時間沒有回應，可能斷線了。確定要接管嗎？`);
         if(!ok) return;
+      } else {
+        // 大廳階段：門檻較低，牌桌還不存在，接管不會曝光任何秘密資訊
+        const ok = confirm(
+          `${teamName(targetTeam)}隊長已經有人了。\n` +
+          `如果對方只是斷線或跑錯分頁，可以接管；但如果對方還在，接管會讓你們同時看到牌底答案。\n` +
+          `確定要接管嗎？`);
+        if(!ok) return;
       }
-    }
-  } else if(isCap){
-    // 大廳階段：門檻較低，牌桌還不存在，接管不會曝光任何秘密資訊
-    const occupant = captainOf(targetTeam);
-    if(occupant && occupant !== myPlayerId){
-      const ok = confirm(
-        `${teamName(targetTeam)}隊長已經有人了。\n` +
-        `如果對方只是斷線或跑錯分頁，可以接管；但如果對方還在，接管會讓你們同時看到牌底答案。\n` +
-        `確定要接管嗎？`);
-      if(!ok) return;
+      ousted = occupant;
     }
   }
+  // 變成特務或觀戰：不管遊戲開始了沒，任何時候都放行——
+  // 特務看不到任何隱藏資訊，換隊、中途加入、退出都不構成資訊外洩，
+  // 之前把這條也鎖死是管太寬，導致斷線的人回來只能卡在觀戰、沒辦法重新加入隊伍。
 
   const patch = { ["players/" + myPlayerId]: role, ["heartbeats/" + myPlayerId]: Date.now() };
+  if(ousted) patch["players/" + ousted] = null;
   if(roomId){ await NET.update(roomId, patch); }
   myRole = role;
   const u = new URL(location.href);
