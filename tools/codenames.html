@@ -135,7 +135,7 @@ label.field{display:block;font-size:12px;letter-spacing:.14em;color:var(--ink-so
 .card.rev-red{background:var(--red);border-color:#5E1F19}
 .card.rev-blue{background:var(--blue);border-color:#1A2E45}
 .card.rev-neutral{background:var(--neutral);border-color:#8A7550}
-.card.rev-assassin{background:var(--black);border-color:#000}
+.card.rev-assassin{background:#3C3630;border-color:#241F1A}
 .card.rev-red .word,.card.rev-blue .word,.card.rev-assassin .word{color:#F3E8D6;opacity:.92}
 .card.rev-neutral .word{color:#4A3D28;opacity:.85}
 .card.rev .word{font-size:clamp(10px,2.1vw,15px);font-weight:400;letter-spacing:.12em}
@@ -150,6 +150,10 @@ label.field{display:block;font-size:12px;letter-spacing:.14em;color:var(--ink-so
 .log{font-size:13px;line-height:1.8;color:var(--ink-soft);max-height:170px;overflow:auto;
   border-top:1px dashed var(--line);padding-top:8px}
 .log b{color:var(--ink)}
+.log div.log-red{border-left:3px solid var(--red);background:rgba(162,56,47,.09);
+  padding:2px 8px;margin:2px 0;border-radius:0 3px 3px 0}
+.log div.log-blue{border-left:3px solid var(--blue);background:rgba(44,74,110,.09);
+  padding:2px 8px;margin:2px 0;border-radius:0 3px 3px 0}
 
 /* ---------- 對話框 ---------- */
 .modal{position:fixed;inset:0;background:rgba(30,24,18,.55);display:flex;align-items:center;
@@ -466,9 +470,11 @@ function winner(){
   if(remaining("blue") === 0) return "blue";
   return null;
 }
-function pushLog(text){
+function pushLog(text, team){
   const key = Date.now() + "_" + Math.floor(Math.random()*1000);
-  return { ["log/" + key]: { t: Date.now(), m: text } };
+  const entry = { t: Date.now(), m: text };
+  if(team) entry.team = team;
+  return { ["log/" + key]: entry };
 }
 function logList(){
   if(!state || !state.log) return [];
@@ -637,7 +643,7 @@ async function giveClue(){
   };
   const secs = state.settings && state.settings.timerEnabled ? (state.settings.timerSeconds||90) : 0;
   patch.turnEndsAt = secs ? Date.now() + secs*1000 : null;
-  Object.assign(patch, pushLog(`${teamName(team)}隊長給出線索：${word} ${count === 0 ? "∞" : count}`));
+  Object.assign(patch, pushLog(`${teamName(team)}隊長給出線索：${word} ${count === 0 ? "∞" : count}`, team));
   await NET.update(roomId, patch);
   $("clueInput").value = ""; $("countInput").value = "";
 }
@@ -729,7 +735,8 @@ function render(){
   $("lobbyPanel").classList.toggle("hidden", !inLobby);
   $("playArea").classList.toggle("hidden", inLobby);
   $("roomLabel").textContent = roomId;
-  $("log").innerHTML = logList().map(e => `<div>${escapeHtml(e.m)}</div>`).join("");
+  $("log").innerHTML = logList().map(e =>
+    `<div${e.team ? ` class="log-${e.team}"` : ""}>${escapeHtml(e.m)}</div>`).join("");
 
   if(inLobby){
     renderRoles();
