@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>名畫牌庫抓取器</title>
+<style>
+  :root{
+    --bg:#241a2e; --panel:#2f2140; --gold:#d4af6a; --gold-dim:#8a7245;
+    --text:#f0e6d2; --text-dim:#b9aecb; --danger:#c0524a; --ok:#5a9b6f; --card-bg:#1a1424;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; font-family:-apple-system,BlinkMacSystemFont,"PingFang TC","Microsoft JhengHei",sans-serif;
+    background:radial-gradient(circle at 50% 0%, #3a2a4d, var(--bg) 70%);
+    color:var(--text); min-height:100vh; padding-bottom:40px;
+  }
+  .wrap{max-width:900px; margin:0 auto; padding:16px;}
+  h1{font-size:20px; color:var(--gold); text-align:center; letter-spacing:1px; margin:18px 0 10px;}
+  .panel{
+    background:var(--panel); border:1px solid var(--gold-dim); border-radius:14px;
+    padding:16px; margin-bottom:16px; box-shadow:0 4px 18px rgba(0,0,0,.35);
+  }
+  .muted{color:var(--text-dim); font-size:13px; line-height:1.6;}
+  table.cat-table{width:100%; border-collapse:collapse; font-size:13px; margin-top:8px;}
+  table.cat-table th, table.cat-table td{padding:6px; border-bottom:1px solid #3a2a4d; text-align:left;}
+  table.cat-table input{
+    width:100%; padding:6px 8px; border-radius:6px; border:1px solid var(--gold-dim);
+    background:#1d1528; color:var(--text); font-size:13px;
+  }
+  button{
+    padding:9px 14px; border-radius:8px; border:1px solid var(--gold-dim);
+    background:linear-gradient(180deg,#4a3a63,#382a52); color:var(--gold);
+    font-size:14px; cursor:pointer; margin:4px 4px 0 0;
+  }
+  button.primary{background:linear-gradient(180deg,var(--gold),#b8944e); color:#241a2e; border-color:var(--gold);}
+  button.small{padding:4px 10px; font-size:12px;}
+  button:disabled{opacity:.4; cursor:not-allowed;}
+  .status-line{font-size:13px; color:var(--text-dim); margin-top:6px;}
+  .grid{display:grid; grid-template-columns:repeat(auto-fill,minmax(120px,1fr)); gap:10px; margin-top:10px;}
+  .card{
+    background:#1d1528; border:1px solid var(--gold-dim); border-radius:10px; padding:6px;
+    font-size:11px; position:relative;
+  }
+  .card.excluded{opacity:.35;}
+  .card img{width:100%; aspect-ratio:2/3; object-fit:cover; border-radius:6px; display:block; margin-bottom:4px; background:#111;}
+  .card .lic{
+    display:inline-block; font-size:10px; padding:1px 6px; border-radius:8px; margin-bottom:3px;
+  }
+  .card .lic.ok{background:rgba(90,155,111,.25); color:var(--ok); border:1px solid var(--ok);}
+  .card .lic.warn{background:rgba(192,82,74,.25); color:#ff8f87; border:1px solid var(--danger);}
+  .card .title-input{width:100%; font-size:11px; padding:3px 5px; margin-top:3px; border-radius:5px; border:1px solid var(--gold-dim); background:#241a30; color:var(--text);}
+  .card label{display:flex; align-items:center; gap:4px; font-size:11px; margin-top:3px; cursor:pointer;}
+  .badge{display:inline-block; padding:2px 8px; border-radius:20px; font-size:12px; background:#3a2a4d; border:1px solid var(--gold-dim); color:var(--gold);}
+  #output{width:100%; min-height:220px; font-family:monospace; font-size:13px; white-space:pre;}
+  .row{display:flex; gap:8px; align-items:center; flex-wrap:wrap;}
+  .artist-block h3{margin:16px 0 4px; color:var(--gold); font-size:15px;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>🎨 名畫牌庫抓取器</h1>
+
+  <div class="panel">
+    <p class="muted">
+      直接呼叫 Wikimedia Commons 官方 API 讀取分類頁裡的圖片，不用你手動一張張複製。
+      每個分類先抓一批（預設 40 張），不夠可以按「載入更多」繼續抓，直到抓完整個分類。
+      抓回來的每張圖會自動標示授權（綠色 OK／紅色需人工確認），紅色的預設不勾選，你可以自己決定要不要留。
+    </p>
+    <table class="cat-table">
+      <thead><tr><th style="width:110px;">畫家</th><th>Wikimedia 分類（網址或 Category: 名稱都可以）</th><th></th></tr></thead>
+      <tbody id="cat-rows"></tbody>
+    </table>
+    <div class="row">
+      <button id="btn-add-cat">＋加一個分類</button>
+      <button class="primary" id="btn-fetch-all">開始抓取所有分類</button>
+    </div>
+    <p class="status-line" id="global-status"></p>
+  </div>
+
+  <div id="results"></div>
+
+  <div class="panel" id="panel-output" style="display:none;">
+    <div class="row" style="justify-content:space-between;">
+      <h3 style="margin:0;">已勾選 <span id="selected-count">0</span> 張 — 貼進 dixit.html 的 CARD_DECK 陣列</h3>
+      <div>
+        <button class="small" id="btn-generate">產生陣列</button>
+        <button class="small" id="btn-copy">複製全部</button>
+      </div>
+    </div>
+    <textarea id="output" readonly></textarea>
+  </div>
+</div>
+
+<script>
+const DEFAULT_CATS = [
+  { artist: '梵谷', cat: 'Category:Paintings_by_Vincent_van_Gogh_in_the_Art_Institute_of_Chicago' },
+  { artist: '莫內', cat: 'Category:Paintings_by_Claude_Monet_in_the_Metropolitan_Museum_of_Art' },
+  { artist: '北齋', cat: 'Category:Katsushika_Hokusai' },
+  { artist: '孟克', cat: 'Category:Paintings_by_Edvard_Munch_in_Nasjonalmuseet' },
+  { artist: '康丁斯基', cat: 'Category:Wassily_Kandinsky' },
+];
+
+// 解析使用者貼的分類輸入（可能是完整網址、也可能已經是 Category:xxx）
+function parseCategoryInput(raw) {
+  let s = raw.trim();
+  const m = s.match(/\/wiki\/(Category:.+)$/i);
+  if (m) s = decodeURIComponent(m[1]);
+  if (!/^Category:/i.test(s)) s = 'Category:' + s;
+  return s.replace(/ /g, '_');
+}
+
+function licenseIsOk(extmetadata) {
+  if (!extmetadata) return false;
+  const lic = (extmetadata.LicenseShortName && extmetadata.LicenseShortName.value || '').toLowerCase();
+  const usageTerms = (extmetadata.UsageTerms && extmetadata.UsageTerms.value || '').toLowerCase();
+  const text = lic + ' ' + usageTerms;
+  if (/public domain|pd-|cc0/i.test(text)) return true;
+  return false;
+}
+
+let catRows = []; // {id, artist, catInput, catTitle, continueParams, done, images:[{pageid,title,url,width,height,licenseOk,licenseLabel,selected,editTitle}]}
+let rowIdSeq = 1;
+
+function addCatRow(artist = '', cat = '') {
+  const row = { id: rowIdSeq++, artist, catInput: cat, catTitle: cat ? parseCategoryInput(cat) : '', continueParams: null, done: false, fetchedCount: 0, images: [] };
+  catRows.push(row);
+  renderCatRows();
+}
+
+function renderCatRows() {
+  const tbody = document.getElementById('cat-rows');
+  tbody.innerHTML = '';
+  catRows.forEach(row => {
+    const tr = document.createElement('tr');
+    const tdArtist = document.createElement('td');
+    const inArtist = document.createElement('input');
+    inArtist.value = row.artist;
+    inArtist.oninput = () => row.artist = inArtist.value;
+    tdArtist.appendChild(inArtist);
+    tr.appendChild(tdArtist);
+
+    const tdCat = document.createElement('td');
+    const inCat = document.createElement('input');
+    inCat.value = row.catInput;
+    inCat.oninput = () => { row.catInput = inCat.value; };
+    tdCat.appendChild(inCat);
+    tr.appendChild(tdCat);
+
+    const tdDel = document.createElement('td');
+    const btnDel = document.createElement('button');
+    btnDel.className = 'small';
+    btnDel.textContent = '🗑️';
+    btnDel.onclick = () => { catRows = catRows.filter(r => r.id !== row.id); renderCatRows(); renderResults(); };
+    tdDel.appendChild(btnDel);
+    tr.appendChild(tdDel);
+
+    tbody.appendChild(tr);
+  });
+}
+
+document.getElementById('btn-add-cat').onclick = () => addCatRow();
+DEFAULT_CATS.forEach(c => addCatRow(c.artist, c.cat));
+
+async function fetchCategoryBatch(row) {
+  row.catTitle = parseCategoryInput(row.catInput);
+  const params = new URLSearchParams({
+    action: 'query', format: 'json', generator: 'categorymembers',
+    gcmtitle: row.catTitle, gcmtype: 'file', gcmlimit: '40',
+    prop: 'imageinfo', iiprop: 'url|extmetadata|size', origin: '*',
+  });
+  if (row.continueParams) {
+    for (const [k, v] of Object.entries(row.continueParams)) params.set(k, v);
+  }
+  const url = 'https://commons.wikimedia.org/w/api.php?' + params.toString();
+  const res = await fetch(url);
+  if (!res.ok) throw new Error('HTTP ' + res.status);
+  const data = await res.json();
+  if (data.error) throw new Error(data.error.info || JSON.stringify(data.error));
+
+  const pages = (data.query && data.query.pages) ? Object.values(data.query.pages) : [];
+  for (const p of pages) {
+    if (!p.imageinfo || !p.imageinfo[0]) continue;
+    const info = p.imageinfo[0];
+    const okLic = licenseIsOk(info.extmetadata);
+    const licLabel = (info.extmetadata && info.extmetadata.LicenseShortName && info.extmetadata.LicenseShortName.value) || '未知授權';
+    const rawTitle = (p.title || '').replace(/^File:/, '').replace(/\.[a-zA-Z]+$/, '').replace(/_/g, ' ');
+    row.images.push({
+      pageid: p.pageid, url: info.url, width: info.width, height: info.height,
+      licenseOk: okLic, licenseLabel: licLabel, selected: okLic, editTitle: rawTitle,
+    });
+  }
+  row.fetchedCount = row.images.length;
+  if (data.continue) {
+    row.continueParams = data.continue;
+    row.done = false;
+  } else {
+    row.continueParams = null;
+    row.done = true;
+  }
+}
+
+document.getElementById('btn-fetch-all').onclick = async () => {
+  const statusEl = document.getElementById('global-status');
+  document.getElementById('btn-fetch-all').disabled = true;
+  for (const row of catRows) {
+    statusEl.textContent = `正在抓取「${row.artist || row.catInput}」...`;
+    try {
+      await fetchCategoryBatch(row);
+    } catch (e) {
+      statusEl.textContent = `「${row.artist || row.catInput}」抓取失敗：${e.message}`;
+      row.error = e.message;
+    }
+    renderResults();
+  }
+  statusEl.textContent = '全部分類第一批抓取完成，不夠的話可以在各分類下按「載入更多」。';
+  document.getElementById('btn-fetch-all').disabled = false;
+};
+
+function renderResults() {
+  const box = document.getElementById('results');
+  box.innerHTML = '';
+  for (const row of catRows) {
+    if (!row.images.length && !row.error) continue;
+    const block = document.createElement('div');
+    block.className = 'panel artist-block';
+    const okCount = row.images.filter(i => i.selected).length;
+    block.innerHTML = `<h3>${escapeHtml(row.artist || '(未命名)')} <span class="badge">已抓 ${row.images.length} 張，勾選 ${okCount} 張</span></h3>`;
+    if (row.error) {
+      const p = document.createElement('p');
+      p.className = 'muted';
+      p.style.color = 'var(--danger)';
+      p.textContent = '錯誤：' + row.error;
+      block.appendChild(p);
+    }
+    const grid = document.createElement('div');
+    grid.className = 'grid';
+    row.images.forEach((img, idx) => {
+      const card = document.createElement('div');
+      card.className = 'card' + (img.selected ? '' : ' excluded');
+      const imgEl = document.createElement('img');
+      imgEl.src = img.url;
+      imgEl.loading = 'lazy';
+      card.appendChild(imgEl);
+
+      const lic = document.createElement('span');
+      lic.className = 'lic ' + (img.licenseOk ? 'ok' : 'warn');
+      lic.textContent = img.licenseLabel;
+      card.appendChild(lic);
+
+      const titleInput = document.createElement('input');
+      titleInput.className = 'title-input';
+      titleInput.value = img.editTitle;
+      titleInput.oninput = () => { img.editTitle = titleInput.value; };
+      card.appendChild(titleInput);
+
+      const label = document.createElement('label');
+      const cb = document.createElement('input');
+      cb.type = 'checkbox';
+      cb.checked = img.selected;
+      cb.onchange = () => { img.selected = cb.checked; card.classList.toggle('excluded', !cb.checked); renderCountBadge(); };
+      label.appendChild(cb);
+      label.appendChild(document.createTextNode('納入牌庫'));
+      card.appendChild(label);
+
+      grid.appendChild(card);
+    });
+    block.appendChild(grid);
+
+    if (!row.done) {
+      const btnMore = document.createElement('button');
+      btnMore.textContent = row.error ? '重試' : '載入更多';
+      btnMore.style.marginTop = '10px';
+      btnMore.onclick = async () => {
+        btnMore.disabled = true;
+        btnMore.textContent = '抓取中…';
+        try {
+          await fetchCategoryBatch(row);
+          row.error = null;
+        } catch (e) {
+          row.error = e.message;
+        }
+        renderResults();
+      };
+      block.appendChild(btnMore);
+    } else {
+      const doneNote = document.createElement('p');
+      doneNote.className = 'muted';
+      doneNote.textContent = '這個分類已經抓到底了。';
+      block.appendChild(doneNote);
+    }
+
+    box.appendChild(block);
+  }
+  renderCountBadge();
+}
+
+function renderCountBadge() {
+  const total = catRows.reduce((sum, r) => sum + r.images.filter(i => i.selected).length, 0);
+  document.getElementById('selected-count').textContent = total;
+  document.getElementById('panel-output').style.display = total > 0 ? 'block' : 'none';
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+document.getElementById('btn-generate').onclick = () => {
+  const lines = [];
+  for (const row of catRows) {
+    for (const img of row.images) {
+      if (!img.selected) continue;
+      const esc = s => String(s).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+      lines.push(`  {artist:"${esc(row.artist)}", title:"${esc(img.editTitle)}", imageUrl:"${esc(img.url)}"},`);
+    }
+  }
+  document.getElementById('output').value = lines.join('\n');
+  document.getElementById('panel-output').scrollIntoView({ behavior: 'smooth' });
+};
+
+document.getElementById('btn-copy').onclick = async () => {
+  const ta = document.getElementById('output');
+  ta.select();
+  try {
+    await navigator.clipboard.writeText(ta.value);
+    document.getElementById('btn-copy').textContent = '已複製 ✓';
+    setTimeout(() => { document.getElementById('btn-copy').textContent = '複製全部'; }, 1500);
+  } catch (e) { document.execCommand('copy'); }
+};
+</script>
+</body>
+</html>
