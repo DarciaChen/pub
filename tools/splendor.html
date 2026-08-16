@@ -522,6 +522,32 @@ async function ensureNet(){
   }
 }
 
+/* 意外滑掉分頁、下拉重新整理時，用 localStorage 記住房號/座位/名字，
+   讓玩家重新打開頁面時可以自動接回原本的房間，不用重新輸入房號、
+   也不會被當成新玩家加入而佔掉多一個座位。只存在自己手機的瀏覽器裡。 */
+const SESSION_KEY = "splendor_session_v1";
+function saveSession(){
+  try{ localStorage.setItem(SESSION_KEY, JSON.stringify({roomId:ROOM_ID, myIndex:MY_INDEX, myName:MY_NAME})); }
+  catch(e){ /* 私密瀏覽模式等情況可能無法寫入，忽略即可，不影響本次遊戲 */ }
+}
+function clearSession(){
+  try{ localStorage.removeItem(SESSION_KEY); } catch(e){}
+}
+async function tryResumeSession(){
+  let saved;
+  try{ saved = JSON.parse(localStorage.getItem(SESSION_KEY) || "null"); } catch(e){ saved = null; }
+  if(!saved || !saved.roomId) return false;
+  const cur = await NET.get(saved.roomId);
+  // 房間不存在（可能從沒真的建立成功、或是本機測試模式重整後資料本來就會消失）→放棄接回
+  if(!cur || cur.kind!=="lobby"){ clearSession(); return false; }
+  const nameAtIndex = cur.players && cur.players[saved.myIndex];
+  if(nameAtIndex===undefined || nameAtIndex!==saved.myName){ clearSession(); return false; }
+  ROOM_ID = saved.roomId; MY_INDEX = saved.myIndex; MY_NAME = saved.myName;
+  subscribeRoom();
+  toast("已自動回到房間 "+ROOM_ID);
+  return true;
+}
+
 async function createRoom(){
   MY_NAME = document.getElementById('nameInput').value.trim() || "玩家1";
   ROOM_ID = genRoomCode();
@@ -530,6 +556,7 @@ async function createRoom(){
   await NET.write(ROOM_ID, lobby);
   enterLobbyView(lobby);
   subscribeRoom();
+  saveSession();
 }
 async function joinRoom(){
   const code = document.getElementById('roomCodeInput').value.trim().toUpperCase();
@@ -546,6 +573,7 @@ async function joinRoom(){
     await NET.write(ROOM_ID, cur);
     enterLobbyView(cur);
     subscribeRoom();
+    saveSession();
   } else {
     toast("這局已經開始了");
   }
@@ -978,7 +1006,7 @@ function renderEndScreen(){
     }).join('')+
     '<div style="height:14px"></div><button class="btn primary" id="btnBackLobby" style="width:100%">返回大廳</button></div>';
   document.body.appendChild(wrap);
-  wrap.querySelector('#btnBackLobby').onclick = ()=>{ location.reload(); };
+  wrap.querySelector('#btnBackLobby').onclick = ()=>{ clearSession(); location.reload(); };
 }
 
 /* ==========================================================================
@@ -987,7 +1015,7 @@ function renderEndScreen(){
 document.getElementById('btnCreate').onclick = createRoom;
 document.getElementById('btnJoin').onclick = joinRoom;
 document.getElementById('btnStart').onclick = startGame;
-document.getElementById('btnLeave').onclick = ()=>location.reload();
+document.getElementById('btnLeave').onclick = ()=>{ clearSession(); location.reload(); };
 document.getElementById('btnHelp').onclick = ()=>toggleHelp(true);
 document.getElementById('btnHelpLobby').onclick = ()=>toggleHelp(true);
 document.getElementById('modeGems').onclick = ()=>setMode('gems');
@@ -1017,6 +1045,7 @@ document.getElementById('myReserved').addEventListener('click', (e)=>{
 
 (async function init(){
   await ensureNet();
+  await tryResumeSession();
 })();
 </script>
 </body>
