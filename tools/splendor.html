@@ -605,19 +605,29 @@ function setMode(m){
 function toggleGemSel(color){
   if(MODE!=='gems') return;
   const bank = GAME_STATE.bank;
+
+  // 情況A：目前已經是「同色2顆」狀態，再點同一色 → 整組取消，方便重選
+  if(SEL_GEMS.length===2 && SEL_GEMS[0]===color && SEL_GEMS[1]===color){
+    SEL_GEMS = [];
+    return renderGame();
+  }
+  // 情況B：目前只選了這1顆、再點同一顆 → 這是要升級成「同色2顆」，要優先判斷，
+  //         不能被下面「已選過就取消」的通用邏輯攔截，否則第二次點永遠變成取消選取
+  if(SEL_GEMS.length===1 && SEL_GEMS[0]===color){
+    if(bank[color]>=4){ SEL_GEMS=[color,color]; }
+    else { toast("此顏色寶石不足4顆，不能取2顆同色"); }
+    return renderGame();
+  }
+  // 情況C：在「最多3種不同色」模式下，點已選過的顏色 → 取消該顏色
   if(SEL_GEMS.includes(color)){
     SEL_GEMS = SEL_GEMS.filter(c=>c!==color);
     return renderGame();
   }
-  // 判斷目前選取模式：same-2 或 distinct(<=3)
-  if(SEL_GEMS.length===1 && SEL_GEMS[0]===color){
-    if(bank[color]>=4){ SEL_GEMS=[color,color]; }
-    else { toast("此顏色寶石不足4顆，不能取2顆同色"); return; }
-  } else if(SEL_GEMS.length===0){
+  // 情況D：全新選取一種顏色
+  if(SEL_GEMS.length===0){
     if(bank[color]<=0){ toast("此顏色寶石已經沒有了"); return; }
     SEL_GEMS=[color];
-  } else if(SEL_GEMS.length<3 && new Set(SEL_GEMS).size===SEL_GEMS.length && !SEL_GEMS.includes(color) && SEL_GEMS.every((c,i)=>c!==SEL_GEMS[0]||i===0)){
-    if(SEL_GEMS.length>=1 && SEL_GEMS[0]===SEL_GEMS[1]){ toast("已選擇同色2顆，請先取消"); return; }
+  } else if(SEL_GEMS.length<3){
     if(bank[color]<=0){ toast("此顏色寶石已經沒有了"); return; }
     SEL_GEMS.push(color);
   } else {
