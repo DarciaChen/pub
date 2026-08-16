@@ -74,63 +74,64 @@ input[type=text]{
 
 /* ---------- 遊戲主畫面 ---------- */
 #gameScreen{display:flex; flex-direction:column; height:100vh; height:100dvh;}
-.topbar{display:flex; align-items:center; justify-content:space-between; padding:8px 12px; background:var(--panel); border-bottom:1px solid var(--line);}
-.topbar .roomTag{font-size:11px; color:var(--cream-dim);}
-.turnBanner{font-size:13px; font-weight:700; color:var(--gold-bright);}
+.topbar{display:flex; align-items:center; justify-content:space-between; padding:5px 10px; background:var(--panel); border-bottom:1px solid var(--line);}
+.topbar .roomTag{font-size:10px; color:var(--cream-dim);}
+.turnBanner{font-size:12px; font-weight:700; color:var(--gold-bright);}
 .turnBanner.mine{color:#7fdc9a;}
 
-.board{flex:1; overflow-y:auto; padding:10px 8px 4px;}
+.board{flex:1; overflow-y:auto; padding:4px 6px 2px; min-height:0;}
 
-.nobleRow{display:flex; gap:8px; justify-content:center; padding:6px 2px 12px; flex-wrap:wrap;}
+.nobleCaption{text-align:center;font-size:9.5px;color:var(--cream-dim);padding:2px 0 4px;}
+.nobleRow{display:flex; gap:5px; justify-content:center; padding:0 2px 6px; flex-wrap:wrap;}
 .noble{
-  width:56px;height:56px;border-radius:10px;
+  width:38px;height:38px;border-radius:8px;
   background:radial-gradient(circle at 30% 30%, #4a3a1e, #241a10 75%);
   border:2px solid var(--gold); display:flex; flex-direction:column; align-items:center; justify-content:center;
-  gap:2px; box-shadow:0 3px 6px rgba(0,0,0,.5);
+  gap:1px; box-shadow:0 2px 4px rgba(0,0,0,.5);
 }
-.noble .pt{color:var(--gold-bright); font-weight:800; font-size:13px;}
-.noble .reqs{display:flex; gap:2px;}
-.noble .req{width:11px;height:11px;border-radius:50%; border:1px solid rgba(0,0,0,.4);}
+.noble .pt{color:var(--gold-bright); font-weight:800; font-size:10px;}
+.noble .reqs{display:flex; gap:1px;}
+.noble .req{width:7px;height:7px;border-radius:50%; border:1px solid rgba(0,0,0,.4);}
 .noble.got{opacity:.3;}
 
-.levelRow{display:flex; gap:8px; align-items:flex-start; padding:6px 2px; overflow-x:auto;}
+.levelRow{display:flex; gap:5px; align-items:flex-start; padding:3px 2px; overflow-x:auto;}
 .deckPile{
-  flex:0 0 44px; width:44px; height:62px; border-radius:6px;
+  flex:0 0 34px; width:34px; height:46px; border-radius:5px;
   background:linear-gradient(160deg,#3a2a17,#1a120a);
   border:1px solid var(--line); display:flex; flex-direction:column; align-items:center; justify-content:center;
-  font-size:11px; color:var(--cream-dim); position:relative;
+  font-size:8.5px; color:var(--cream-dim); position:relative; line-height:1.2;
 }
 .deckPile .lv{color:var(--gold-bright); font-weight:700;}
 .deckPile.reserveBtn{border:1px dashed var(--gold); color:var(--gold-bright);}
 
-.cardSlot{flex:0 0 76px; width:76px;}
+.cardSlot{flex:0 0 58px; width:58px;}
 .devCard{
-  width:76px; min-height:96px; border-radius:8px; padding:5px;
+  width:58px; min-height:70px; border-radius:6px; padding:3px;
   background:linear-gradient(160deg,#f6efd8,#e9dcb8);
   color:#241a10; border:2px solid #cbb987; position:relative;
   display:flex; flex-direction:column; justify-content:space-between;
-  box-shadow:0 3px 8px rgba(0,0,0,.45);
+  box-shadow:0 2px 5px rgba(0,0,0,.45);
 }
-.devCard.affordable{border-color:var(--gold-bright); box-shadow:0 0 0 2px var(--gold-bright), 0 3px 10px rgba(201,162,75,.5);}
+.devCard.affordable{border-color:var(--gold-bright); box-shadow:0 0 0 2px var(--gold-bright), 0 2px 7px rgba(201,162,75,.5);}
 .devCard.selected{outline:3px solid #7fdc9a; outline-offset:1px;}
 .devCard .top{display:flex; justify-content:space-between; align-items:flex-start;}
-.devCard .pt{font-weight:800; font-size:15px; display:flex; align-items:baseline; gap:1px;}
-.devCard .pt i{font-style:normal; font-size:8px; font-weight:600; opacity:.6;}
-.devCard .pt.zero{opacity:.4; font-size:12px;}
-.devCard .bonusChip{width:14px;height:14px;border-radius:2px; border:1px solid rgba(0,0,0,.35); transform:rotate(45deg); box-shadow:inset -2px -2px 3px rgba(0,0,0,.35), inset 2px 2px 3px rgba(255,255,255,.5);}
-.devCard .costs{display:flex; flex-wrap:wrap; gap:2px; margin-top:4px;}
-.devCard .costs .c{display:flex; align-items:center; gap:2px; font-size:10px; font-weight:700; background:rgba(255,255,255,.5); border-radius:4px; padding:1px 3px;}
-.devCard .costs .dot{width:9px;height:9px;border-radius:50%; border:1px solid rgba(0,0,0,.35);}
-.devCard .missing{font-size:9px; color:#8a2b2b; margin-top:2px; font-weight:700;}
-.devCard.reservedFace{background:linear-gradient(160deg,#2c2018,#1b120c); color:var(--cream-dim); display:flex; align-items:center; justify-content:center; font-size:20px;}
+.devCard .pt{font-weight:800; font-size:12px; display:flex; align-items:baseline; gap:1px;}
+.devCard .pt i{font-style:normal; font-size:7px; font-weight:600; opacity:.6;}
+.devCard .pt.zero{opacity:.4; font-size:10px;}
+.devCard .bonusChip{width:11px;height:11px;border-radius:2px; border:1px solid rgba(0,0,0,.35); transform:rotate(45deg); box-shadow:inset -1px -1px 2px rgba(0,0,0,.35), inset 1px 1px 2px rgba(255,255,255,.5);}
+.devCard .costs{display:flex; flex-wrap:wrap; gap:1px; margin-top:2px;}
+.devCard .costs .c{display:flex; align-items:center; gap:1px; font-size:8.5px; font-weight:700; background:rgba(255,255,255,.5); border-radius:3px; padding:0 2px;}
+.devCard .costs .dot{width:7px;height:7px;border-radius:50%; border:1px solid rgba(0,0,0,.35);}
+.devCard .missing{font-size:7.5px; color:#8a2b2b; margin-top:1px; font-weight:700;}
+.devCard.reservedFace{background:linear-gradient(160deg,#2c2018,#1b120c); color:var(--cream-dim); display:flex; align-items:center; justify-content:center; font-size:16px;}
 
-.bankRow{display:flex; gap:10px; justify-content:center; padding:10px 4px 4px; flex-wrap:wrap;}
+.bankRow{display:flex; gap:6px; justify-content:center; padding:5px 4px 2px; flex-wrap:wrap;}
 .gem{
-  width:46px;height:46px;border-radius:50%; position:relative;
-  display:flex; align-items:center; justify-content:center; font-weight:800; font-size:14px; color:#fff;
-  border:2px solid rgba(0,0,0,.35); box-shadow:inset 0 -4px 6px rgba(0,0,0,.35), inset 0 3px 4px rgba(255,255,255,.25), 0 3px 6px rgba(0,0,0,.4);
+  width:34px;height:34px;border-radius:50%; position:relative;
+  display:flex; align-items:center; justify-content:center; font-weight:800; font-size:11px; color:#fff;
+  border:2px solid rgba(0,0,0,.35); box-shadow:inset 0 -3px 5px rgba(0,0,0,.35), inset 0 2px 3px rgba(255,255,255,.25), 0 2px 5px rgba(0,0,0,.4);
 }
-.gem.mini{width:26px;height:26px; font-size:10px; border-width:1px;}
+.gem.mini{width:15px;height:15px; font-size:7.5px; border-width:1px;}
 .gem.sel{outline:3px solid var(--gold-bright); outline-offset:2px;}
 .gem.dis{opacity:.3;}
 .gem.D{background:radial-gradient(circle at 32% 28%, #fffef8, var(--diamond) 60%, var(--diamond-ink)); color:#5c5432;}
@@ -139,28 +140,30 @@ input[type=text]{
 .gem.R{background:radial-gradient(circle at 32% 28%, #e07a7a, var(--ruby) 60%, var(--ruby-ink));}
 .gem.O{background:radial-gradient(circle at 32% 28%, #5c5c62, var(--onyx) 60%, var(--onyx-ink));}
 .gem.G{background:radial-gradient(circle at 32% 28%, #ffe793, var(--goldgem) 60%, var(--goldgem-ink)); color:#4a3510;}
-.gemCount{position:absolute; bottom:-6px; right:-4px; background:var(--panel); border:1px solid var(--line); border-radius:8px; font-size:10px; padding:0 4px; color:var(--cream);}
+.gemCount{position:absolute; bottom:-5px; right:-3px; background:var(--panel); border:1px solid var(--line); border-radius:7px; font-size:8.5px; padding:0 3px; color:var(--cream);}
 
-.actionBar{display:flex; gap:8px; padding:8px 10px calc(10px + env(safe-area-inset-bottom)); background:var(--panel); border-top:1px solid var(--line); flex-wrap:wrap;}
-.actionBar .btn{flex:1; min-width:70px; text-align:center; font-size:13px; padding:10px 6px;}
+.modeHint{font-size:11px; color:var(--gold-bright); text-align:center; padding:4px 10px; background:var(--panel2); border-top:1px solid var(--line); line-height:1.5;}
+
+.actionBar{display:flex; gap:6px; padding:6px 10px calc(6px + env(safe-area-inset-bottom)); background:var(--panel); border-top:1px solid var(--line); flex-wrap:wrap;}
+.actionBar .btn{flex:1; min-width:64px; text-align:center; font-size:12px; padding:8px 6px;}
 .actionBar .btn.active{background:linear-gradient(180deg,var(--gold-bright),var(--gold)); color:#241a10;}
 
-.playersStrip{display:flex; gap:6px; overflow-x:auto; padding:6px 8px; background:#170f09; border-bottom:1px solid var(--line);}
-.pMini{flex:0 0 auto; min-width:118px; background:var(--panel2); border:1px solid var(--line); border-radius:8px; padding:6px 8px; font-size:11px;}
+.playersStrip{display:flex; gap:5px; overflow-x:auto; padding:4px 8px; background:#170f09; border-bottom:1px solid var(--line);}
+.pMini{flex:0 0 auto; min-width:92px; background:var(--panel2); border:1px solid var(--line); border-radius:7px; padding:4px 6px; font-size:9.5px;}
 .pMini.turn{border-color:var(--gold-bright); box-shadow:0 0 0 1px var(--gold-bright);}
-.pMini .nm{font-weight:700; color:var(--gold-bright); font-size:12px; display:flex; justify-content:space-between;}
-.pMini .bonuses{display:flex; gap:3px; margin-top:4px;}
-.pMini .bonuses .b{display:flex; align-items:center; gap:2px; font-size:10px;}
-.pMini .bonuses .dot{width:10px;height:10px;border-radius:50%;}
-.pMini .gems{display:flex; gap:3px; margin-top:3px; flex-wrap:wrap;}
+.pMini .nm{font-weight:700; color:var(--gold-bright); font-size:10.5px; display:flex; justify-content:space-between; gap:6px;}
+.pMini .bonuses{display:flex; gap:2px; margin-top:2px;}
+.pMini .bonuses .b{display:flex; align-items:center; gap:1px; font-size:8.5px;}
+.pMini .bonuses .dot{width:7px;height:7px;border-radius:50%;}
+.pMini .gems{display:flex; gap:2px; margin-top:2px; flex-wrap:wrap;}
 
-.myPanel{background:var(--panel); border-top:1px solid var(--line); padding:8px 10px;}
-.myPanel .hd{display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;}
-.myPanel .hd .pts{color:var(--gold-bright); font-weight:800;}
-.myGems{display:flex; gap:8px; flex-wrap:wrap;}
-.reservedRow{display:flex; gap:8px; margin-top:8px;}
+.myPanel{background:var(--panel); border-top:1px solid var(--line); padding:5px 10px;}
+.myPanel .hd{display:flex; justify-content:space-between; align-items:center; margin-bottom:3px;}
+.myPanel .hd .pts{color:var(--gold-bright); font-weight:800; font-size:12px;}
+.myGems{display:flex; gap:5px; flex-wrap:wrap;}
+.reservedRow{display:flex; gap:5px; margin-top:5px;}
 
-.log{font-size:11px; color:var(--cream-dim); padding:4px 10px 8px; max-height:56px; overflow-y:auto;}
+.log{font-size:9.5px; color:var(--cream-dim); padding:2px 10px 3px; max-height:30px; overflow-y:auto; line-height:1.4;}
 
 .modalWrap{position:fixed; inset:0; background:rgba(0,0,0,.6); display:flex; align-items:flex-end; justify-content:center; z-index:50;}
 .modal{background:var(--panel); border:1px solid var(--gold); border-radius:14px 14px 0 0; padding:18px; width:100%; max-width:480px; max-height:80vh; overflow-y:auto;}
@@ -225,7 +228,7 @@ input[type=text]{
   <div class="playersStrip" id="playersStrip"></div>
 
   <div class="board" id="board">
-    <div style="text-align:center;font-size:11px;color:var(--cream-dim);padding-top:6px;">🏆 貴族：當你擁有的寶石卡數量集滿圖示顏色與數量，貴族就會主動拜訪，自動 +3分</div>
+    <div class="nobleCaption">🏆 貴族：當你擁有的寶石卡數量集滿圖示顏色與數量，貴族就會主動拜訪，自動 +3分</div>
     <div class="nobleRow" id="nobleRow"></div>
     <div class="levelRow" id="row3"></div>
     <div class="levelRow" id="row2"></div>
@@ -245,6 +248,7 @@ input[type=text]{
     <div class="reservedRow" id="myReserved"></div>
   </div>
 
+  <div class="modeHint hidden" id="modeHint"></div>
   <div class="actionBar">
     <button class="btn" id="modeGems">取寶石</button>
     <button class="btn" id="modeReserve">搶先保留</button>
@@ -893,6 +897,19 @@ function renderGame(){
   document.getElementById('btnConfirm').classList.toggle('hidden', !showConfirm);
   document.getElementById('btnCancel').classList.toggle('hidden', !MODE);
   ['modeGems','modeReserve','modeBuy'].forEach(id=>document.getElementById(id).disabled=!isMyTurn());
+
+  const MODE_HINTS = {
+    gems: '可以取3種不同顏色寶石各1顆，或同一種顏色寶石2顆（該色庫存需≥4顆才能取）；黃金萬能寶石不能用這個方式拿',
+    reserve: '點選檯面上的一張寶石卡搶先保留；也可以點「從牌庫選擇」蓋牌保留（連你自己都看不到）；保留同時會免費送你1顆黃金萬能寶石',
+    buy: '點選金框（買得起）的寶石卡完成購買，你已擁有的寶石會自動幫你扣掉'
+  };
+  const hintEl = document.getElementById('modeHint');
+  if(isMyTurn() && MODE && MODE_HINTS[MODE] && state.pendingDiscard==null){
+    hintEl.textContent = MODE_HINTS[MODE];
+    hintEl.classList.remove('hidden');
+  } else {
+    hintEl.classList.add('hidden');
+  }
 
   // 記錄
   document.getElementById('logBox').innerHTML = state.log.slice(-5).map(l=>'· '+l).join('<br>');
