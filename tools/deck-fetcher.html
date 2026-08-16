@@ -64,8 +64,12 @@
   <div class="panel">
     <p class="muted">
       直接呼叫 Wikimedia Commons 官方 API 讀取分類頁裡的圖片，不用你手動一張張複製。
-      每個分類先抓一批（預設 40 張），不夠可以按「載入更多」繼續抓，直到抓完整個分類。
+      有些博物館分類（例如梵谷、孟克）底下是「每幅畫各自一個子分類」的整理方式，
+      這個工具會先抓分類直屬的圖，抓完之後自動往下鑽子分類（一次處理 5 個），
+      不夠按「載入更多」繼續，直到抓完整個分類（含所有子分類）。
       抓回來的每張圖會自動標示授權（綠色 OK／紅色需人工確認），紅色的預設不勾選，你可以自己決定要不要留。
+      孟克那筆改用比較大的「Paintings by Edvard Munch」總分類——Wikimedia 上找不到乾淨的「只限
+      Nasjonalmuseet」分類，這樣會混到其他館藏（如 Munchmuseet），你抓回來之後可以自己篩掉不要的。
     </p>
     <table class="cat-table">
       <thead><tr><th style="width:110px;">畫家</th><th>Wikimedia 分類（網址或 Category: 名稱都可以）</th><th></th></tr></thead>
@@ -97,7 +101,7 @@ const DEFAULT_CATS = [
   { artist: '梵谷', cat: 'Category:Paintings_by_Vincent_van_Gogh_in_the_Art_Institute_of_Chicago' },
   { artist: '莫內', cat: 'Category:Paintings_by_Claude_Monet_in_the_Metropolitan_Museum_of_Art' },
   { artist: '北齋', cat: 'Category:Katsushika_Hokusai' },
-  { artist: '孟克', cat: 'Category:Paintings_by_Edvard_Munch_in_Nasjonalmuseet' },
+  { artist: '孟克', cat: 'Category:Paintings_by_Edvard_Munch' },
   { artist: '康丁斯基', cat: 'Category:Wassily_Kandinsky' },
 ];
 
@@ -123,7 +127,12 @@ let catRows = []; // {id, artist, catInput, catTitle, continueParams, done, imag
 let rowIdSeq = 1;
 
 function addCatRow(artist = '', cat = '') {
-  const row = { id: rowIdSeq++, artist, catInput: cat, catTitle: cat ? parseCategoryInput(cat) : '', continueParams: null, done: false, fetchedCount: 0, images: [] };
+  const row = {
+    id: rowIdSeq++, artist, catInput: cat, catTitle: cat ? parseCategoryInput(cat) : '',
+    rootContinue: null, rootDone: false,
+    subcatQueue: [], subcatIndex: 0,
+    done: false, fetchedCount: 0, images: [],
+  };
   catRows.push(row);
   renderCatRows();
 }
@@ -162,42 +171,79 @@ function renderCatRows() {
 document.getElementById('btn-add-cat').onclick = () => addCatRow();
 DEFAULT_CATS.forEach(c => addCatRow(c.artist, c.cat));
 
-async function fetchCategoryBatch(row) {
-  row.catTitle = parseCategoryInput(row.catInput);
+function pushImageFromPage(row, p) {
+  if (!p.imageinfo || !p.imageinfo[0]) return;
+  const info = p.imageinfo[0];
+  const okLic = licenseIsOk(info.extmetadata);
+  const licLabel = (info.extmetadata && info.extmetadata.LicenseShortName && info.extmetadata.LicenseShortName.value) || '未知授權';
+  const rawTitle = (p.title || '').replace(/^File:/, '').replace(/\.[a-zA-Z]+$/, '').replace(/_/g, ' ');
+  row.images.push({
+    pageid: p.pageid, url: info.url, width: info.width, height: info.height,
+    licenseOk: okLic, licenseLabel: licLabel, selected: okLic, editTitle: rawTitle,
+  });
+}
+
+async function fetchCategoryMembers(categoryTitle, types, limit, continueParams) {
   const params = new URLSearchParams({
     action: 'query', format: 'json', generator: 'categorymembers',
-    gcmtitle: row.catTitle, gcmtype: 'file', gcmlimit: '40',
+    gcmtitle: categoryTitle, gcmtype: types, gcmlimit: String(limit),
     prop: 'imageinfo', iiprop: 'url|extmetadata|size', origin: '*',
   });
-  if (row.continueParams) {
-    for (const [k, v] of Object.entries(row.continueParams)) params.set(k, v);
+  if (continueParams) {
+    for (const [k, v] of Object.entries(continueParams)) params.set(k, v);
   }
   const url = 'https://commons.wikimedia.org/w/api.php?' + params.toString();
   const res = await fetch(url);
   if (!res.ok) throw new Error('HTTP ' + res.status);
   const data = await res.json();
   if (data.error) throw new Error(data.error.info || JSON.stringify(data.error));
+  return data;
+}
 
-  const pages = (data.query && data.query.pages) ? Object.values(data.query.pages) : [];
-  for (const p of pages) {
-    if (!p.imageinfo || !p.imageinfo[0]) continue;
-    const info = p.imageinfo[0];
-    const okLic = licenseIsOk(info.extmetadata);
-    const licLabel = (info.extmetadata && info.extmetadata.LicenseShortName && info.extmetadata.LicenseShortName.value) || '未知授權';
-    const rawTitle = (p.title || '').replace(/^File:/, '').replace(/\.[a-zA-Z]+$/, '').replace(/_/g, ' ');
-    row.images.push({
-      pageid: p.pageid, url: info.url, width: info.width, height: info.height,
-      licenseOk: okLic, licenseLabel: licLabel, selected: okLic, editTitle: rawTitle,
-    });
+// 每次呼叫做「一批」工作：先把根分類直屬的圖跟子分類清單抓完（可能要點好幾次「載入更多」
+// 才會抓完，分類很大時 Wikimedia 一次只回一頁），根分類抓完之後，
+// 才開始一批一批鑽進子分類抓裡面的圖（很多博物館分類是每幅畫各自一個子分類）
+async function fetchCategoryBatch(row) {
+  row.catTitle = parseCategoryInput(row.catInput);
+
+  if (!row.rootDone) {
+    const data = await fetchCategoryMembers(row.catTitle, 'file|subcat', 40, row.rootContinue);
+    const pages = (data.query && data.query.pages) ? Object.values(data.query.pages) : [];
+    for (const p of pages) {
+      if (p.ns === 14 || /^Category:/.test(p.title || '')) {
+        row.subcatQueue.push(p.title);
+      } else {
+        pushImageFromPage(row, p);
+      }
+    }
+    row.fetchedCount = row.images.length;
+    if (data.continue) {
+      row.rootContinue = data.continue;
+      row.rootDone = false;
+    } else {
+      row.rootContinue = null;
+      row.rootDone = true;
+    }
+    row.done = row.rootDone && row.subcatIndex >= row.subcatQueue.length;
+    return;
+  }
+
+  // 根分類抓完了，開始鑽子分類，一次處理 5 個子分類（避免單次點擊打太多 API）
+  const BATCH = 5;
+  const end = Math.min(row.subcatIndex + BATCH, row.subcatQueue.length);
+  for (; row.subcatIndex < end; row.subcatIndex++) {
+    const subcatTitle = row.subcatQueue[row.subcatIndex];
+    try {
+      const data = await fetchCategoryMembers(subcatTitle, 'file', 20, null);
+      const pages = (data.query && data.query.pages) ? Object.values(data.query.pages) : [];
+      for (const p of pages) pushImageFromPage(row, p);
+    } catch (e) {
+      // 單一子分類抓失敗不中斷整批，跳過繼續下一個
+      console.error('子分類抓取失敗：', subcatTitle, e.message);
+    }
   }
   row.fetchedCount = row.images.length;
-  if (data.continue) {
-    row.continueParams = data.continue;
-    row.done = false;
-  } else {
-    row.continueParams = null;
-    row.done = true;
-  }
+  row.done = row.subcatIndex >= row.subcatQueue.length;
 }
 
 document.getElementById('btn-fetch-all').onclick = async () => {
@@ -269,7 +315,10 @@ function renderResults() {
 
     if (!row.done) {
       const btnMore = document.createElement('button');
-      btnMore.textContent = row.error ? '重試' : '載入更多';
+      const phaseNote = !row.rootDone
+        ? '（還在抓根分類直屬的圖）'
+        : `（子分類：${row.subcatIndex}/${row.subcatQueue.length}）`;
+      btnMore.textContent = row.error ? '重試' : ('載入更多 ' + phaseNote);
       btnMore.style.marginTop = '10px';
       btnMore.onclick = async () => {
         btnMore.disabled = true;
@@ -286,7 +335,7 @@ function renderResults() {
     } else {
       const doneNote = document.createElement('p');
       doneNote.className = 'muted';
-      doneNote.textContent = '這個分類已經抓到底了。';
+      doneNote.textContent = `這個分類已經抓到底了（含 ${row.subcatQueue.length} 個子分類）。`;
       block.appendChild(doneNote);
     }
 
