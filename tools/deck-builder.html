@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>名畫牌庫產生器</title>
+<style>
+  :root{
+    --bg:#241a2e; --panel:#2f2140; --gold:#d4af6a; --gold-dim:#8a7245;
+    --text:#f0e6d2; --text-dim:#b9aecb; --danger:#c0524a; --ok:#5a9b6f; --card-bg:#1a1424;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; font-family:-apple-system,BlinkMacSystemFont,"PingFang TC","Microsoft JhengHei",sans-serif;
+    background:radial-gradient(circle at 50% 0%, #3a2a4d, var(--bg) 70%);
+    color:var(--text); min-height:100vh; padding-bottom:40px;
+  }
+  .wrap{max-width:820px; margin:0 auto; padding:16px;}
+  h1{font-size:20px; color:var(--gold); text-align:center; letter-spacing:1px; margin:18px 0 10px;}
+  .panel{
+    background:var(--panel); border:1px solid var(--gold-dim); border-radius:14px;
+    padding:16px; margin-bottom:16px; box-shadow:0 4px 18px rgba(0,0,0,.35);
+  }
+  textarea{
+    width:100%; min-height:140px; padding:10px; border-radius:8px; border:1px solid var(--gold-dim);
+    background:#1d1528; color:var(--text); font-size:14px; font-family:monospace; resize:vertical;
+  }
+  button{
+    padding:10px 16px; border-radius:8px; border:1px solid var(--gold-dim);
+    background:linear-gradient(180deg,#4a3a63,#382a52); color:var(--gold);
+    font-size:14px; cursor:pointer; margin:8px 6px 0 0;
+  }
+  button.primary{background:linear-gradient(180deg,var(--gold),#b8944e); color:#241a2e; border-color:var(--gold);}
+  button.small{padding:4px 10px; font-size:12px;}
+  .muted{color:var(--text-dim); font-size:13px; line-height:1.6;}
+  table{width:100%; border-collapse:collapse; margin-top:10px; font-size:13px;}
+  th,td{padding:6px 6px; border-bottom:1px solid #3a2a4d; text-align:left; vertical-align:middle;}
+  th{color:var(--gold); font-weight:600;}
+  td input, td select{
+    width:100%; padding:5px 6px; border-radius:6px; border:1px solid var(--gold-dim);
+    background:#1d1528; color:var(--text); font-size:13px;
+  }
+  td.thumb{width:52px;}
+  td.thumb img{width:48px; height:64px; object-fit:cover; border-radius:4px; border:1px solid var(--gold-dim); display:block;}
+  td.thumb .broken{width:48px; height:64px; display:flex; align-items:center; justify-content:center; font-size:10px; color:var(--danger); border:1px dashed var(--danger); border-radius:4px;}
+  td.del{width:36px; text-align:center;}
+  .badge{display:inline-block; padding:2px 8px; border-radius:20px; font-size:12px; background:#3a2a4d; border:1px solid var(--gold-dim); color:var(--gold);}
+  #output{width:100%; min-height:220px; font-family:monospace; font-size:13px; white-space:pre;}
+  .row{display:flex; gap:8px; align-items:center; flex-wrap:wrap;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>🎨 名畫牌庫產生器</h1>
+
+  <div class="panel">
+    <p class="muted">
+      去 Wikimedia Commons 分類頁，對想要的圖片<strong>右鍵→複製圖片網址</strong>（或複製檔案頁網址也可以），
+      一行貼一個網址，貼完按「解析網址」。畫家會自動用檔名關鍵字猜，猜不出來或猜錯的用下拉選單自己選；
+      標題也是自動從檔名清出來的粗略版本，可以直接在表格裡改成你要的中文標題。
+    </p>
+    <textarea id="input-urls" placeholder="https://upload.wikimedia.org/wikipedia/commons/e/ea/Van_Gogh_-_Starry_Night_-_Google_Art_Project.jpg
+https://commons.wikimedia.org/wiki/File:Claude_Monet_-_The_Parc_Monceau.jpg
+（一行一個，貼多少都可以）"></textarea>
+    <div class="row">
+      <button class="primary" id="btn-parse">解析網址</button>
+      <span class="muted" id="parse-status"></span>
+    </div>
+  </div>
+
+  <div class="panel" id="panel-table" style="display:none;">
+    <div class="row" style="justify-content:space-between;">
+      <h3 style="margin:0;">解析結果（<span id="row-count">0</span> 筆）— 確認無誤後產生陣列</h3>
+      <span class="badge" id="broken-badge" style="display:none;"></span>
+    </div>
+    <p class="muted">縮圖顯示不出來的，代表這個網址在你自己瀏覽器裡多半也打不開，建議刪掉這一列（右邊 🗑️）或換一個網址。</p>
+    <table>
+      <thead><tr><th>縮圖</th><th>畫家</th><th>標題</th><th>網址</th><th></th></tr></thead>
+      <tbody id="table-body"></tbody>
+    </table>
+    <div class="row">
+      <button class="primary" id="btn-generate">產生陣列</button>
+      <button id="btn-add-row">＋手動加一列</button>
+    </div>
+  </div>
+
+  <div class="panel" id="panel-output" style="display:none;">
+    <div class="row" style="justify-content:space-between;">
+      <h3 style="margin:0;">貼進 dixit.html 的 CARD_DECK 陣列</h3>
+      <button class="small" id="btn-copy">複製全部</button>
+    </div>
+    <textarea id="output" readonly></textarea>
+    <p class="muted">直接整段複製，貼到 dixit.html 裡 <code>const CARD_DECK = [...]</code> 那段（或把新的幾筆插進既有陣列裡即可，不用整個換掉）。</p>
+  </div>
+</div>
+
+<script>
+const ARTIST_KEYWORDS = [
+  { artist: '梵谷', keys: ['van_gogh','vangogh','van gogh','梵谷'] },
+  { artist: '莫內', keys: ['monet','莫內'] },
+  { artist: '北齋', keys: ['hokusai','katsushika','北齋','葛飾'] },
+  { artist: '孟克', keys: ['munch','edvard','孟克'] },
+  { artist: '康丁斯基', keys: ['kandinsky','wassily','康丁斯基'] },
+];
+const ARTIST_LIST = ARTIST_KEYWORDS.map(a => a.artist).concat(['未知/其他']);
+
+function guessArtist(text) {
+  const low = text.toLowerCase();
+  for (const a of ARTIST_KEYWORDS) {
+    if (a.keys.some(k => low.includes(k.toLowerCase()))) return a.artist;
+  }
+  return '未知/其他';
+}
+
+// 把各種可能貼進來的網址型態，統一轉成可直接 hotlink 的圖片網址
+function normalizeImageUrl(raw) {
+  let url = raw.trim();
+  if (!url) return null;
+  // Commons 檔案頁網址 -> 轉成 Special:FilePath 直連格式
+  const fileMatch = url.match(/commons\.wikimedia\.org\/wiki\/File:(.+)$/i);
+  if (fileMatch) {
+    return 'https://commons.wikimedia.org/wiki/Special:FilePath/' + fileMatch[1];
+  }
+  return url;
+}
+
+function guessTitle(url) {
+  try {
+    let seg = decodeURIComponent(url.split('/').pop() || '');
+    seg = seg.replace(/^File:/i, '');
+    seg = seg.replace(/\.(jpg|jpeg|png|JPG|JPEG|PNG)$/i, '');
+    seg = seg.replace(/_/g, ' ');
+    seg = seg.replace(/\s*-\s*Google Art Project.*$/i, '');
+    seg = seg.replace(/\s*\(.*?\)\s*/g, ' ');
+    seg = seg.replace(/\s{2,}/g, ' ').trim();
+    return seg || '(請手動輸入標題)';
+  } catch (e) {
+    return '(請手動輸入標題)';
+  }
+}
+
+let rows = []; // {url, title, artist}
+
+function renderTable() {
+  const tbody = document.getElementById('table-body');
+  tbody.innerHTML = '';
+  let brokenCount = 0;
+  rows.forEach((row, i) => {
+    const tr = document.createElement('tr');
+
+    const tdThumb = document.createElement('td');
+    tdThumb.className = 'thumb';
+    const img = document.createElement('img');
+    img.src = row.url;
+    img.loading = 'lazy';
+    img.onerror = () => { img.replaceWith(Object.assign(document.createElement('div'), {className:'broken', textContent:'打不開'})); brokenCount++; document.getElementById('broken-badge').style.display='inline-block'; document.getElementById('broken-badge').textContent = brokenCount + ' 張圖打不開'; };
+    tdThumb.appendChild(img);
+    tr.appendChild(tdThumb);
+
+    const tdArtist = document.createElement('td');
+    const sel = document.createElement('select');
+    ARTIST_LIST.forEach(a => {
+      const opt = document.createElement('option');
+      opt.value = a; opt.textContent = a;
+      if (a === row.artist) opt.selected = true;
+      sel.appendChild(opt);
+    });
+    sel.onchange = () => { rows[i].artist = sel.value; };
+    tdArtist.appendChild(sel);
+    tr.appendChild(tdArtist);
+
+    const tdTitle = document.createElement('td');
+    const inputTitle = document.createElement('input');
+    inputTitle.type = 'text';
+    inputTitle.value = row.title;
+    inputTitle.oninput = () => { rows[i].title = inputTitle.value; };
+    tdTitle.appendChild(inputTitle);
+    tr.appendChild(tdTitle);
+
+    const tdUrl = document.createElement('td');
+    const inputUrl = document.createElement('input');
+    inputUrl.type = 'text';
+    inputUrl.value = row.url;
+    inputUrl.oninput = () => { rows[i].url = inputUrl.value; img.src = inputUrl.value; };
+    tdUrl.appendChild(inputUrl);
+    tr.appendChild(tdUrl);
+
+    const tdDel = document.createElement('td');
+    tdDel.className = 'del';
+    const btnDel = document.createElement('button');
+    btnDel.className = 'small';
+    btnDel.textContent = '🗑️';
+    btnDel.onclick = () => { rows.splice(i, 1); renderTable(); };
+    tdDel.appendChild(btnDel);
+    tr.appendChild(tdDel);
+
+    tbody.appendChild(tr);
+  });
+  document.getElementById('row-count').textContent = rows.length;
+  document.getElementById('panel-table').style.display = rows.length ? 'block' : 'none';
+}
+
+document.getElementById('btn-parse').onclick = () => {
+  const raw = document.getElementById('input-urls').value;
+  const lines = raw.split('\n').map(l => l.trim()).filter(Boolean);
+  const seen = new Set(rows.map(r => r.url));
+  let added = 0, skippedDup = 0, skippedInvalid = 0;
+  for (const line of lines) {
+    const url = normalizeImageUrl(line);
+    if (!url) { skippedInvalid++; continue; }
+    if (!/wikimedia\.org/i.test(url)) { skippedInvalid++; continue; }
+    if (seen.has(url)) { skippedDup++; continue; }
+    seen.add(url);
+    rows.push({ url, title: guessTitle(url), artist: guessArtist(url) });
+    added++;
+  }
+  document.getElementById('parse-status').textContent =
+    `新增 ${added} 筆${skippedDup ? '，跳過 ' + skippedDup + ' 筆重複' : ''}${skippedInvalid ? '，跳過 ' + skippedInvalid + ' 筆看起來不是 Wikimedia 網址' : ''}`;
+  document.getElementById('input-urls').value = '';
+  renderTable();
+};
+
+document.getElementById('btn-add-row').onclick = () => {
+  rows.push({ url: '', title: '', artist: '未知/其他' });
+  renderTable();
+};
+
+document.getElementById('btn-generate').onclick = () => {
+  const valid = rows.filter(r => r.url && r.title);
+  const lines = valid.map(r => {
+    const esc = s => String(s).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+    return `  {artist:"${esc(r.artist)}", title:"${esc(r.title)}", imageUrl:"${esc(r.url)}"},`;
+  });
+  const text = lines.join('\n');
+  document.getElementById('output').value = text;
+  document.getElementById('panel-output').style.display = 'block';
+  document.getElementById('panel-output').scrollIntoView({ behavior: 'smooth' });
+};
+
+document.getElementById('btn-copy').onclick = async () => {
+  const ta = document.getElementById('output');
+  ta.select();
+  try {
+    await navigator.clipboard.writeText(ta.value);
+    document.getElementById('btn-copy').textContent = '已複製 ✓';
+    setTimeout(() => { document.getElementById('btn-copy').textContent = '複製全部'; }, 1500);
+  } catch (e) {
+    document.execCommand('copy');
+  }
+};
+</script>
+</body>
+</html>
