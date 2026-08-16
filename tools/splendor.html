@@ -117,7 +117,7 @@ input[type=text]{
 .devCard .pt{font-weight:800; font-size:15px; display:flex; align-items:baseline; gap:1px;}
 .devCard .pt i{font-style:normal; font-size:8px; font-weight:600; opacity:.6;}
 .devCard .pt.zero{opacity:.4; font-size:12px;}
-.devCard .bonusChip{width:16px;height:16px;border-radius:50%; border:1px solid rgba(0,0,0,.3);}
+.devCard .bonusChip{width:14px;height:14px;border-radius:2px; border:1px solid rgba(0,0,0,.35); transform:rotate(45deg); box-shadow:inset -2px -2px 3px rgba(0,0,0,.35), inset 2px 2px 3px rgba(255,255,255,.5);}
 .devCard .costs{display:flex; flex-wrap:wrap; gap:2px; margin-top:4px;}
 .devCard .costs .c{display:flex; align-items:center; gap:2px; font-size:10px; font-weight:700; background:rgba(255,255,255,.5); border-radius:4px; padding:1px 3px;}
 .devCard .costs .dot{width:9px;height:9px;border-radius:50%; border:1px solid rgba(0,0,0,.35);}
@@ -225,7 +225,7 @@ input[type=text]{
   <div class="playersStrip" id="playersStrip"></div>
 
   <div class="board" id="board">
-    <div style="text-align:center;font-size:11px;color:var(--cream-dim);padding-top:6px;">🏆 貴族：集滿圖示顏色的永久獎勵數量會自動 +3分</div>
+    <div style="text-align:center;font-size:11px;color:var(--cream-dim);padding-top:6px;">🏆 貴族：集滿圖示顏色的寶石數量會自動 +3分</div>
     <div class="nobleRow" id="nobleRow"></div>
     <div class="levelRow" id="row3"></div>
     <div class="levelRow" id="row2"></div>
@@ -247,7 +247,7 @@ input[type=text]{
 
   <div class="actionBar">
     <button class="btn" id="modeGems">取寶石</button>
-    <button class="btn" id="modeReserve">預購卡片</button>
+    <button class="btn" id="modeReserve">搶先保留</button>
     <button class="btn" id="modeBuy">購買</button>
     <button class="btn primary hidden" id="btnConfirm">確認</button>
     <button class="btn ghost hidden" id="btnCancel">取消</button>
@@ -275,7 +275,7 @@ const NODE_ROOT = "splendor-rooms";
 
 /* ==========================================================================
    1. 卡牌 / 貴族資料（90 張發展卡＝40/30/20，10 張貴族板塊）
-      色碼：D=鑽石(白) S=藍寶石 E=祖母綠 R=紅寶石 O=縞瑪瑙 G=黃金(萬能)
+      色碼：D=珍珠(白) S=藍寶石 E=祖母綠 R=紅寶石 O=黑曜石(黑) G=黃金(萬能)
       卡牌費用結構重建自公開規則（各等級張數、費用曲線、對稱色彩分佈皆與
       官方一致），卡面沒有官方美術/人名，純數值。貴族需求採官方已知的
       「5組4+4雙色 + 5組3+3+3三色」對稱結構。
@@ -285,7 +285,7 @@ const NOBLES = JSON.parse('[{"pt":3,"req":{"D":4,"S":4}},{"pt":3,"req":{"S":4,"E
 const LEVEL_IDS = {1:[],2:[],3:[]};
 CARDS.forEach((c,i)=>LEVEL_IDS[c.lv].push(i));
 const COLORS = ["D","S","E","R","O"];
-const GEM_NAME = {D:"鑽石",S:"藍寶石",E:"祖母綠",R:"紅寶石",O:"縞瑪瑙",G:"黃金"};
+const GEM_NAME = {D:"珍珠",S:"藍寶石",E:"祖母綠",R:"紅寶石",O:"黑曜石",G:"黃金"};
 
 /* ==========================================================================
    2. 連線層：FirebaseNet（真連線）／ LocalNet（同瀏覽器分頁 BroadcastChannel）
@@ -657,8 +657,8 @@ async function confirmAction(){
     }
     await afterAction();
   } else if(MODE==='reserve'){
-    if(!SEL_RESERVE){ toast("請先選一張要預購的卡片"); return; }
-    if(p.reserved.length>=3){ toast("預購卡已達上限（3張）"); return; }
+    if(!SEL_RESERVE){ toast("請先選一張要搶先保留的寶石卡"); return; }
+    if(p.reserved.length>=3){ toast("搶先保留已達上限（3張）"); return; }
     let cardId;
     if(SEL_RESERVE.slot==='blind'){
       const deck=GAME_STATE.decks[SEL_RESERVE.lv];
@@ -670,10 +670,10 @@ async function confirmAction(){
     }
     p.reserved.push(cardId);
     if(GAME_STATE.bank.G>0){ GAME_STATE.bank.G--; p.gems.G++; }
-    GAME_STATE.log.push(p.name+" 預購了一張等級"+SEL_RESERVE.lv+"卡片");
+    GAME_STATE.log.push(p.name+" 搶先保留了一張等級"+SEL_RESERVE.lv+"寶石卡");
     await afterAction();
   } else if(MODE==='buy'){
-    if(!SEL_BUY){ toast("請先選一張要購買的卡片"); return; }
+    if(!SEL_BUY){ toast("請先選一張要購買的寶石卡"); return; }
     let cardId, removeFn;
     if(SEL_BUY.from==='board'){
       cardId = GAME_STATE.board[SEL_BUY.lv][SEL_BUY.slot];
@@ -687,7 +687,7 @@ async function confirmAction(){
     payForCard(card, p, GAME_STATE.bank);
     removeFn();
     p.cards.push(cardId);
-    GAME_STATE.log.push(p.name+" 購買了一張卡片（+"+card.pt+"分）");
+    GAME_STATE.log.push(p.name+" 購買了一張寶石卡（+"+card.pt+"分）");
     await afterAction();
   }
 }
@@ -789,7 +789,7 @@ function renderGame(){
       '<div class="nm"><span>'+p.name+(i===MY_INDEX?'（你）':'')+'</span><span>'+playerPoints(p)+'分</span></div>'+
       '<div class="bonuses">'+COLORS.map(c=>'<span class="b">'+gemDot(c,10)+bon[c]+'</span>').join('')+'</div>'+
       '<div class="gems">'+COLORS.concat(['G']).filter(c=>p.gems[c]>0).map(c=>'<span class="gem mini '+c+'">'+p.gems[c]+'</span>').join('')+'</div>'+
-      '<div style="margin-top:3px;color:var(--cream-dim)">預購 '+p.reserved.length+'/3'+(p.nobles.length?' · 貴族 '+p.nobles.map(()=>'👑').join(''):'')+'</div>'+
+      '<div style="margin-top:3px;color:var(--cream-dim)">保留 '+p.reserved.length+'/3'+(p.nobles.length?' · 貴族 '+p.nobles.map(()=>'👑').join(''):'')+'</div>'+
       '</div>';
   }).join('');
 
@@ -809,7 +809,7 @@ function renderGame(){
     const deck = state.decks[lv];
     let html = '<div class="deckPile"><span class="lv">Lv'+lv+'</span><span>'+deck.length+'張</span></div>';
     if(MODE==='reserve' && isMyTurn() && me.reserved.length<3){
-      html = '<div class="deckPile reserveBtn" data-reserveblind="'+lv+'"><span class="lv">Lv'+lv+'</span><span>盲抽預購</span></div>';
+      html = '<div class="deckPile reserveBtn" data-reserveblind="'+lv+'"><span class="lv">Lv'+lv+'</span><span>從牌庫選擇</span></div>';
     }
     html += state.board[lv].map((cid,slot)=>{
       const card = CARDS[cid];
@@ -878,26 +878,26 @@ function renderGame(){
 }
 
 const HELP_HTML = `
-  <h3>怎麼看卡片</h3>
+  <h3>你的回合可以做（4選1）</h3>
   <div style="font-size:13px;line-height:1.9;color:var(--cream)">
-    <b style="color:var(--gold-bright)">左上角數字</b>＝買下這張卡「當場」得到的分數。很多等級1的卡是<b>0分</b>（會用比較淡的字顯示），不是漏掉了，只是這張卡沒有分數加成，重點在它的顏色獎勵。<br><br>
-    <b style="color:var(--gold-bright)">右上角圓點</b>＝買下後永久得到的顏色獎勵。以後每次買卡，這個顏色都自動少算1顆（等於送你一顆這色寶石，一直有效到遊戲結束）。<br><br>
-    <b style="color:var(--gold-bright)">下方彩色數字</b>＝購買這張卡「原始」要付的寶石費用。你已經有的顏色獎勵會自動幫你打折，不用自己算。<br><br>
-    卡片外圍<b style="color:var(--gold-bright)">金框</b>＝目前你的寶石+獎勵已經買得起；灰色小字「缺N顆」＝還差幾顆湊不到。
+    ① 取3種不同寶石各1顆　② 取同一種寶石2顆（該色庫存要≥4顆才能取）<br>
+    ③ 搶先保留一張寶石卡（會讓別人不能買那一張；最多同時保留3張；也可以「從牌庫選擇」蓋牌保留，連你自己都不知道拿到什麼；保留同時免費拿1顆黃金萬能寶石）<br>
+    ④ 購買一張檯面上、或自己保留中的寶石卡（花寶石買下，買到的寶石卡永久代表你擁有這個顏色的寶石）
   </div>
-  <h3 style="margin-top:14px">你的回合可以做（4選1）</h3>
+  <h3 style="margin-top:14px">怎麼看寶石卡</h3>
   <div style="font-size:13px;line-height:1.9;color:var(--cream)">
-    ① 取3種不同顏色寶石各1顆　② 取同一顏色寶石2顆（該色庫存要≥4顆才能取）<br>
-    ③ 預購一張卡（最多同時持有3張；也可以「盲抽牌庫頂」蓋牌預購，連你自己都不知道抽到什麼；預購同時免費拿1顆黃金萬能寶石）<br>
-    ④ 購買一張檯面上的卡、或自己預購中的卡
+    <b style="color:var(--gold-bright)">左上角數字</b>＝獲得這張寶石卡可以得到的對應分數（Level 1 的卡片是零分）<br>
+    <b style="color:var(--gold-bright)">右上角寶石</b>＝買下後永久擁有的寶石，以後買卡這個顏色都會幫你扣掉1顆<br>
+    <b style="color:var(--gold-bright)">下方彩色數字</b>＝購買原始要付的寶石數量，你已擁有的寶石會自動幫你扣掉<br>
+    <b style="color:var(--gold-bright)">金框</b>＝目前買得起；「缺N顆」＝還差幾顆
   </div>
   <h3 style="margin-top:14px">貴族</h3>
   <div style="font-size:13px;line-height:1.9;color:var(--cream)">
-    集滿某位貴族板塊要求的「顏色獎勵」數量（看的是永久獎勵，不是手上寶石），回合結束時會自動獲得+3分。如果同時滿足2位以上，換你自己選一位。
+    集滿某位貴族板塊要求的寶石數量（看的是永久擁有的寶石，不是手上寶石），回合結束時會自動獲得+3分。如果同時滿足2位以上，換你自己選一位。
   </div>
   <h3 style="margin-top:14px">遊戲何時結束</h3>
   <div style="font-size:13px;line-height:1.9;color:var(--cream)">
-    只要有人分數達到15分，該回合結束後大家再各補走完最後一輪（讓每個人回合數公平），最後分數最高的人獲勝；平手比已購買卡片數，卡片較少的人獲勝。
+    只要有人分數達到15分，該回合結束後大家再各補走完最後一輪（讓每個人回合數公平），最後分數最高的人獲勝；平手比已購買寶石卡數，較少的人獲勝。
   </div>
 `;
 function toggleHelp(show){
