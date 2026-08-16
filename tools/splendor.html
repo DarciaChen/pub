@@ -225,7 +225,7 @@ input[type=text]{
   <div class="playersStrip" id="playersStrip"></div>
 
   <div class="board" id="board">
-    <div style="text-align:center;font-size:11px;color:var(--cream-dim);padding-top:6px;">🏆 貴族：集滿圖示顏色的寶石數量會自動 +3分</div>
+    <div style="text-align:center;font-size:11px;color:var(--cream-dim);padding-top:6px;">🏆 貴族：當你擁有的寶石卡數量集滿圖示顏色與數量，貴族就會主動拜訪，自動 +3分</div>
     <div class="nobleRow" id="nobleRow"></div>
     <div class="levelRow" id="row3"></div>
     <div class="levelRow" id="row2"></div>
@@ -893,7 +893,7 @@ const HELP_HTML = `
   </div>
   <h3 style="margin-top:14px">貴族</h3>
   <div style="font-size:13px;line-height:1.9;color:var(--cream)">
-    集滿某位貴族板塊要求的寶石數量（看的是永久擁有的寶石，不是手上寶石），回合結束時會自動獲得+3分。如果同時滿足2位以上，換你自己選一位。
+    每位貴族板塊都有指定的寶石與數量要求。當你擁有「代表該種寶石的寶石卡」達到要求的數量（看的是已經買下的寶石卡，不是手上的寶石籌碼），這位貴族就會主動拜訪你，直接幫你 +3分，不用額外花費。如果同時符合2位以上貴族的條件，換你自己選一位讓他來訪。
   </div>
   <h3 style="margin-top:14px">遊戲何時結束</h3>
   <div style="font-size:13px;line-height:1.9;color:var(--cream)">
