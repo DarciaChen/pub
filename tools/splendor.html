@@ -356,12 +356,12 @@ function newGame(playerNames){
 }
 function playerBonuses(p){
   const b={D:0,S:0,E:0,R:0,O:0};
-  p.cards.forEach(id=>{ b[CARDS[id].bonus]++; });
+  (p.cards||[]).forEach(id=>{ b[CARDS[id].bonus]++; });
   return b;
 }
 function playerPoints(p){
-  let pt = p.cards.reduce((s,id)=>s+CARDS[id].pt,0);
-  pt += p.nobles.reduce((s,idx)=>s+NOBLES[idx].pt,0);
+  let pt = (p.cards||[]).reduce((s,id)=>s+CARDS[id].pt,0);
+  pt += (p.nobles||[]).reduce((s,idx)=>s+NOBLES[idx].pt,0);
   return pt;
 }
 function totalGems(p){ return COLORS.reduce((s,c)=>s+p.gems[c],0) + p.gems.G; }
@@ -421,7 +421,7 @@ function checkNobles(state, pIdx){
   }
 }
 function checkTrigger(state, pIdx){
-  if(state.finalRoundTrigger===null && playerPoints(state.players[pIdx])>=15){
+  if(state.finalRoundTrigger==null && playerPoints(state.players[pIdx])>=15){
     state.finalRoundTrigger = pIdx;
     state.log.push(state.players[pIdx].name+" 達到 15 分！進入最終回合");
   }
@@ -429,9 +429,9 @@ function checkTrigger(state, pIdx){
 function advanceTurn(state){
   const n = state.players.length;
   const next = (state.turn+1)%n;
-  if(state.finalRoundTrigger!==null && next===state.finalRoundTrigger){
+  if(state.finalRoundTrigger!=null && next===state.finalRoundTrigger){
     state.gameOver = true;
-    const ranked = state.players.map((p,i)=>({i, pts:playerPoints(p), cards:p.cards.length}))
+    const ranked = state.players.map((p,i)=>({i, pts:playerPoints(p), cards:(p.cards||[]).length}))
       .sort((a,b)=> b.pts-a.pts || a.cards-b.cards);
     state.result = ranked;
     state.log.push("遊戲結束！"+state.players[ranked[0].i].name+" 獲勝");
@@ -442,6 +442,33 @@ function advanceTurn(state){
 function needsDiscard(state){
   const p = state.players[state.turn];
   return totalGems(p) > 10;
+}
+/* Firebase 會把「空陣列」「空物件」「null 值」的欄位整個刪掉（等同不存在），
+   讀回來變成 undefined。這裡在每次收到網路狀態時，把可能被刪掉的欄位
+   補回安全預設值，避免牌庫抽空、貴族全數發完、剛開局手牌全空等情境
+   讀到 undefined 而整段 render 中斷。 */
+function normalizeGameState(g){
+  if(!g) return g;
+  g.players = (g.players||[]).map(p=>({
+    name: p.name||"",
+    gems: Object.assign({D:0,S:0,E:0,R:0,O:0,G:0}, p.gems||{}),
+    cards: p.cards||[],
+    reserved: p.reserved||[],
+    nobles: p.nobles||[]
+  }));
+  g.bank = Object.assign({D:0,S:0,E:0,R:0,O:0,G:0}, g.bank||{});
+  g.decks = g.decks||{};
+  g.board = g.board||{};
+  [1,2,3].forEach(lv=>{ g.decks[lv]=g.decks[lv]||[]; g.board[lv]=g.board[lv]||[]; });
+  g.nobles = g.nobles||[];
+  g.log = g.log||[];
+  g.turn = g.turn||0;
+  g.finalRoundTrigger = (g.finalRoundTrigger===undefined) ? null : g.finalRoundTrigger;
+  g.pendingDiscard = (g.pendingDiscard===undefined) ? null : g.pendingDiscard;
+  g.pendingNoble = g.pendingNoble||null;
+  g.gameOver = !!g.gameOver;
+  g.result = g.result||null;
+  return g;
 }
 
 /* ==========================================================================
@@ -519,9 +546,9 @@ function subscribeRoom(){
     if(state.kind==="lobby"){
       LOBBY_STATE = state;
       if(!state.started){ enterLobbyView(state); }
-      else if(state.game){ GAME_STATE = state.game; enterGameView(); renderGame(); }
+      else if(state.game){ GAME_STATE = normalizeGameState(state.game); enterGameView(); renderGame(); }
     } else if(state.phase){
-      GAME_STATE = state;
+      GAME_STATE = normalizeGameState(state);
       enterGameView();
       renderGame();
     }
@@ -714,10 +741,10 @@ function renderGame(){
     banner.textContent = "遊戲結束";
   } else if(state.pendingNoble){
     banner.textContent = state.pendingNoble.playerIdx===MY_INDEX ? "請選擇貴族" : (state.players[state.pendingNoble.playerIdx].name+" 選擇貴族中…");
-  } else if(state.pendingDiscard!==null){
+  } else if(state.pendingDiscard!=null){
     banner.textContent = state.pendingDiscard===MY_INDEX ? "請丟棄多餘寶石（上限10顆）" : (state.players[state.pendingDiscard].name+" 正在丟棄寶石…");
   } else {
-    banner.textContent = (state.turn===MY_INDEX?"輪到你了":state.players[state.turn].name+" 的回合") + (state.finalRoundTrigger!==null?"（最終回合）":"");
+    banner.textContent = (state.turn===MY_INDEX?"輪到你了":state.players[state.turn].name+" 的回合") + (state.finalRoundTrigger!=null?"（最終回合）":"");
   }
   banner.classList.toggle('mine', state.turn===MY_INDEX && !state.gameOver);
 
@@ -800,7 +827,7 @@ function renderGame(){
   document.getElementById('modeGems').classList.toggle('active', MODE==='gems');
   document.getElementById('modeReserve').classList.toggle('active', MODE==='reserve');
   document.getElementById('modeBuy').classList.toggle('active', MODE==='buy');
-  const showConfirm = isMyTurn() && MODE && state.pendingDiscard===null;
+  const showConfirm = isMyTurn() && MODE && state.pendingDiscard==null;
   document.getElementById('btnConfirm').classList.toggle('hidden', !showConfirm);
   document.getElementById('btnCancel').classList.toggle('hidden', !MODE);
   ['modeGems','modeReserve','modeBuy'].forEach(id=>document.getElementById(id).disabled=!isMyTurn());
