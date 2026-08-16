@@ -489,6 +489,7 @@ let MODE = null; // 'gems' | 'reserve' | 'buy'
 let SEL_GEMS = [];
 let SEL_RESERVE = null; // {lv, slot} or {lv:'blind'}
 let SEL_BUY = null; // {from:'board'|'reserved', lv, slot} or {from:'reserved', idx}
+let PRE_ACTION_SNAPSHOT = null; // 動作執行前的狀態快照，只存在本機記憶體，供丟棄寶石畫面「返回上一步」用
 
 function toast(msg){
   const host=document.getElementById('toastHost');
@@ -638,6 +639,7 @@ function toggleGemSel(color){
 
 async function confirmAction(){
   if(!isMyTurn()) return;
+  PRE_ACTION_SNAPSHOT = JSON.parse(JSON.stringify(GAME_STATE)); // 動作前先存快照，丟棄寶石時可以整組復原重來
   const p = GAME_STATE.players[MY_INDEX];
   if(MODE==='gems'){
     if(SEL_GEMS.length===0){ toast("請先選擇寶石"); return; }
@@ -695,6 +697,7 @@ async function afterAction(){
     return;
   }
   finalizeTurn();
+  PRE_ACTION_SNAPSHOT = null;
   await pushState();
   renderGame();
 }
@@ -731,9 +734,20 @@ async function confirmDiscard(){
   });
   DISCARD_SEL={};
   GAME_STATE.pendingDiscard=null;
+  PRE_ACTION_SNAPSHOT=null; // 已確定丟棄，不再需要復原
   finalizeTurn();
   await pushState();
   renderGame();
+}
+async function undoAction(){
+  if(!PRE_ACTION_SNAPSHOT) return;
+  GAME_STATE = normalizeGameState(PRE_ACTION_SNAPSHOT);
+  PRE_ACTION_SNAPSHOT = null;
+  DISCARD_SEL = {};
+  MODE=null; SEL_GEMS=[]; SEL_RESERVE=null; SEL_BUY=null;
+  await pushState();
+  renderGame();
+  toast("已復原，重新選擇你的動作");
 }
 
 /* ==========================================================================
@@ -900,9 +914,11 @@ function renderDiscardModal(){
   const need = totalGems(p)-10;
   const wrap = document.createElement('div');
   wrap.id='discardModal'; wrap.className='modalWrap';
+  const backBtnHtml = PRE_ACTION_SNAPSHOT ? '<button class="btn ghost" id="discardBack" style="width:100%">← 返回上一步，不丟棄（改選別的動作）</button><div style="height:8px"></div>' : '';
   wrap.innerHTML = '<div class="modal"><h3>寶石超過上限，請丟棄 '+need+' 顆</h3><div class="opts" id="discardOpts"></div>'+
-    '<div style="height:10px"></div><button class="btn primary" id="discardOk" style="width:100%">確認丟棄</button></div>';
+    '<div style="height:10px"></div>'+backBtnHtml+'<button class="btn primary" id="discardOk" style="width:100%">確認丟棄</button></div>';
   document.body.appendChild(wrap);
+  if(PRE_ACTION_SNAPSHOT){ wrap.querySelector('#discardBack').onclick = undoAction; }
   const opts = wrap.querySelector('#discardOpts');
   opts.innerHTML = COLORS.concat(['G']).filter(c=>p.gems[c]>0).map(c=>{
     const n = DISCARD_SEL[c]||0;
