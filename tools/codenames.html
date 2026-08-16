@@ -847,6 +847,23 @@ function renderBoard(w){
 
 function renderActions(w){
   const p = $("actionPanel");
+
+  // 算出這次「應該顯示哪一種畫面」，跟上次一樣就整個跳過重建——
+  // 不然隊長打線索詞打到一半，只要背景心跳觸發一次 render()，輸入框會被砍掉重建，字跟游標焦點就沒了。
+  let viewKey;
+  if(w){ viewKey = "win"; }
+  else if(!myRole || myRole === "spectator"){ viewKey = "spectator"; }
+  else {
+    const mine = myTeam() === state.turn;
+    if(isCaptain()){
+      viewKey = !mine ? "captain-wait" : (state.clue ? "captain-clue-given" : "captain-give-clue");
+    } else {
+      viewKey = !mine ? "agent-wait" : (!state.clue ? "agent-no-clue" : "agent-guessing");
+    }
+  }
+  if(p.dataset.view === viewKey) return;
+  p.dataset.view = viewKey;
+
   if(w){
     p.innerHTML = `<div class="row"><button class="btn btn--red" id="btnAgain">再玩一局</button>
       <span class="hint" style="margin:0">會回到大廳，可以重選隊長跟隊員。</span></div>`;
