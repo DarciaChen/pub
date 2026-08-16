@@ -837,7 +837,7 @@ function renderBoard(w){
     else if(showKey){ cls.push("key-" + c.id); }
     const corner = (!c.f && showKey) ? `<span class="corner ${c.id}"></span>` : "";
     let voteBadge = "";
-    if(votingOn && !c.f && !isCaptain()){
+    if(votingOn && !c.f){
       const n = (state.votes && state.votes[i]) ? Object.keys(state.votes[i]).length : 0;
       if(n > 0 || myVote === i){
         voteBadge = `<span class="votecount${myVote===i?" mine":""}">${n}票</span>`;
@@ -885,9 +885,7 @@ function renderActions(w){
   if(isCaptain()){
     if(!mine){ p.innerHTML = `<span class="hint" style="margin:0">對方回合，靜候。你看到的顏色就是答案，別說溜嘴。</span>`; return; }
     if(state.clue){
-      p.innerHTML = `<div class="row"><span class="hint" style="margin:0;flex:1">線索已送出，等隊員翻牌。</span>
-        <button class="btn btn--sm" id="btnEnd">替隊員結束回合</button></div>`;
-      $("btnEnd").addEventListener("click", () => endTurn(false));
+      p.innerHTML = `<span class="hint" style="margin:0">線索已送出，等隊員翻牌或結束猜測。</span>`;
       return;
     }
     p.innerHTML = `<div class="row">
