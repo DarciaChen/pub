@@ -114,7 +114,9 @@ input[type=text]{
 .devCard.affordable{border-color:var(--gold-bright); box-shadow:0 0 0 2px var(--gold-bright), 0 3px 10px rgba(201,162,75,.5);}
 .devCard.selected{outline:3px solid #7fdc9a; outline-offset:1px;}
 .devCard .top{display:flex; justify-content:space-between; align-items:flex-start;}
-.devCard .pt{font-weight:800; font-size:15px;}
+.devCard .pt{font-weight:800; font-size:15px; display:flex; align-items:baseline; gap:1px;}
+.devCard .pt i{font-style:normal; font-size:8px; font-weight:600; opacity:.6;}
+.devCard .pt.zero{opacity:.4; font-size:12px;}
 .devCard .bonusChip{width:16px;height:16px;border-radius:50%; border:1px solid rgba(0,0,0,.3);}
 .devCard .costs{display:flex; flex-wrap:wrap; gap:2px; margin-top:4px;}
 .devCard .costs .c{display:flex; align-items:center; gap:2px; font-size:10px; font-weight:700; background:rgba(255,255,255,.5); border-radius:4px; padding:1px 3px;}
@@ -181,6 +183,7 @@ input[type=text]{
   <div class="brand">
     <h1>璀璨寶石</h1>
     <div class="sub">S P L E N D O R · 連線版</div>
+    <button class="btn ghost pill" id="btnHelpLobby" style="margin-top:10px;font-size:12px;padding:6px 14px;">？怎麼玩</button>
   </div>
 
   <div class="card-box" id="joinCreateBox">
@@ -212,8 +215,11 @@ input[type=text]{
 <!-- ============ 遊戲主畫面 ============ -->
 <div id="gameScreen" class="hidden">
   <div class="topbar">
-    <div class="roomTag">房號 <span id="gRoomCode"></span></div>
-    <div class="turnBanner" id="turnBanner">—</div>
+    <div style="display:flex;align-items:center;gap:10px;overflow:hidden;">
+      <div class="roomTag">房號 <span id="gRoomCode"></span></div>
+      <div class="turnBanner" id="turnBanner">—</div>
+    </div>
+    <button class="btn ghost" id="btnHelp" style="padding:4px 10px;font-size:12px;flex:none;">？規則</button>
   </div>
 
   <div class="playersStrip" id="playersStrip"></div>
@@ -788,7 +794,7 @@ function renderGame(){
       if(MODE==='reserve' && isMyTurn()) clickAttr = 'data-reserve="'+lv+':'+slot+'"';
       else if(MODE==='buy' && isMyTurn()) clickAttr = 'data-buyboard="'+lv+':'+slot+'"';
       return '<div class="cardSlot"><div class="devCard '+(afford?'affordable':'')+' '+(selectedBuy||selectedRes?'selected':'')+'" '+clickAttr+'>'+
-        '<div class="top"><span class="pt">'+(card.pt||'')+'</span><span class="bonusChip" style="background:var(--'+colorVarName(card.bonus)+')"></span></div>'+
+        '<div class="top"><span class="pt '+(card.pt===0?'zero':'')+'">'+card.pt+'<i>分</i></span><span class="bonusChip" style="background:var(--'+colorVarName(card.bonus)+')"></span></div>'+
         '<div class="costs">'+Object.keys(card.cost).map(c=>'<span class="c"><span class="dot" style="background:var(--'+colorVarName(c)+')"></span>'+card.cost[c]+'</span>').join('')+'</div>'+
         (MODE==='buy' && !missing.ok ? '<div class="missing">缺 '+missing.deficit+' 顆</div>' : '')+
         '</div></div>';
@@ -817,7 +823,7 @@ function renderGame(){
     const selected = SEL_BUY && SEL_BUY.from==='reserved' && SEL_BUY.idx===idx;
     const clickAttr = (MODE==='buy' && isMyTurn()) ? 'data-buyres="'+idx+'"' : '';
     return '<div class="cardSlot"><div class="devCard '+(afford?'affordable':'')+' '+(selected?'selected':'')+'" '+clickAttr+'>'+
-      '<div class="top"><span class="pt">'+(card.pt||'')+'</span><span class="bonusChip" style="background:var(--'+colorVarName(card.bonus)+')"></span></div>'+
+      '<div class="top"><span class="pt '+(card.pt===0?'zero':'')+'">'+card.pt+'<i>分</i></span><span class="bonusChip" style="background:var(--'+colorVarName(card.bonus)+')"></span></div>'+
       '<div class="costs">'+Object.keys(card.cost).map(c=>'<span class="c"><span class="dot" style="background:var(--'+colorVarName(c)+')"></span>'+card.cost[c]+'</span>').join('')+'</div>'+
       (MODE==='buy' && !missing.ok ? '<div class="missing">缺 '+missing.deficit+' 顆</div>' : '')+
       '</div></div>';
@@ -839,6 +845,41 @@ function renderGame(){
   renderDiscardModal();
   // 遊戲結束畫面
   renderEndScreen();
+}
+
+const HELP_HTML = `
+  <h3>怎麼看卡片</h3>
+  <div style="font-size:13px;line-height:1.9;color:var(--cream)">
+    <b style="color:var(--gold-bright)">左上角數字</b>＝買下這張卡「當場」得到的分數。很多等級1的卡是<b>0分</b>（會用比較淡的字顯示），不是漏掉了，只是這張卡沒有分數加成，重點在它的顏色獎勵。<br><br>
+    <b style="color:var(--gold-bright)">右上角圓點</b>＝買下後永久得到的顏色獎勵。以後每次買卡，這個顏色都自動少算1顆（等於送你一顆這色寶石，一直有效到遊戲結束）。<br><br>
+    <b style="color:var(--gold-bright)">下方彩色數字</b>＝購買這張卡「原始」要付的寶石費用。你已經有的顏色獎勵會自動幫你打折，不用自己算。<br><br>
+    卡片外圍<b style="color:var(--gold-bright)">金框</b>＝目前你的寶石+獎勵已經買得起；灰色小字「缺N顆」＝還差幾顆湊不到。
+  </div>
+  <h3 style="margin-top:14px">你的回合可以做（4選1）</h3>
+  <div style="font-size:13px;line-height:1.9;color:var(--cream)">
+    ① 取3種不同顏色寶石各1顆　② 取同一顏色寶石2顆（該色庫存要≥4顆才能取）<br>
+    ③ 預購一張卡（最多同時持有3張；也可以「盲抽牌庫頂」蓋牌預購，連你自己都不知道抽到什麼；預購同時免費拿1顆黃金萬能寶石）<br>
+    ④ 購買一張檯面上的卡、或自己預購中的卡
+  </div>
+  <h3 style="margin-top:14px">貴族</h3>
+  <div style="font-size:13px;line-height:1.9;color:var(--cream)">
+    集滿某位貴族板塊要求的「顏色獎勵」數量（看的是永久獎勵，不是手上寶石），回合結束時會自動獲得+3分。如果同時滿足2位以上，換你自己選一位。
+  </div>
+  <h3 style="margin-top:14px">遊戲何時結束</h3>
+  <div style="font-size:13px;line-height:1.9;color:var(--cream)">
+    只要有人分數達到15分，該回合結束後大家再各補走完最後一輪（讓每個人回合數公平），最後分數最高的人獲勝；平手比已購買卡片數，卡片較少的人獲勝。
+  </div>
+`;
+function toggleHelp(show){
+  const existing = document.getElementById('helpModal');
+  if(existing){ existing.remove(); if(!show) return; }
+  if(show===false) return;
+  const wrap = document.createElement('div');
+  wrap.id='helpModal'; wrap.className='modalWrap';
+  wrap.innerHTML = '<div class="modal">'+HELP_HTML+'<div style="height:10px"></div><button class="btn primary" id="helpCloseBtn" style="width:100%">知道了</button></div>';
+  wrap.addEventListener('click', (e)=>{ if(e.target===wrap) wrap.remove(); });
+  document.body.appendChild(wrap);
+  wrap.querySelector('#helpCloseBtn').onclick = ()=>wrap.remove();
 }
 
 function renderDiscardModal(){
@@ -894,6 +935,8 @@ document.getElementById('btnCreate').onclick = createRoom;
 document.getElementById('btnJoin').onclick = joinRoom;
 document.getElementById('btnStart').onclick = startGame;
 document.getElementById('btnLeave').onclick = ()=>location.reload();
+document.getElementById('btnHelp').onclick = ()=>toggleHelp(true);
+document.getElementById('btnHelpLobby').onclick = ()=>toggleHelp(true);
 document.getElementById('modeGems').onclick = ()=>setMode('gems');
 document.getElementById('modeReserve').onclick = ()=>setMode('reserve');
 document.getElementById('modeBuy').onclick = ()=>setMode('buy');
