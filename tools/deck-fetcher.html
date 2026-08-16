@@ -231,6 +231,7 @@ async function fetchCategoryBatch(row) {
   // 根分類抓完了，開始鑽子分類，一次處理 5 個子分類（避免單次點擊打太多 API）
   const BATCH = 5;
   const end = Math.min(row.subcatIndex + BATCH, row.subcatQueue.length);
+  const subcatErrors = [];
   for (; row.subcatIndex < end; row.subcatIndex++) {
     const subcatTitle = row.subcatQueue[row.subcatIndex];
     try {
@@ -238,12 +239,13 @@ async function fetchCategoryBatch(row) {
       const pages = (data.query && data.query.pages) ? Object.values(data.query.pages) : [];
       for (const p of pages) pushImageFromPage(row, p);
     } catch (e) {
-      // 單一子分類抓失敗不中斷整批，跳過繼續下一個
-      console.error('子分類抓取失敗：', subcatTitle, e.message);
+      // 單一子分類抓失敗不中斷整批，跳過繼續下一個，但錯誤要留著給畫面顯示，不能只印 console
+      subcatErrors.push(subcatTitle + '：' + e.message);
     }
   }
   row.fetchedCount = row.images.length;
   row.done = row.subcatIndex >= row.subcatQueue.length;
+  row.lastSubcatErrors = subcatErrors;
 }
 
 document.getElementById('btn-fetch-all').onclick = async () => {
@@ -267,16 +269,31 @@ function renderResults() {
   const box = document.getElementById('results');
   box.innerHTML = '';
   for (const row of catRows) {
-    if (!row.images.length && !row.error) continue;
+    const attempted = row.rootDone || row.rootContinue !== null || row.subcatQueue.length > 0 || row.images.length > 0 || !!row.error;
+    if (!attempted) continue;
     const block = document.createElement('div');
     block.className = 'panel artist-block';
     const okCount = row.images.filter(i => i.selected).length;
-    block.innerHTML = `<h3>${escapeHtml(row.artist || '(未命名)')} <span class="badge">已抓 ${row.images.length} 張，勾選 ${okCount} 張</span></h3>`;
+    block.innerHTML = `<h3>${escapeHtml(row.artist || '(未命名)')} <span class="badge">已抓 ${row.images.length} 張，勾選 ${okCount} 張</span> <span class="badge">找到 ${row.subcatQueue.length} 個子分類（已處理 ${row.subcatIndex}）</span></h3>`;
+    if (row.images.length === 0 && row.subcatQueue.length === 0 && row.rootDone && !row.error) {
+      const p = document.createElement('p');
+      p.className = 'muted';
+      p.style.color = 'var(--danger)';
+      p.textContent = '這個分類抓完了，但直屬圖是 0 張、子分類也是 0 個——很可能是分類名稱不對（打錯字、或這個分類其實不存在），麻煩去 Wikimedia 網站上確認實際分類名稱。';
+      block.appendChild(p);
+    }
     if (row.error) {
       const p = document.createElement('p');
       p.className = 'muted';
       p.style.color = 'var(--danger)';
       p.textContent = '錯誤：' + row.error;
+      block.appendChild(p);
+    }
+    if (row.lastSubcatErrors && row.lastSubcatErrors.length) {
+      const p = document.createElement('p');
+      p.className = 'muted';
+      p.style.color = 'var(--danger)';
+      p.textContent = `有 ${row.lastSubcatErrors.length} 個子分類抓取失敗：` + row.lastSubcatErrors.join('；');
       block.appendChild(p);
     }
     const grid = document.createElement('div');
