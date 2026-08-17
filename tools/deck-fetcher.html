@@ -23,6 +23,11 @@
   }
   .muted{color:var(--text-dim); font-size:13px; line-height:1.6;}
   table.cat-table{width:100%; border-collapse:collapse; font-size:13px; margin-top:8px;}
+  textarea{
+    width:100%; min-height:110px; padding:10px; border-radius:8px; border:1px solid var(--gold-dim);
+    background:#1d1528; color:var(--text); font-size:13px; font-family:monospace; resize:vertical;
+    margin-top:6px;
+  }
   table.cat-table th, table.cat-table td{padding:6px; border-bottom:1px solid #3a2a4d; text-align:left;}
   table.cat-table input{
     width:100%; padding:6px 8px; border-radius:6px; border:1px solid var(--gold-dim);
@@ -80,6 +85,21 @@
       <button class="primary" id="btn-fetch-all">開始抓取所有分類</button>
     </div>
     <p class="status-line" id="global-status"></p>
+
+    <details style="margin-top:14px;">
+      <summary style="cursor:pointer; color:var(--gold); font-size:14px;">📋 一次貼多個分類（批次加入）</summary>
+      <p class="muted" style="margin-top:8px;">
+        一行一個，格式「畫家: 網址」（冒號前後半形都可以，也可以用逗號分隔）。
+        如果不寫畫家名稱，只貼網址，會試著從分類名稱自動猜一個，猜錯了之後可以在上面表格自己改。
+      </p>
+      <textarea id="input-bulk-cats" placeholder="林布蘭: https://commons.wikimedia.org/wiki/Category:Paintings_by_Rembrandt
+波提切利: https://commons.wikimedia.org/wiki/Category:Paintings_by_Sandro_Botticelli
+拉斐爾: https://commons.wikimedia.org/wiki/Category:Paintings_by_Raphael"></textarea>
+      <div class="row">
+        <button class="primary" id="btn-bulk-add">批次加入</button>
+        <span class="muted" id="bulk-status"></span>
+      </div>
+    </details>
   </div>
 
   <div id="results"></div>
@@ -173,6 +193,40 @@ function renderCatRows() {
 
 document.getElementById('btn-add-cat').onclick = () => addCatRow();
 DEFAULT_CATS.forEach(c => addCatRow(c.artist, c.cat));
+
+// 從分類名稱猜一個畫家顯示名稱（只在沒填畫家時當備用，猜錯了使用者可以自己在表格改）
+function guessArtistFromCatTitle(catTitle) {
+  const cleaned = catTitle.replace(/^Category:/i, '').replace(/Paintings?_by_/i, '').replace(/_/g, ' ');
+  const firstPart = cleaned.split(/ in | at /i)[0];
+  return firstPart.trim() || '(未命名)';
+}
+
+document.getElementById('btn-bulk-add').onclick = () => {
+  const raw = document.getElementById('input-bulk-cats').value;
+  const lines = raw.split('\n').map(l => l.trim()).filter(Boolean);
+  let added = 0, skippedEmpty = 0;
+  for (const line of lines) {
+    // 支援「畫家: 網址」「畫家：網址」「畫家,網址」，冒號/逗號前後半形全形都吃；
+    // 如果整行本身就是網址（沒有分隔符可拆），就不填畫家，讓 addCatRow 之後用分類名稱去猜
+    const m = line.match(/^(.*?)[:：,，]\s*(https?:\/\/.+|Category:.+)$/i);
+    let artist, cat;
+    if (m) {
+      artist = m[1].trim();
+      cat = m[2].trim();
+    } else if (/^https?:\/\//i.test(line) || /^Category:/i.test(line)) {
+      cat = line;
+      artist = guessArtistFromCatTitle(parseCategoryInput(line));
+    } else {
+      skippedEmpty++;
+      continue;
+    }
+    addCatRow(artist, cat);
+    added++;
+  }
+  document.getElementById('bulk-status').textContent =
+    `已加入 ${added} 筆${skippedEmpty ? '，跳過 ' + skippedEmpty + ' 行看不出網址' : ''}`;
+  document.getElementById('input-bulk-cats').value = '';
+};
 
 function pushImageFromPage(row, p) {
   if (!p.imageinfo || !p.imageinfo[0]) return;
