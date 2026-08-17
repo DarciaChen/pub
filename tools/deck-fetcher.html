@@ -203,30 +203,38 @@ function guessArtistFromCatTitle(catTitle) {
 
 document.getElementById('btn-bulk-add').onclick = () => {
   const raw = document.getElementById('input-bulk-cats').value;
-  const lines = raw.split(/\r\n|\r|\n/).map(l => l.trim()).filter(Boolean);
-  let added = 0, skippedEmpty = 0, skippedTableChrome = 0;
-  for (const line of lines) {
-    // Markdown 表格分隔列（|----|----|這種）本身沒有網址，直接跳過不算錯誤
-    if (/^\|?[\s:|-]+\|?$/.test(line)) { skippedTableChrome++; continue; }
 
-    // 不管前面用什麼符號分隔（冒號、逗號、輸入法自動轉換出的各種怪符號、markdown 表格的 |），
-    // 只要整行裡找得到一段網址，就把網址前面剩下的文字當畫家名稱。
-    const urlMatch = line.match(/(https?:\/\/\S+|Category:\S+)/i);
-    if (!urlMatch) {
-      skippedEmpty++;
-      continue;
-    }
-    // 去掉網址結尾誤黏到的符號（<網址>、表格結尾的 |、句尾標點等）
-    // 注意：< > | 在 Unicode 分類裡多半是「符號」不是「標點」，兩個類別都要涵蓋到
-    const cat = urlMatch[0].replace(/[\p{P}\p{S}]+$/u, '');
-    // 畫家名稱同時去頭去尾的符號（表格開頭的 | 、儲存格內的空白 padding 等）
-    let artist = line.slice(0, urlMatch.index).replace(/^[\s\p{P}\p{S}]+|[\s\p{P}\p{S}]+$/gu, '').trim();
+  // 不逐行解析——貼上內容常常在奇怪的地方被斷行（尤其表格從別的 App 複製過來時），
+  // 「畫家」跟「網址」可能被拆到不同行。改成把整段文字的換行全部攤平成空白，
+  // 用「每個網址前面、最後一個 | 之後」的文字當畫家名稱，不受斷行位置影響。
+  const flat = raw.replace(/[\r\n]+/g, ' ');
+  const urlRe = /(https?:\/\/\S+|Category:\S+)/gi;
+  const matches = [];
+  let m;
+  while ((m = urlRe.exec(flat)) !== null) {
+    matches.push({ index: m.index, raw: m[0] });
+  }
+
+  let added = 0;
+  for (let i = 0; i < matches.length; i++) {
+    const segStart = i === 0 ? 0 : matches[i - 1].index + matches[i - 1].raw.length;
+    const gap = flat.slice(segStart, matches[i].index);
+    // 表格格式「|畫家|<網址」中間隔了兩個 |（一個開頭、一個分隔儲存格），
+    // 不能只抓「最後一個 | 之後」的內容（那樣會抓到 | 跟 < 中間的空隙）。
+    // 改成：依 | 拆成好幾段，每段都去掉頭尾符號，過濾掉清空後變空的段落，
+    // 剩下最後一個「有實際內容」的段落才是畫家名稱。
+    const trimSym = s => s.replace(/^[\s\p{P}\p{S}]+|[\s\p{P}\p{S}]+$/gu, '').trim();
+    const segments = gap.split('|').map(trimSym).filter(Boolean);
+    let artist = segments.length ? segments[segments.length - 1] : '';
+    const cat = matches[i].raw.replace(/[\p{P}\p{S}]+$/u, '');
     if (!artist) artist = guessArtistFromCatTitle(parseCategoryInput(cat));
     addCatRow(artist, cat);
     added++;
   }
+
   document.getElementById('bulk-status').textContent =
-    `已加入 ${added} 筆${skippedEmpty ? '，跳過 ' + skippedEmpty + ' 行看不出網址' : ''}`;
+    matches.length === 0 ? '沒有找到任何網址，確認一下貼的內容裡有沒有 http 開頭的連結。'
+    : `已加入 ${added} 筆`;
   document.getElementById('input-bulk-cats').value = '';
 };
 
