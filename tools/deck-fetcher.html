@@ -203,23 +203,20 @@ function guessArtistFromCatTitle(catTitle) {
 
 document.getElementById('btn-bulk-add').onclick = () => {
   const raw = document.getElementById('input-bulk-cats').value;
-  const lines = raw.split('\n').map(l => l.trim()).filter(Boolean);
+  const lines = raw.split(/\r\n|\r|\n/).map(l => l.trim()).filter(Boolean);
   let added = 0, skippedEmpty = 0;
   for (const line of lines) {
-    // 支援「畫家: 網址」「畫家：網址」「畫家,網址」，冒號/逗號前後半形全形都吃；
-    // 如果整行本身就是網址（沒有分隔符可拆），就不填畫家，讓 addCatRow 之後用分類名稱去猜
-    const m = line.match(/^(.*?)[:：,，]\s*(https?:\/\/.+|Category:.+)$/i);
-    let artist, cat;
-    if (m) {
-      artist = m[1].trim();
-      cat = m[2].trim();
-    } else if (/^https?:\/\//i.test(line) || /^Category:/i.test(line)) {
-      cat = line;
-      artist = guessArtistFromCatTitle(parseCategoryInput(line));
-    } else {
+    // 不管前面用什麼符號分隔（冒號、逗號、輸入法自動轉換出的各種怪符號），
+    // 只要整行裡找得到一段網址，就把網址前面剩下的文字當畫家名稱。
+    // 這樣比嚴格比對特定分隔符穩，不會因為手機輸入法把冒號轉成別的符號就整行判讀失敗。
+    const urlMatch = line.match(/(https?:\/\/\S+|Category:\S+)/i);
+    if (!urlMatch) {
       skippedEmpty++;
       continue;
     }
+    const cat = urlMatch[0];
+    let artist = line.slice(0, urlMatch.index).replace(/[\s\p{P}]+$/u, '').trim();
+    if (!artist) artist = guessArtistFromCatTitle(parseCategoryInput(cat));
     addCatRow(artist, cat);
     added++;
   }
