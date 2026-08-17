@@ -214,8 +214,10 @@ document.getElementById('btn-bulk-add').onclick = () => {
       skippedEmpty++;
       continue;
     }
-    const cat = urlMatch[0];
-    let artist = line.slice(0, urlMatch.index).replace(/[\s\p{P}]+$/u, '').trim();
+    // 去掉網址結尾誤黏到的符號（例如貼上內容用 <網址> 包起來、或句尾標點跟著黏進來）
+    // 注意：< > 在 Unicode 分類裡是「符號」不是「標點」，兩個類別都要涵蓋到
+    const cat = urlMatch[0].replace(/[\p{P}\p{S}]+$/u, '');
+    let artist = line.slice(0, urlMatch.index).replace(/[\s\p{P}\p{S}]+$/u, '').trim();
     if (!artist) artist = guessArtistFromCatTitle(parseCategoryInput(cat));
     addCatRow(artist, cat);
     added++;
