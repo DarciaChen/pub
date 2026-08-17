@@ -86,16 +86,19 @@
 
   <div class="panel" id="panel-output" style="display:none;">
     <div class="row" style="justify-content:space-between;">
-      <h3 style="margin:0;">已勾選 <span id="selected-count">0</span> 張 — 貼進 dixit.html 的 CARD_DECK 陣列</h3>
+      <h3 style="margin:0;">已勾選 <span id="selected-count">0</span> 張</h3>
       <div>
-        <button class="small" id="btn-generate">產生陣列</button>
+        <button class="small" id="btn-download-zip">📦 打包下載到電腦</button>
+        <button class="small" id="btn-generate">產生陣列（給 dixit.html 用）</button>
         <button class="small" id="btn-copy">複製全部</button>
       </div>
     </div>
+    <p class="muted" id="zip-status"></p>
     <textarea id="output" readonly></textarea>
   </div>
 </div>
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script>
 const DEFAULT_CATS = [
   { artist: '梵谷', cat: 'Category:Paintings_by_Vincent_van_Gogh_in_the_Art_Institute_of_Chicago' },
@@ -393,6 +396,83 @@ document.getElementById('btn-copy').onclick = async () => {
     setTimeout(() => { document.getElementById('btn-copy').textContent = '複製全部'; }, 1500);
   } catch (e) { document.execCommand('copy'); }
 };
+
+// 檔名安全化：拿掉會讓 zip 裡的檔名壞掉的字元
+function safeFilename(name, ext) {
+  const cleaned = String(name).replace(/[\\/:*?"<>|]/g, '_').trim().slice(0, 100) || 'untitled';
+  return cleaned + ext;
+}
+
+function extFromUrl(url) {
+  const m = url.split('?')[0].match(/\.([a-zA-Z]+)$/);
+  return m ? '.' + m[1].toLowerCase() : '.jpg';
+}
+
+document.getElementById('btn-download-zip').onclick = async () => {
+  const btn = document.getElementById('btn-download-zip');
+  const statusEl = document.getElementById('zip-status');
+  const zip = new JSZip();
+
+  // 蒐集所有已勾選的圖，依畫家分資料夾，避免同資料夾檔名撞名
+  const items = [];
+  for (const row of catRows) {
+    for (const img of row.images) {
+      if (!img.selected) continue;
+      items.push({ artist: row.artist || '未命名', title: img.editTitle, url: img.url });
+    }
+  }
+
+  if (items.length === 0) {
+    statusEl.textContent = '目前沒有勾選任何圖片。';
+    return;
+  }
+
+  btn.disabled = true;
+  let done = 0, failed = 0;
+  const usedNames = {}; // 依資料夾記錄用過的檔名，避免同資料夾內撞名互相覆蓋
+
+  for (const item of items) {
+    statusEl.textContent = `下載中… ${done + failed + 1} / ${items.length}`;
+    try {
+      const res = await fetch(item.url);
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const blob = await res.blob();
+      const folder = safeFilename(item.artist, '');
+      let filename = safeFilename(item.title, extFromUrl(item.url));
+      const key = folder + '/' + filename;
+      if (usedNames[key]) {
+        usedNames[key]++;
+        const dot = filename.lastIndexOf('.');
+        filename = filename.slice(0, dot) + '_' + usedNames[key] + filename.slice(dot);
+      } else {
+        usedNames[key] = 1;
+      }
+      zip.folder(folder).file(filename, blob);
+      done++;
+    } catch (e) {
+      failed++;
+      console.error('下載失敗：', item.url, e.message);
+    }
+  }
+
+  statusEl.textContent = `打包中…（成功 ${done} 張${failed ? '，失敗 ' + failed + ' 張' : ''}）`;
+  try {
+    const content = await zip.generateAsync({ type: 'blob' });
+    const a = document.createElement('a');
+    const objUrl = URL.createObjectURL(content);
+    a.href = objUrl;
+    a.download = '名畫牌庫.zip';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(objUrl);
+    statusEl.textContent = `打包完成！成功 ${done} 張${failed ? '，失敗 ' + failed + ' 張（可能是該圖網址失效，可以自己再看一下哪幾張）' : ''}。`;
+  } catch (e) {
+    statusEl.textContent = '打包失敗：' + e.message;
+  }
+  btn.disabled = false;
+};
 </script>
+
 </body>
 </html>
