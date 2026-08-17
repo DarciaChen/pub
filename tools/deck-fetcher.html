@@ -204,20 +204,23 @@ function guessArtistFromCatTitle(catTitle) {
 document.getElementById('btn-bulk-add').onclick = () => {
   const raw = document.getElementById('input-bulk-cats').value;
   const lines = raw.split(/\r\n|\r|\n/).map(l => l.trim()).filter(Boolean);
-  let added = 0, skippedEmpty = 0;
+  let added = 0, skippedEmpty = 0, skippedTableChrome = 0;
   for (const line of lines) {
-    // 不管前面用什麼符號分隔（冒號、逗號、輸入法自動轉換出的各種怪符號），
+    // Markdown 表格分隔列（|----|----|這種）本身沒有網址，直接跳過不算錯誤
+    if (/^\|?[\s:|-]+\|?$/.test(line)) { skippedTableChrome++; continue; }
+
+    // 不管前面用什麼符號分隔（冒號、逗號、輸入法自動轉換出的各種怪符號、markdown 表格的 |），
     // 只要整行裡找得到一段網址，就把網址前面剩下的文字當畫家名稱。
-    // 這樣比嚴格比對特定分隔符穩，不會因為手機輸入法把冒號轉成別的符號就整行判讀失敗。
     const urlMatch = line.match(/(https?:\/\/\S+|Category:\S+)/i);
     if (!urlMatch) {
       skippedEmpty++;
       continue;
     }
-    // 去掉網址結尾誤黏到的符號（例如貼上內容用 <網址> 包起來、或句尾標點跟著黏進來）
-    // 注意：< > 在 Unicode 分類裡是「符號」不是「標點」，兩個類別都要涵蓋到
+    // 去掉網址結尾誤黏到的符號（<網址>、表格結尾的 |、句尾標點等）
+    // 注意：< > | 在 Unicode 分類裡多半是「符號」不是「標點」，兩個類別都要涵蓋到
     const cat = urlMatch[0].replace(/[\p{P}\p{S}]+$/u, '');
-    let artist = line.slice(0, urlMatch.index).replace(/[\s\p{P}\p{S}]+$/u, '').trim();
+    // 畫家名稱同時去頭去尾的符號（表格開頭的 | 、儲存格內的空白 padding 等）
+    let artist = line.slice(0, urlMatch.index).replace(/^[\s\p{P}\p{S}]+|[\s\p{P}\p{S}]+$/gu, '').trim();
     if (!artist) artist = guessArtistFromCatTitle(parseCategoryInput(cat));
     addCatRow(artist, cat);
     added++;
