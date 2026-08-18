@@ -126,6 +126,7 @@
     <!-- 出題階段（跟隨者等待） -->
     <div id="phase-clue-wait" style="display:none;">
       <h3>等待說書人出題…</h3>
+      <p class="muted" id="clue-wait-countdown"></p>
     </div>
 
     <!-- 跟牌階段 -->
@@ -134,6 +135,7 @@
       <h3 id="submit-heading">挑一張跟這句提示最搭的牌</h3>
       <div class="card-grid" id="hand-follower"></div>
       <p class="muted" id="submit-wait-msg" style="display:none;">已送出，等待其他人…</p>
+      <p class="muted" id="submit-wait-countdown"></p>
     </div>
 
     <!-- 投票階段 -->
@@ -142,6 +144,7 @@
       <h3>猜猜看哪張是說書人的牌</h3>
       <div class="card-grid" id="vote-grid"></div>
       <p class="muted" id="vote-wait-msg" style="display:none;">已投票，等待其他人…</p>
+      <p class="muted" id="vote-wait-countdown"></p>
     </div>
 
     <!-- 揭曉階段 -->
@@ -191,7 +194,17 @@ function initGame(playerIds, deckSize, rng = Math.random) {
     phase: 'clue', round: 1, storytellerId: firstStoryteller, hands, drawPile,
     discardPile: [], clue: null, submitted: {}, votes: {},
     scores: Object.fromEntries(playerIds.map(id => [id, 0])), playerIds: [...playerIds],
+    phaseStartedAt: Date.now(),
   };
+}
+function autoPickCard(hand, rng = Math.random) {
+  if (!hand || hand.length === 0) return null;
+  return hand[Math.floor(rng() * hand.length)];
+}
+function autoPickVoteTarget(state, voterId, rng = Math.random) {
+  const candidates = Object.keys(state.submitted).filter(id => id !== voterId);
+  if (candidates.length === 0) return null;
+  return candidates[Math.floor(rng() * candidates.length)];
 }
 function cloneLite(o){ return JSON.parse(JSON.stringify(o)); }
 
@@ -209,6 +222,7 @@ function normalizeGameState(game) {
   next.scores = next.scores || {};
   next.hands = next.hands || {};
   next.playerIds = next.playerIds || [];
+  next.phaseStartedAt = next.phaseStartedAt || Date.now();
   for (const pid of next.playerIds) {
     if (!next.hands[pid]) next.hands[pid] = [];
     if (typeof next.scores[pid] !== 'number') next.scores[pid] = 0;
@@ -226,6 +240,7 @@ function submitClue(state, storytellerId, cardIndex, clueText) {
   next.submitted[storytellerId] = cardIndex;
   next.hands[storytellerId] = next.hands[storytellerId].filter(c => c !== cardIndex);
   next.phase = 'submit';
+  next.phaseStartedAt = Date.now();
   return next;
 }
 function submitFollowerCard(state, playerId, cardIndex) {
@@ -237,7 +252,7 @@ function submitFollowerCard(state, playerId, cardIndex) {
   next.submitted[playerId] = cardIndex;
   next.hands[playerId] = next.hands[playerId].filter(c => c !== cardIndex);
   const followers = state.playerIds.filter(id => id !== state.storytellerId);
-  if (followers.every(id => id in next.submitted)) next.phase = 'vote';
+  if (followers.every(id => id in next.submitted)) { next.phase = 'vote'; next.phaseStartedAt = Date.now(); }
   return next;
 }
 function castVote(state, voterId, votedForPlayerId) {
@@ -305,6 +320,7 @@ function nextRound(state, rng = Math.random) {
   next.round += 1;
   next.clue = null; next.submitted = {}; next.votes = {}; next.roundResult = null;
   next.phase = 'clue';
+  next.phaseStartedAt = Date.now();
   return next;
 }
 
@@ -1008,6 +1024,85 @@ async function goNextRound() {
     await backend.transactionGame(currentRoomId, (currentGame) => nextRound(currentGame, Math.random));
   } catch (e) { showToast(e.message); }
 }
+
+// ============================================================
+// 4b. 托管代打：等太久沒人動作，系統自動幫卡住的人選一張牌/投一票，
+//     避免整場遊戲卡死等一個離線或分心的玩家。
+//     每個連線中的裝置都會各自檢查，靠 transactionGame 的原子性保證
+//     就算好幾台裝置同時想代打，也只有一次真的生效，不會出錯。
+// ============================================================
+const AUTO_PLAY_TIMEOUT_MS = 90 * 1000; // 90 秒沒動作就代打，可依需要調整
+
+async function checkAndAutoPlay() {
+  const room = latestRoom;
+  if (!room || !room.game || !currentRoomId) return;
+  const game = room.game;
+  const elapsed = Date.now() - (game.phaseStartedAt || Date.now());
+  if (elapsed < AUTO_PLAY_TIMEOUT_MS) return;
+
+  if (game.phase === 'clue') {
+    if (game.storytellerId in game.submitted) return; // 已經有人处理過了
+    try {
+      await backend.transactionGame(currentRoomId, (g) => {
+        const cur = normalizeGameState(g);
+        if (!cur || cur.phase !== 'clue') return cur; // 狀態已經變了，別人搶先處理了
+        if (cur.storytellerId in cur.submitted) return cur;
+        const card = autoPickCard(cur.hands[cur.storytellerId], Math.random);
+        if (card === null) return cur; // 沒手牌可代打，放棄（理論上不該發生）
+        return submitClue(cur, cur.storytellerId, card, '（已托管自動出題）');
+      });
+    } catch (e) { /* 交易失敗代表已經有其他裝置代打過了，忽略即可 */ }
+  } else if (game.phase === 'submit') {
+    const followers = game.playerIds.filter(id => id !== game.storytellerId);
+    for (const pid of followers) {
+      if (pid in game.submitted) continue;
+      try {
+        await backend.transactionGame(currentRoomId, (g) => {
+          const cur = normalizeGameState(g);
+          if (!cur || cur.phase !== 'submit') return cur;
+          if (pid in cur.submitted) return cur;
+          const card = autoPickCard(cur.hands[pid], Math.random);
+          if (card === null) return cur;
+          return submitFollowerCard(cur, pid, card);
+        });
+      } catch (e) { /* 忽略，可能已經被代打過或本人剛好也送出了 */ }
+    }
+  } else if (game.phase === 'vote') {
+    const followers = game.playerIds.filter(id => id !== game.storytellerId);
+    for (const pid of followers) {
+      if (pid in game.votes) continue;
+      try {
+        await backend.transactionGame(currentRoomId, (g) => {
+          const cur = normalizeGameState(g);
+          if (!cur || cur.phase !== 'vote') return cur;
+          if (pid in cur.votes) return cur;
+          const target = autoPickVoteTarget(cur, pid, Math.random);
+          if (target === null) return cur;
+          let next = castVote(cur, pid, target);
+          if (next.phase === 'reveal') next = scoreRound(next);
+          return next;
+        });
+      } catch (e) { /* 忽略 */ }
+    }
+  }
+}
+
+setInterval(() => { checkAndAutoPlay().catch(() => {}); }, 5000);
+
+// 每秒更新等待畫面上的倒數文字，讓玩家知道還要多久會被系統代打
+setInterval(() => {
+  const room = latestRoom;
+  if (!room || !room.game) return;
+  const game = room.game;
+  const remain = Math.max(0, AUTO_PLAY_TIMEOUT_MS - (Date.now() - (game.phaseStartedAt || Date.now())));
+  const secs = Math.ceil(remain / 1000);
+  const text = secs > 0 ? `還有 ${secs} 秒沒動作會被系統自動代打` : '即將自動代打…';
+  const countdownIds = ['clue-wait-countdown', 'submit-wait-countdown', 'vote-wait-countdown'];
+  for (const id of countdownIds) {
+    const elm = document.getElementById(id);
+    if (elm) elm.textContent = text;
+  }
+}, 1000);
 
 function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
