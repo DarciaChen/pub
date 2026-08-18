@@ -194,6 +194,28 @@ function initGame(playerIds, deckSize, rng = Math.random) {
   };
 }
 function cloneLite(o){ return JSON.parse(JSON.stringify(o)); }
+
+// Firebase Realtime Database 會把空物件 {} / 空陣列 [] 直接刪掉整個欄位，
+// 不是存成空的，是欄位消失。換輪時 submitted/votes 重置成 {} 寫回去，
+// 下一次讀出來時這兩個欄位就會是 undefined，導致後面的程式碼爆掉。
+// 每次從 Firebase 讀到 game 物件、要拿去用之前，都要先過這一關補回預設值。
+function normalizeGameState(game) {
+  if (!game) return game;
+  const next = { ...game };
+  next.submitted = next.submitted || {};
+  next.votes = next.votes || {};
+  next.discardPile = next.discardPile || [];
+  next.drawPile = next.drawPile || [];
+  next.scores = next.scores || {};
+  next.hands = next.hands || {};
+  next.playerIds = next.playerIds || [];
+  for (const pid of next.playerIds) {
+    if (!next.hands[pid]) next.hands[pid] = [];
+    if (typeof next.scores[pid] !== 'number') next.scores[pid] = 0;
+  }
+  return next;
+}
+
 function submitClue(state, storytellerId, cardIndex, clueText) {
   if (state.phase !== 'clue') throw new Error('現在不是出題階段');
   if (storytellerId !== state.storytellerId) throw new Error('只有說書人能出題');
@@ -579,7 +601,7 @@ async function initBackend() {
       async transactionGame(roomId, fn) {
         let opError = null;
         const result = await runTransaction(ref(db, `${NODE_ROOT}/${roomId}/game`), (currentGame) => {
-          try { return fn(currentGame); }
+          try { return fn(normalizeGameState(currentGame)); }
           catch (e) { opError = e; return; /* 回傳 undefined = 放棄本次交易，不寫入 */ }
         });
         if (opError) throw opError;
@@ -619,7 +641,10 @@ function initLocalBackend() {
         cursor[parts[i]] = { ...(cursor[parts[i]] || {}) };
         cursor = cursor[parts[i]];
       }
-      cursor[parts[parts.length - 1]] = val;
+      const lastKey = parts[parts.length - 1];
+      // 跟 Firebase 行為一致：patch 值是 null，代表要把這個 key 整個刪掉，不是存成 null
+      if (val === null) delete cursor[lastKey];
+      else cursor[lastKey] = val;
     }
     return next;
   }
@@ -647,7 +672,7 @@ function initLocalBackend() {
     // 跨視窗近乎同時操作的覆蓋風險——LocalNet 本來就只是離線測試用的簡化模式
     async transactionGame(roomId, fn) {
       const currentGame = (store[roomId] || {}).game;
-      const nextGame = fn(currentGame);
+      const nextGame = fn(normalizeGameState(currentGame));
       store[roomId] = { ...(store[roomId] || {}), game: nextGame };
       bc.postMessage({ roomId, data: store[roomId] });
       notifyLocal(roomId);
@@ -674,6 +699,19 @@ let selectedCardIndex = null;
 function uid() { return 'u' + Math.random().toString(36).slice(2, 10); }
 function roomCode() { return Math.random().toString(36).slice(2, 8); }
 
+// 記住「這個瀏覽器在這個房間裡是誰」，重新整理/退出重進同一個房間時
+// 認回原本的身份（覆蓋同一個 id），而不是每次都產生新 id 變成另一個幽靈玩家卡在名單裡
+function getStoredIdentity(roomId) {
+  try { return localStorage.getItem('dixit_identity_' + roomId) || null; }
+  catch (e) { return null; }
+}
+function storeIdentity(roomId, id) {
+  try { localStorage.setItem('dixit_identity_' + roomId, id); } catch (e) {}
+}
+function clearStoredIdentity(roomId) {
+  try { localStorage.removeItem('dixit_identity_' + roomId); } catch (e) {}
+}
+
 function showToast(msg) {
   const t = document.getElementById('toast');
   t.textContent = msg;
@@ -689,6 +727,7 @@ async function createRoom() {
   if (!name) return showToast('請先輸入暱稱');
   myId = uid(); myName = name;
   currentRoomId = roomCode();
+  storeIdentity(currentRoomId, myId);
   const room = {
     createdAt: Date.now(),
     hostId: myId,
@@ -705,11 +744,14 @@ async function joinRoom() {
   const rid = el('input-room-id').value.trim();
   if (!name) return showToast('請先輸入暱稱');
   if (!rid) return showToast('請輸入房號');
-  myId = uid(); myName = name;
+  myId = getStoredIdentity(rid) || uid();
+  storeIdentity(rid, myId);
+  myName = name;
   currentRoomId = rid;
   const room = await backend.readRoom(rid);
   if (!room) return showToast('找不到這個房間');
-  // 用路徑鍵 patch，只新增自己這個節點，不會覆蓋掉同時加入的其他玩家
+  // 用路徑鍵 patch，只新增/更新自己這個節點，不會覆蓋掉同時加入的其他玩家；
+  // 如果是同一個人重進，myId 跟之前一樣，這裡會直接覆蓋更新舊的那筆，不會多出一個幽靈玩家
   await backend.updateRoom(rid, { [`players/${myId}`]: { name, connected: true } });
   history.replaceState(null, '', `?room=${rid}`);
   enterRoom();
@@ -722,7 +764,14 @@ function enterRoom() {
   unsubscribe = backend.subscribeRoom(currentRoomId, renderRoom);
 }
 
-function leaveRoom() {
+async function leaveRoom() {
+  // 真的把自己從房間的玩家名單移除，不然幽靈玩家會一直卡在名單裡，
+  // 遊戲開始後如果幽靈玩家被排進跟隨者名單，會永遠卡住等一個不存在的人出牌/投票
+  if (currentRoomId && myId) {
+    try { await backend.updateRoom(currentRoomId, { [`players/${myId}`]: null }); }
+    catch (e) { console.error('離開房間時移除玩家失敗：', e); }
+    clearStoredIdentity(currentRoomId);
+  }
   if (unsubscribe) unsubscribe();
   currentRoomId = null; myId = null;
   history.replaceState(null, '', location.pathname);
@@ -734,6 +783,7 @@ let latestRoom = null;
 
 function renderRoom(room) {
   if (!room) return;
+  if (room.game) room.game = normalizeGameState(room.game);
   latestRoom = room;
   const players = room.players || {};
   const playerIds = Object.keys(players);
