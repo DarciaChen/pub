@@ -72,7 +72,8 @@
       有些博物館分類（例如梵谷、孟克）底下是「每幅畫各自一個子分類」的整理方式，
       這個工具會先抓分類直屬的圖，抓完之後自動往下鑽子分類（一次處理 5 個），
       不夠按「載入更多」繼續，直到抓完整個分類（含所有子分類）。
-      抓回來的每張圖會自動標示授權（綠色 OK／紅色需人工確認），紅色的預設不勾選，你可以自己決定要不要留。
+      抓回來的每張圖會自動標示授權（綠色 OK／紅色需人工確認）跟解析度（低於 500×500 的標紅，放大成卡牌尺寸容易糊）。
+      這兩項有一項不合格，就預設不勾選，你可以自己決定要不要留。
       孟克那筆改用比較大的「Paintings by Edvard Munch」總分類——Wikimedia 上找不到乾淨的「只限
       Nasjonalmuseet」分類，這樣會混到其他館藏（如 Munchmuseet），你抓回來之後可以自己篩掉不要的。
     </p>
@@ -238,15 +239,24 @@ document.getElementById('btn-bulk-add').onclick = () => {
   document.getElementById('input-bulk-cats').value = '';
 };
 
+// 解析度太低的圖，放大到卡牌尺寸看起來會糊，預設不勾選。
+// Dixit 卡牌是直式 2:3，短邊（寬）低於這個門檻的，通常放大就會糊。
+const MIN_WIDTH = 500;
+const MIN_HEIGHT = 500;
+
 function pushImageFromPage(row, p) {
   if (!p.imageinfo || !p.imageinfo[0]) return;
   const info = p.imageinfo[0];
   const okLic = licenseIsOk(info.extmetadata);
   const licLabel = (info.extmetadata && info.extmetadata.LicenseShortName && info.extmetadata.LicenseShortName.value) || '未知授權';
   const rawTitle = (p.title || '').replace(/^File:/, '').replace(/\.[a-zA-Z]+$/, '').replace(/_/g, ' ');
+  const width = info.width || 0;
+  const height = info.height || 0;
+  const okResolution = width >= MIN_WIDTH && height >= MIN_HEIGHT;
   row.images.push({
-    pageid: p.pageid, url: info.url, width: info.width, height: info.height,
-    licenseOk: okLic, licenseLabel: licLabel, selected: okLic, editTitle: rawTitle,
+    pageid: p.pageid, url: info.url, width, height,
+    licenseOk: okLic, licenseLabel: licLabel, resolutionOk: okResolution,
+    selected: okLic && okResolution, editTitle: rawTitle,
   });
 }
 
@@ -377,6 +387,12 @@ function renderResults() {
       lic.className = 'lic ' + (img.licenseOk ? 'ok' : 'warn');
       lic.textContent = img.licenseLabel;
       card.appendChild(lic);
+
+      const res = document.createElement('span');
+      res.className = 'lic ' + (img.resolutionOk ? 'ok' : 'warn');
+      res.textContent = (img.width && img.height) ? `${img.width}×${img.height}` : '解析度未知';
+      res.title = img.resolutionOk ? '' : `低於門檻 ${MIN_WIDTH}×${MIN_HEIGHT}，放大可能會糊`;
+      card.appendChild(res);
 
       const titleInput = document.createElement('input');
       titleInput.className = 'title-input';
