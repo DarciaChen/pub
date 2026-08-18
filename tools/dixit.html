@@ -711,6 +711,12 @@ function storeIdentity(roomId, id) {
 function clearStoredIdentity(roomId) {
   try { localStorage.removeItem('dixit_identity_' + roomId); } catch (e) {}
 }
+function storeName(name) {
+  try { localStorage.setItem('dixit_last_name', name); } catch (e) {}
+}
+function getStoredName() {
+  try { return localStorage.getItem('dixit_last_name') || ''; } catch (e) { return ''; }
+}
 
 function showToast(msg) {
   const t = document.getElementById('toast');
@@ -739,22 +745,24 @@ async function createRoom() {
   enterRoom();
 }
 
-async function joinRoom() {
+async function joinRoom(silent = false) {
   const name = el('input-name').value.trim();
   const rid = el('input-room-id').value.trim();
-  if (!name) return showToast('請先輸入暱稱');
-  if (!rid) return showToast('請輸入房號');
+  if (!name) { if (!silent) showToast('請先輸入暱稱'); return false; }
+  if (!rid) { if (!silent) showToast('請輸入房號'); return false; }
   myId = getStoredIdentity(rid) || uid();
   storeIdentity(rid, myId);
+  storeName(name);
   myName = name;
   currentRoomId = rid;
   const room = await backend.readRoom(rid);
-  if (!room) return showToast('找不到這個房間');
+  if (!room) { if (!silent) showToast('找不到這個房間'); return false; }
   // 用路徑鍵 patch，只新增/更新自己這個節點，不會覆蓋掉同時加入的其他玩家；
   // 如果是同一個人重進，myId 跟之前一樣，這裡會直接覆蓋更新舊的那筆，不會多出一個幽靈玩家
   await backend.updateRoom(rid, { [`players/${myId}`]: { name, connected: true } });
   history.replaceState(null, '', `?room=${rid}`);
   enterRoom();
+  return true;
 }
 
 function enterRoom() {
@@ -1009,7 +1017,7 @@ function escapeHtml(s) {
 // 5. 綁定事件、啟動
 // ============================================================
 el('btn-create-room').onclick = createRoom;
-el('btn-join-room').onclick = joinRoom;
+el('btn-join-room').onclick = () => joinRoom(false);
 el('btn-leave-room').onclick = leaveRoom;
 el('btn-start-game').onclick = startGame;
 el('btn-submit-clue').onclick = submitClueAction;
@@ -1017,9 +1025,21 @@ el('btn-next-round').onclick = goNextRound;
 
 (async function init() {
   await initBackend();
+  const storedName = getStoredName();
+  if (storedName) el('input-name').value = storedName;
+
   const params = new URLSearchParams(location.search);
   const rid = params.get('room');
-  if (rid) el('input-room-id').value = rid;
+  if (rid) {
+    el('input-room-id').value = rid;
+    // 網址帶房號、瀏覽器又記得這個房間的身份跟暱稱時，直接自動接回房間，
+    // 不用使用者手動再按一次「加入房間」——意外滑掉/重整回來時體驗才會順
+    const storedId = getStoredIdentity(rid);
+    if (storedId && storedName) {
+      const ok = await joinRoom(true);
+      if (!ok) showToast('自動接回房間失敗，麻煩手動按「加入房間」');
+    }
+  }
 })();
 </script>
 </body>
