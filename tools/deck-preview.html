@@ -1,0 +1,429 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>牌庫預覽</title>
+<style>
+  :root{
+    --bg:#241a2e; --panel:#2f2140; --gold:#d4af6a; --gold-dim:#8a7245;
+    --text:#f0e6d2; --text-dim:#b9aecb; --danger:#c0524a; --ok:#5a9b6f; --card-bg:#1a1424;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; font-family:-apple-system,BlinkMacSystemFont,"PingFang TC","Microsoft JhengHei",sans-serif;
+    background:radial-gradient(circle at 50% 0%, #3a2a4d, var(--bg) 70%);
+    color:var(--text); min-height:100vh; padding-bottom:60px;
+  }
+  .wrap{max-width:1100px; margin:0 auto; padding:16px;}
+  h1{font-size:20px; color:var(--gold); text-align:center; letter-spacing:1px; margin:18px 0 6px;}
+  .panel{
+    background:var(--panel); border:1px solid var(--gold-dim); border-radius:14px;
+    padding:14px; margin-bottom:14px; box-shadow:0 4px 18px rgba(0,0,0,.35);
+  }
+  .muted{color:var(--text-dim); font-size:13px; line-height:1.6;}
+  .toolbar{display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-top:8px;}
+  select, input[type=text]{
+    padding:8px 10px; border-radius:8px; border:1px solid var(--gold-dim);
+    background:#1d1528; color:var(--text); font-size:14px;
+  }
+  button{
+    padding:9px 14px; border-radius:8px; border:1px solid var(--gold-dim);
+    background:linear-gradient(180deg,#4a3a63,#382a52); color:var(--gold);
+    font-size:14px; cursor:pointer;
+  }
+  button.primary{background:linear-gradient(180deg,var(--gold),#b8944e); color:#241a2e; border-color:var(--gold);}
+  button.small{padding:4px 10px; font-size:12px;}
+  .badge{display:inline-block; padding:2px 8px; border-radius:20px; font-size:12px; background:#3a2a4d; border:1px solid var(--gold-dim); color:var(--gold);}
+  .grid{display:grid; grid-template-columns:repeat(auto-fill,minmax(130px,1fr)); gap:10px; margin-top:12px;}
+  .card{
+    background:#1d1528; border:2px solid var(--gold-dim); border-radius:10px; padding:6px;
+    font-size:11px; position:relative; cursor:pointer; transition:border-color .15s, opacity .15s;
+  }
+  .card.marked{border-color:var(--danger); opacity:.4;}
+  .card img{width:100%; aspect-ratio:2/3; object-fit:cover; border-radius:6px; display:block; margin-bottom:4px; background:#111;}
+  .card .broken{width:100%; aspect-ratio:2/3; display:flex; align-items:center; justify-content:center; font-size:11px; color:var(--danger); border:1px dashed var(--danger); border-radius:6px; margin-bottom:4px;}
+  .card .idx{position:absolute; top:8px; left:8px; background:rgba(0,0,0,.7); color:var(--gold); font-size:10px; padding:1px 5px; border-radius:8px;}
+  .card .artist{color:var(--gold); font-weight:600; display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+  .card .title{color:var(--text-dim); display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+  .mark-tag{position:absolute; top:8px; right:8px; background:var(--danger); color:#fff; font-size:10px; padding:1px 6px; border-radius:8px; display:none;}
+  .card.marked .mark-tag{display:block;}
+  #output-panel{display:none;}
+  #output{width:100%; min-height:140px; font-family:monospace; font-size:13px; white-space:pre;
+    padding:10px; border-radius:8px; border:1px solid var(--gold-dim); background:#1d1528; color:var(--text);}
+  .sticky-bar{
+    position:sticky; top:0; z-index:10; background:var(--bg); padding:10px 0; margin:-16px -16px 10px;
+    padding-left:16px; padding-right:16px; border-bottom:1px solid var(--gold-dim);
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="sticky-bar">
+    <h1>🎨 牌庫預覽（點卡片標記要刪的）</h1>
+    <div class="toolbar">
+      <select id="filter-artist"><option value="">全部畫家</option></select>
+      <input type="text" id="filter-search" placeholder="搜尋標題關鍵字…">
+      <span class="badge" id="count-badge"></span>
+      <span class="badge" id="marked-badge" style="border-color:var(--danger); color:#ff8f87;"></span>
+      <button class="small" id="btn-clear-marks">清空標記</button>
+      <button class="primary" id="btn-generate">產生要刪除的清單</button>
+    </div>
+  </div>
+
+  <p class="muted">點卡片＝標記要刪除（會變暗、右上角出現「刪」）。再點一次取消標記。圖片顯示不出來的，本來就該刪。挑完按「產生要刪除的清單」，把輸出貼給 Claude 就會幫你從牌庫拿掉。</p>
+
+  <div class="grid" id="grid"></div>
+
+  <div class="panel" id="output-panel">
+    <div class="toolbar" style="justify-content:space-between;">
+      <h3 style="margin:0;">已標記 <span id="output-count">0</span> 張要刪除</h3>
+      <button class="small" id="btn-copy">複製</button>
+    </div>
+    <textarea id="output" readonly></textarea>
+  </div>
+</div>
+
+<script>
+const CARD_DECK = [
+{artist:"梵谷", title:"在亞爾的臥室", imageUrl:"https://commons.wikimedia.org/wiki/Special:FilePath/Vincent_van_Gogh_-_The_Bedroom_-_Google_Art_Project.jpg"},
+  {artist:"梵谷", title:"自畫像", imageUrl:"https://commons.wikimedia.org/wiki/Special:FilePath/Vincent_van_Gogh_-_Self-Portrait_-_1954.326_-_Art_Institute_of_Chicago.jpg"},
+  {artist:"梵谷", title:"詩人的花園", imageUrl:"https://commons.wikimedia.org/wiki/Special:FilePath/Vincent_van_Gogh_-_The_Poet's_Garden_-_1933.433_-_Art_Institute_of_Chicago.jpg"},
+  {artist:"梵谷", title:"星夜", imageUrl:"https://commons.wikimedia.org/wiki/Special:FilePath/Van_Gogh_-_Starry_Night_-_Google_Art_Project.jpg"},
+  {artist:"梵谷", title:"夜晚露天咖啡座", imageUrl:"https://commons.wikimedia.org/wiki/Special:FilePath/Vincent-van-gogh-cafe-terrace-on-the-place-du-forum-arles-at-night-the.jpg"},
+  {artist:"莫內", title:"鳶尾花小徑", imageUrl:"https://commons.wikimedia.org/wiki/Special:FilePath/The_Path_through_the_Irises,_1917_-_Claude_Monet,_MET_DT1890.jpg"},
+  {artist:"莫內", title:"睡蓮", imageUrl:"https://commons.wikimedia.org/wiki/Special:FilePath/WLA_metmuseum_Water_Lilies_by_Claude_Monet.jpg"},
+  {artist:"莫內", title:"蒙梭公園", imageUrl:"https://commons.wikimedia.org/wiki/Special:FilePath/Claude_Monet_-_The_Parc_Monceau.jpg"},
+  {artist:"莫內", title:"卡蜜兒坐在長椅上", imageUrl:"https://commons.wikimedia.org/wiki/Special:FilePath/Claude_Monet,_1873,_Camille_Monet_on_a_Bench,_oil_on_canvas,_60.6_x_80.3_cm,_The_Metropolitan_Museum_of_Art,_New_York.jpg"},
+  {artist:"莫內", title:"Claude Monet 052", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/2/23/Claude_Monet_052.jpg"},
+  {artist:"莫內", title:"The Four Trees", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/b/b3/The_Four_Trees.JPG"},
+  {artist:"莫內", title:"Rouen Cathedral - The Portal (Sunlight)", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/9/9c/Rouen_Cathedral_-_The_Portal_%28Sunlight%29.JPG"},
+  {artist:"莫內", title:"Apples and Grapes", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/2/28/Apples_and_Grapes%2C_by_Claude_Monet.jpg"},
+  {artist:"莫內", title:"The Houses of Parliament (Effect of Fog)", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/5/57/The_Houses_of_Parliament_%28Effect_of_Fog%29.JPG"},
+  {artist:"莫內", title:"Chrysanthemums", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/e/e8/Chrysanthemums_%28Monet%29.JPG"},
+  {artist:"莫內", title:"The Path through the Irises", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/4/45/The_Path_through_the_Irises.JPG"},
+  {artist:"莫內", title:"Vue de Vétheuil", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/c/c0/Claude_Monet_-_Vue_de_V%C3%A9theuil.jpg"},
+  {artist:"莫內", title:"Pappeln", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/e/e7/Monet_-_Pappeln_-_1991.jpg"},
+  {artist:"莫內", title:"Rouen Cathedral - The Portal (Sunlight) 2", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/3/39/Claude_Monet_-_Rouen_Cathedral_-_The_Portal_%28Sunlight%29.jpg"},
+  {artist:"莫內", title:"The Four Trees (1891)", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/b/b2/1891_Monet_The_four_trees_anagoria.JPG"},
+  {artist:"莫內", title:"Camille Monet in the Garden at Argenteuil", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/f/fd/Claude_Monet_-_Camille_Monet_in_the_Garden_at_Argenteuil.jpg"},
+  {artist:"莫內", title:"Landscape, The Parc Monceau", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/b/b7/Claude_Monet_-_Landscape%2C_The_Parc_Monceau.jpg"},
+  {artist:"莫內", title:"The Manneporte near Étretat", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/5/58/Claude_Monet_-_The_Manneporte_near_%C3%89tretat.jpg"},
+  {artist:"莫內", title:"View of Vétheuil", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/4/4f/Claude_Monet_-_View_of_V%C3%A9theuil.jpg"},
+  {artist:"莫內", title:"The Parc Monceau, 1878", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/0/0f/Claude_Monet%2C_The_Parc_Monceau%2C_1878.jpg"},
+  {artist:"莫內", title:"Cabane des douaniers", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/e/e5/Monet-Cabanededouaniers.jpg"},
+  {artist:"莫內", title:"Houses on the Achterzaan", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/0/04/Houses_on_the_Achterzaan_MET_2374.jpg"},
+  {artist:"莫內", title:"Houses on the Achterzaan (2)", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/0/07/Houses_on_the_Achterzaan_MET_DT719.jpg"},
+  {artist:"莫內", title:"Houses on the Achterzaan (3)", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/7/78/Houses_on_the_Achterzaan_MET_ep1975.1.196.bw.R.jpg"},
+  {artist:"莫內", title:"Dr. Leclenché", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/d/d2/Dr._Leclench%C3%A9_MET_DT1900.jpg"},
+  {artist:"莫內", title:"Cabin of the Customs Watch", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/5/50/Cabin_of_the_Customs_Watch_MET_DT1905.jpg"},
+  {artist:"莫內", title:"Île aux Orties near Vernon", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/b/b6/%C3%8Ele_aux_Orties_near_Vernon_MET_DT302452.jpg"},
+  {artist:"莫內", title:"The Houses of Parliament (Effect of Fog) 2", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/a/a9/The_Houses_of_Parliament_%28Effect_of_Fog%29_MET_DT1893.jpg"},
+  {artist:"莫內", title:"The Four Trees (MET)", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/8/87/The_Four_Trees_MET_DT832.jpg"},
+  {artist:"莫內", title:"Apples and Grapes (MET)", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/1/19/Apples_and_Grapes_MET_DT1561.jpg"},
+  {artist:"莫內", title:"Morning on the Seine near Giverny", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/2/2f/Morning_on_the_Seine_near_Giverny_MET_DT1903.jpg"},
+  {artist:"莫內", title:"Rouen Cathedral - The Portal (Sunlight) 3", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/b/bf/Rouen_Cathedral-_The_Portal_%28Sunlight%29_MET_DT2185.jpg"},
+  {artist:"莫內", title:"Chrysanthemums (MET)", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/f/fc/Chrysanthemums_MET_DT1887.jpg"},
+  {artist:"莫內", title:"Camille Monet in the Garden at Argenteuil (MET)", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/4/46/Camille_Monet_%281847%E2%80%931879%29_in_the_Garden_at_Argenteuil_MET_DT1884.jpg"},
+  {artist:"莫內", title:"Houses of Parliament, Fog Effect", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/3/30/Monet_-_houses-of-parliament-fog-effect.jpg"},
+  {artist:"莫內", title:"Orties (Wildenstein 1491)", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/a/ac/Orties_wildenstein_1491.png"},
+  {artist:"莫內", title:"The Houses of Parliament (Effect of Fog) 3", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/e/ec/Monet_-_The_Houses_of_Parliament_%28Effect_of_Fog%29.jpg"},
+  {artist:"莫內", title:"The Houses of Parliament (with frame)", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/1/11/Monet_-_The_Houses_of_Parliament_%28Effect_of_Fog%29_-_with_frame.jpg"},
+  {artist:"康丁斯基", title:"Winter Landscape", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/9/94/Kandinsky_Winter_Landscape_Harvard.jpg"},
+  {artist:"莫內", title:"Claude Monet - Jean Monet on his Hobby Horse", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/2/2a/Claude_Monet_-_Jean_Monet_on_his_Hobby_Horse.jpg"},
+  {artist:"莫內", title:"Parc Monceau Monet", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/2/2e/Parc_Monceau_Monet.jpg"},
+  {artist:"莫內", title:"Monet regates a St adresse", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/6/66/Monet_regates_a_St_adresse.jpg"},
+  {artist:"莫內", title:"Regatta at Sainte-Adresse", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/4/42/Regatta_at_Sainte-Adresse.JPG"},
+  {artist:"莫內", title:"The Manneporte near Étretat", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/1/12/The_Manneporte_near_%C3%89tretat.JPG"},
+  {artist:"莫內", title:"Vétheuil in Summer", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/1/14/V%C3%A9theuil_in_Summer.JPG"},
+  {artist:"莫內", title:"WLA metmuseum Camille Monet on a Garden Bench by Claude Monet", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/e/e9/WLA_metmuseum_Camille_Monet_on_a_Garden_Bench_by_Claude_Monet.jpg"},
+  {artist:"莫內", title:"Claude Monet - La Manneporte près d'Étretat", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/1/1d/Claude_Monet_-_La_Manneporte_pr%C3%A8s_d%27%C3%89tretat.jpg"},
+  {artist:"莫內", title:"Claude Monet - La Manneporte (Étretat)", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/7/78/Claude_Monet_-_La_Manneporte_%28%C3%89tretat%29.jpg"},
+  {artist:"莫內", title:"Claude Monet - Rock Arch", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/2/27/Claude_Monet_-_Rock_Arch.jpg"},
+  {artist:"莫內", title:"Claude Monet - Île aux Fleurs near Vétheuil", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/3/3c/Claude_Monet_-_%C3%8Ele_aux_Fleurs_near_V%C3%A9theuil.jpg"},
+  {artist:"莫內", title:"Claude Monet - Palm Trees at Bordighera", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/4/4c/Claude_Monet_-_Palm_Trees_at_Bordighera.jpg"},
+  {artist:"莫內", title:"Monet The stroller (Suzanne Hoschede)", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/7/73/Monet_The_stroller_%28Suzanne_Hoschede%29.jpg"},
+  {artist:"莫內", title:"Claude Monet, 1867, Regatta at Sainte-Adresse, Metropolitan Museum of Art", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/6/6a/Claude_Monet%2C_1867%2C_Regatta_at_Sainte-Adresse%2C_Metropolitan_Museum_of_Art.jpg"},
+  {artist:"莫內", title:"Landscape- Parc Monceau - Monet", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/f/f9/Landscape-_Parc_Monceau_-_Monet.jpg"},
+  {artist:"莫內", title:"ParcMonceauMonet1876", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/6/64/ParcMonceauMonet1876.jpg"},
+  {artist:"莫內", title:"The Parc Monceau MET DT1889", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/7/70/The_Parc_Monceau_MET_DT1889.jpg"},
+  {artist:"莫內", title:"Jean Monet (1867–1913) on His Hobby Horse MET DT511", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/1/17/Jean_Monet_%281867%E2%80%931913%29_on_His_Hobby_Horse_MET_DT511.jpg"},
+  {artist:"莫內", title:"The Manneporte (Étretat) MET DT1897", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/3/32/The_Manneporte_%28%C3%89tretat%29_MET_DT1897.jpg"},
+  {artist:"莫內", title:"Spring (Fruit Trees in Bloom) MET DT1902", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/a/a6/Spring_%28Fruit_Trees_in_Bloom%29_MET_DT1902.jpg"},
+  {artist:"莫內", title:"View of Vétheuil MET DT1895", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/3/3b/View_of_V%C3%A9theuil_MET_DT1895.jpg"},
+  {artist:"莫內", title:"Landscape- The Parc Monceau MET DT1891", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/7/70/Landscape-_The_Parc_Monceau_MET_DT1891.jpg"},
+  {artist:"莫內", title:"Vétheuil in Summer MET DT1898", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/f/f7/V%C3%A9theuil_in_Summer_MET_DT1898.jpg"},
+  {artist:"莫內", title:"The Seine at Vétheuil MET DT1886", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/7/78/The_Seine_at_V%C3%A9theuil_MET_DT1886.jpg"},
+  {artist:"莫內", title:"Bouquet of Sunflowers MET DP130800", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/3/31/Bouquet_of_Sunflowers_MET_DP130800.jpg"},
+  {artist:"莫內", title:"Ice Floes MET DT2158", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/5/51/Ice_Floes_MET_DT2158.jpg"},
+  {artist:"莫內", title:"Palm Trees at Bordighera MET DT1888", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/5/5a/Palm_Trees_at_Bordighera_MET_DT1888.jpg"},
+  {artist:"莫內", title:"Rapids on the Petite Creuse at Fresselines MET DT226477", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/6/61/Rapids_on_the_Petite_Creuse_at_Fresselines_MET_DT226477.jpg"},
+  {artist:"莫內", title:"The Manneporte near Étretat MET DT1028", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/b/be/The_Manneporte_near_%C3%89tretat_MET_DT1028.jpg"},
+  {artist:"莫內", title:"The Bodmer Oak, Fontainebleau Forest MET DT1560", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/7/7b/The_Bodmer_Oak%2C_Fontainebleau_Forest_MET_DT1560.jpg"},
+  {artist:"莫內", title:"Regatta at Sainte-Adresse MET DT1401", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/2/2c/Regatta_at_Sainte-Adresse_MET_DT1401.jpg"},
+  {artist:"莫內", title:"Water Lilies MET DT1856", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/e/ec/Water_Lilies_MET_DT1856.jpg"},
+  {artist:"莫內", title:"Île aux Fleurs near Vétheuil MET DT1901", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/a/a8/%C3%8Ele_aux_Fleurs_near_V%C3%A9theuil_MET_DT1901.jpg"},
+  {artist:"莫內", title:"Poppy Fields near Argenteuil MET DT1034", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/e/e3/Poppy_Fields_near_Argenteuil_MET_DT1034.jpg"},
+  {artist:"莫內", title:"The Stroller (Suzanne Hoschedé, later Mrs. Theodore Earl Butler, 1868–1899) MET R92D Mon Strollerr7", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/0/05/The_Stroller_%28Suzanne_Hosched%C3%A9%2C_later_Mrs._Theodore_Earl_Butler%2C_1868%E2%80%931899%29_MET_R92D_Mon_Strollerr7.jpg"},
+  {artist:"莫內", title:"Rapids on the Petite Creuse at Fresselines MET DP-14201-047", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/1/1b/Rapids_on_the_Petite_Creuse_at_Fresselines_MET_DP-14201-047.jpg"},
+  {artist:"莫內", title:"The Parc Monceau MET DP-14091-001", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/7/73/The_Parc_Monceau_MET_DP-14091-001.jpg"},
+  {artist:"莫內", title:"The Seine at Vétheuil MET DP-14201-035", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/c/cd/The_Seine_at_V%C3%A9theuil_MET_DP-14201-035.jpg"},
+  {artist:"莫內", title:"Monet - the-stroller-suzanne-hoschede", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/9/9d/Monet_-_the-stroller-suzanne-hoschede.jpg"},
+  {artist:"莫內", title:"Water Lilies by Claude Monet, Metropolitan Museum of Art 1983.532", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/8/8b/Water_Lilies_by_Claude_Monet%2C_Metropolitan_Museum_of_Art_1983.532.JPG"},
+  {artist:"孟克", title:"Dance on the Beach (the Reinhardt Frieze)", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/b/b1/Dance_on_the_Beach_%28the_Reinhardt_Frieze%29.jpg"},
+  {artist:"孟克", title:"Andreas Reading", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/a/a6/Andreas_Reading_%2879%29.jpg"},
+  {artist:"孟克", title:"Küste bei Lübeck", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/e/e1/1907_Munch_K%C3%BCste_bei_L%C3%BCbeck_Nationalgalerie_Prag_anagoria.jpg"},
+  {artist:"孟克", title:"Liebespaare im Park (Linde Frieze)", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/e/ec/Munch%2C_Liebespaare_im_Park_%281904%2C_Linde_Frieze%29.jpg"},
+  {artist:"孟克", title:"Bäume am Meer (Linde Frieze)", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/8/88/Munch%2C_B%C3%A4ume_am_Meer_%281904%2C_Linde_Frieze%29.jpg"},
+  {artist:"孟克", title:"Mädchen bei der Ernte (Linde Frieze)", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/7/73/Munch%2C_M%C3%A4dchen_bei_der_Ernte_%281904%2C_Linde_Frieze%29.jpg"},
+  {artist:"孟克", title:"Jugend am Meer (Linde Frieze)", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/e/e6/Munch%2C_Jugend_am_Meer_%281904%2C_Linde_Frieze%29_02.jpg"},
+  {artist:"孟克", title:"Tanz am Meer (Linde Frieze)", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/9/90/Munch%2C_Tanz_am_Meer_%281904%2C_Linde_Frieze%29.jpg"},
+  {artist:"孟克", title:"Mädchen beim Blumengießen (Linde Frieze)", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/3/3e/Munch%2C_M%C3%A4dchen_beim_Blumengie%C3%9Fen_%281904%2C_Linde_Frieze%29.jpg"},
+  {artist:"孟克", title:"Sommernacht (Linde Frieze)", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/3/32/Munch%2C_Sommernacht_%281903%2C_Linde_Frieze%29.jpg"},
+  {artist:"孟克", title:"Dance on the Beach Munch", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/4/41/Dance_on_the_Beach_Munch.jpg"},
+  {artist:"孟克", title:"Dance on the Beach", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/9/9e/Edvard_Munch_-_Dance_on_the_Beach.jpg"},
+  {artist:"孟克", title:"Trees on the Shore", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/d/d1/Edvard_Munch_-_Trees_on_the_Shore.jpg"},
+  {artist:"孟克", title:"Trees by the Beach (Linde Frieze)", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/0/01/Edvard_Munch_-_Trees_by_the_Beach_%28The_Linde_Frieze%29_-_MM.M.00014_-_Munch_Museum.jpg"},
+  {artist:"孟克", title:"Girls watering Flowers (Linde Frieze) MM", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/7/71/Edvard_Munch_-_Girls_watering_Flowers_%28The_Linde_Frieze%29_-_MM.M.00054_-_Munch_Museum.jpg"},
+  {artist:"孟克", title:"Girls picking Fruit (Linde Frieze) MM", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/c/c7/Edvard_Munch_-_Girls_picking_Fruit_%28The_Linde_Frieze%29_-_MM.M.00019_-_Munch_Museum.jpg"},
+  {artist:"孟克", title:"Young People on the Beach (Linde Frieze)", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/6/68/Edvard_Munch_-_Young_People_on_the_Beach_%28The_Linde_Frieze%29_-_MM.M.00035_-_Munch_Museum.jpg"},
+  {artist:"孟克", title:"Kissing Couples in the Park (Linde Frieze) MM", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/4/4c/Edvard_Munch_-_Kissing_Couples_in_the_Park_%28The_Linde_Frieze%29_-_MM.M.00695_-_Munch_Museum.jpg"},
+  {artist:"孟克", title:"Summer Day or Embrace on the Beach", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/d/d9/Munch_-_Summer_Day_or_Embrace_on_the_Beach_%28The_Linde_Frieze%29%2C_1904%2C_Lot_115.jpg"},
+  {artist:"孟克", title:"Dance on the Beach (Linde Frieze) 1904", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/7/7c/Edvard_Munch_-_Dance_on_the_Beach_%28The_Linde_Frieze%29_%281904%29.jpg"},
+  {artist:"孟克", title:"Madonna", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/3/34/Edvard_Munch_-_Madonna_-_IMG_9762.jpg"},
+  {artist:"孟克", title:"Vampire MM.M.00445", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/6/6c/Edvard_Munch_-_Vampire_-_MM.M.00445_-_Munch_Museum.jpg"},
+  {artist:"孟克", title:"The Researchers", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/1/12/Edvard_Munch_-_The_Researchers_-_MM.M.00905_-_Munch_Museum.jpg"},
+  {artist:"孟克", title:"Vampire in the Forest", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/c/c4/Edvard_Munch_-_Vampire_in_the_Forest_-_MM.M.00374_-_Munch_Museum.jpg"},
+  {artist:"孟克", title:"Vampire MM.M.00169", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/5/5e/Edvard_Munch_-_Vampire_-_MM.M.00169_-_Munch_Museum.jpg"},
+  {artist:"孟克", title:"Puberty", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/b/b6/Edvard_Munch_-_Puberty_-_MM.M.00450_-_Munch_Museum.jpg"},
+  {artist:"孟克", title:"Vampire MM.M.00533", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/c/c6/Edvard_Munch_-_Vampire_-_MM.M.00533_-_Munch_Museum.jpg"},
+  {artist:"孟克", title:"The Sick Child", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/7/74/Edvard_Munch_-_The_Sick_Child_-_MM.M.00051_-_Munch_Museum.jpg"},
+  {artist:"孟克", title:"Strand - Beach (Stavanger)", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/e/e3/Edvard_Munch_-_Strand_-_Beach_-_Stavanger_kunstmuseum_-_SG.0259.jpg"},
+  {artist:"孟克", title:"Horse Team on a Building Site", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/5/58/Munch_-_Horse_Team_on_a_Building_Site%2C_1928%E2%80%931929%2C_MM.M.00986.jpg"},
+  {artist:"孟克", title:"Dame i pyjamas", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/0/05/Munch_-_Dame_i_pyjamas%2C_Ca_1930%2C_RES.B.00337.jpg"},
+  {artist:"孟克", title:"Dr. Munchs sykehus, Hadeland", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/c/c4/Munch_-_Dr._Munchs_sykehus%2C_Hadeland%2C_RES.A.00212.jpg"},
+  {artist:"孟克", title:"Framoverbøyd kvinneakt", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/8/89/Munch_-_Framoverb%C3%B8yd_kvinneakt%2C_Ca_1920%2C_RES.B.00467.jpg"},
+  {artist:"孟克", title:"Knelende kvinneakt", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/e/e9/Munch_-_Knelende_kvinneakt%2C_1921%2C_RES.B.00124.jpg"},
+  {artist:"孟克", title:"Kvinneakt", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/9/90/Munch_-_Kvinneakt%2C_Ca_1920%2C_RES.B.00470.jpg"},
+  {artist:"孟克", title:"Kvinnehode", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/e/ed/Munch_-_Kvinnehode%2C_1922-1925%2C_RES.B.00336.jpg"},
+  {artist:"孟克", title:"Kvinnelig modellstudie", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/3/3c/Munch_-_Kvinnelig_modellstudie%2C_Ca_1920%2C_RES.B.00466.jpg"},
+  {artist:"孟克", title:"Kvinneportrett 1918-1923", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/7/7e/Munch_-_Kvinneportrett%2C_1918-1923%2C_RES.B.00133.jpg"},
+  {artist:"孟克", title:"Kvinneportrett 1923-1926", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/7/73/Munch_-_Kvinneportrett%2C_1923-1926%2C_RES.B.00340.jpg"},
+  {artist:"孟克", title:"Landskap med rød låve", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/6/66/Munch_-_Landskap_med_r%C3%B8d_l%C3%A5ve%2C_1925-1930%2C_RES.A.00223.jpg"},
+  {artist:"孟克", title:"Selvbinder", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/f/f4/Munch_-_Selvbinder%2C_1920-1925%2C_RES.A.00222.jpg"},
+  {artist:"孟克", title:"Sykepleierske med laken", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/e/e4/Munch_-_Sykepleierske_med_laken%2C_1908%2C_RES.B.00300.jpg"},
+  {artist:"孟克", title:"Female Head - Birgitte Prestøe", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/2/29/Edvard_Munch_-_Female_Head._Birgitte_Prest%C3%B8e_-_MM.T.02465_-_Munch_Museum.jpg"},
+  {artist:"孟克", title:"Girls on the pier", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/d/d5/Munch_Girls_on_the_pier.jpg"},
+  {artist:"孟克", title:"Madonna (1894-1895)", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/a/ae/Edvard_Munch_-_Madonna_%281894-1895%29.jpg"},
+  {artist:"孟克", title:"Madonna - Google Art Project", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/5/5f/Edvard_Munch_-_Madonna_-_Google_Art_Project.jpg"},
+  {artist:"孟克", title:"Melancholy (Reinhardt Frieze)", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/a/ab/Edvard_Munch_-_Melancholy_%28The_Reinhardt_Frieze%29.jpg"},
+  {artist:"孟克", title:"Mädchen am Meer", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/2/21/Munch_-_M%C3%A4dchen_am_Meer%2C_1906-07%2C_HK-2929.jpg"},
+  {artist:"孟克", title:"Sonnenblume (Reinhardt-Fries)", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/2/2f/Edvard_Munch_-_Sonnenblume_%28Reinhardt-Fries%29_-_NG_2366_-_Neue_Nationalgalerie.jpg"},
+  {artist:"孟克", title:"Begierde (Reinhardt-Fries)", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/8/8c/Edvard_Munch_-_Begierde_%28Reinhardt-Fries%29_-_NG_2266_-_Neue_Nationalgalerie.jpg"},
+  {artist:"孟克", title:"Mondschein auf dem Meer (Reinhardt Fries)", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/2/21/Edvard_Munch_-_Mondschein_auf_dem_Meer_%28Reinhardt_Fries%29_-_NG_1766_-_Neue_Nationalgalerie.jpg"},
+  {artist:"孟克", title:"Sommernacht (Reinhardt-Fries)", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/a/a4/Edvard_Munch_-_Sommernacht_%28Reinhardt-Fries%29_-_NG_1966_-_Neue_Nationalgalerie.jpg"},
+  {artist:"孟克", title:"Zwei junge Frauen in Rot und Weiss (Reinhardt-Fries)", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/3/3c/Edvard_Munch_-_Zwei_junge_Frauen_in_Rot_und_Weiss_%28Reinhardt-Fries%29_-_NG_1866_-_Neue_Nationalgalerie.jpg"},
+  {artist:"孟克", title:"Bäume am Meer (Reinhardt Fries)", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/6/68/Edvard_Munch_-_B%C3%A4ume_am_Meer_%28Reinhardt_Fries%29_-_NG_2166_-_Neue_Nationalgalerie.jpg"},
+  {artist:"孟克", title:"Paar am Strand (Reinhardt Fries)", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/0/04/Edvard_Munch_-_Paar_am_Strand_%28Reinhardt_Fries%29_-_NG_2066_-_Neue_Nationalgalerie.jpg"},
+  {artist:"孟克", title:"Frauen bei der Obsternte (Reinhardt Fries)", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/b/b1/Edvard_Munch_-_Frauen_bei_der_Obsternte_%28Reinhardt_Fries%29_-_NG_2466_-_Neue_Nationalgalerie.jpg"},
+  {artist:"孟克", title:"Dance on the Beach (Reinhardt Frieze) 1906-07", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/a/ae/Edvard_Munch_-_Dance_on_the_Beach_%28the_Reinhardt_Frieze%29_%281906-07%29.jpeg"},
+  {artist:"孟克", title:"Two Human Beings - The Lonely Ones (Reinhardt Frieze)", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/e/e2/Edvard_Munch_-_Two_Human_Beings._The_Lonely_Ones_%28The_Reinhardt_Frieze%29_%281906-07%29.jpg"},
+  {artist:"梵谷", title:"Vincent Willem van Gogh 135", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/6/62/Vincent_Willem_van_Gogh_135.jpg"},
+  {artist:"梵谷", title:"The Bedroom 1889", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/d/d0/The_Bedroom_1889_Vincent_van_Gogh.jpg"},
+  {artist:"梵谷", title:"The Bedroom - 1926.417 - Art Institute of Chicago", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/5/50/Vincent_van_Gogh_-_The_Bedroom_-_1926.417_-_Art_Institute_of_Chicago.jpg"},
+  {artist:"梵谷", title:"Madame Roulin Rocking the Cradle - 1926.200", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/c/ca/Vincent_van_Gogh_-_Madame_Roulin_Rocking_the_Cradle_%28La_berceuse%29_-_1926.200_-_Art_Institute_of_Chicago.jpg"},
+  {artist:"梵谷", title:"Grapes, Lemons, Pears, and Apples - 1949.215", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/b/b2/Vincent_van_Gogh_-_Grapes%2C_Lemons%2C_Pears%2C_and_Apples_-_1949.215_-_Art_Institute_of_Chicago.jpg"},
+  {artist:"梵谷", title:"Vincent Willem van Gogh 075", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/3/31/Vincent_Willem_van_Gogh_075.jpg"},
+  {artist:"梵谷", title:"Montmartre bei der oberen Mühle", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/9/95/Van_Gogh_-_Montmartre_bei_der_oberen_M%C3%BChle.jpeg"},
+  {artist:"梵谷", title:"Terrace and Observation Deck - 1926.202", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/a/a2/Vincent_van_Gogh_-_Terrace_and_Observation_Deck_at_the_Moulin_de_Blute-Fin%2C_Montmartre_-_1926.202_-_Art_Institute_of_Chicago.jpg"},
+  {artist:"梵谷", title:"Fishing in Spring, the Pont de Clichy - 1965.1169", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/d/dc/Vincent_van_Gogh_-_Fishing_in_Spring%2C_the_Pont_de_Clichy_%28Asni%C3%A8res%29_-_1965.1169_-_Art_Institute_of_Chicago.jpg"},
+  {artist:"梵谷", title:"The Drinkers - 1953.178", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/c/c4/Vincent_van_Gogh_-_The_Drinkers_-_1953.178_-_Art_Institute_of_Chicago.jpg"},
+  {artist:"梵谷", title:"A Peasant Woman Digging - 1968.92", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/d/db/Vincent_van_Gogh_-_A_Peasant_Woman_Digging_in_Front_of_Her_Cottage_-_1968.92_-_Art_Institute_of_Chicago.jpg"},
+  {artist:"林布蘭", title:"Rembrandt 20171205", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/d/df/Rembrandt_20171205.jpg"},
+  {artist:"林布蘭", title:"Rembrandt Artiest in zijn studio, 1629", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/9/98/Rembrandt_Artiest_in_zijn_studio%2C_1629..jpg"},
+  {artist:"林布蘭", title:"Rembrandt - Study of an Angel with the features of Titus", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/d/d9/Rembrandt_-_Study_of_an_Angel_with_the_features_of_Titus_-_300painti00gale_0185.jpg"},
+  {artist:"林布蘭", title:"Govert Flinck - Bathseba im Bade - Führermuseum", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/4/43/Govert_Flinck_%28Sibilla%2C_G._J.%29_%281615-1660%29_-_Bathseba_im_Bade_-_1337_-_F%C3%BChrermuseum.jpg"},
+  {artist:"林布蘭", title:"Rembrandt (Rembrandt van Rijn) - A Woman in Bed - National Galleries of Scotland", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/a/a0/Rembrandt_%28Rembrandt_van_Rijn%29_-_A_Woman_in_Bed_-_NG_827_-_National_Galleries_of_Scotland.jpg"},
+  {artist:"波提切利", title:"Botticelli - Trionfo della Fede", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/9/9e/Botticelli_-_Trionfo_della_Fede.png"},
+  {artist:"波提切利", title:"Botticelli Inferno XVIII", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/b/b5/Botticelli_Inferno_XVIII.png"},
+  {artist:"波提切利", title:"Botticelli - Madonna with child, Palazzo Pitti", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/0/0e/Botticelli_-_Madonna_with_child%2C_Palazzo_Pitti.jpg"},
+  {artist:"波提切利", title:"Fotoreproductie Mars Venus en satyrs door Botticelli", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/b/bf/Fotoreproductie_van_schilderij_Mars%2C_Venus_en_satyrs_door_Botticelli_18025_%28serietitel%29%2C_RP-F-00-141.jpg"},
+  {artist:"波提切利", title:"Fotoreproductie De verlatene door Botticelli", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/9/9b/Fotoreproductie_van_schilderij_De_verlatene_door_Botticelli_4739_%28serietitel%29%2C_RP-F-00-144.jpg"},
+  {artist:"波提切利", title:"Retrato de un hombre - Sandro Botticelli", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/6/66/Retrato_de_un_hombre_-_Sandro_Botticelli.png"},
+  {artist:"波提切利", title:"Cehennem", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/c/c5/Cehennem.png"},
+  {artist:"波提切利", title:"Portrait of a young man holding a roundel", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/d/d0/Portrait_of_a_young_man_holding_a_roundel_%29.jpg"},
+  {artist:"波提切利", title:"Maestro degli Edifici Gotici - Matrimonio mistico di santa Caterina d'Alessandria", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/b/b3/Maestro_degli_Edifici_Gotici_-_Matrimonio_mistico_di_santa_Caterina_d%27Alessandria%2C_n._68.100.jpg"},
+  {artist:"波提切利", title:"Botticelli - Christ on the Cross", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/1/16/Botticelli_-_Christ_on_the_Cross%2C_c._1500%2C_K591.jpg"},
+  {artist:"波提切利", title:"Botticelli - Maria mit dem Kind und Leuchter tragenden Engeln", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/d/d1/Botticelli_-_Maria_mit_dem_Kind_und_Leuchter_tragenden_Engeln%2C_um_1485-1490%2C_102.jpg"},
+  {artist:"波提切利", title:"Sandro Botticelli - Head of a Saint - Detroit Institute of Arts", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/7/7a/Sandro_Botticelli_-_Head_of_a_Saint_-_50.243_-_Detroit_Institute_of_Arts.jpg"},
+  {artist:"波提切利", title:"Sandro Botticelli - Vierge à l'Enfant et un ange", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/8/8f/Sandro_Botticelli_-_Vierge_%C3%A0_l%27Enfant_et_un_ange.jpg"},
+  {artist:"波提切利", title:"Botticelli Madonne01", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/a/a8/Botticelli_Madonne01.JPG"},
+  {artist:"波提切利", title:"Botticelli Madonne02", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/c/c2/Botticelli_Madonne02.JPG"},
+  {artist:"波提切利", title:"Sandro Botticelli - Force", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/d/d7/Sandro_Botticelli_-_Force.jpg"},
+  {artist:"波提切利", title:"Boticelli - Magernes tilbedelse", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/5/51/Boticelli_-_Magernes_tilbedelse_2.jpg"},
+  {artist:"波提切利", title:"Botticelli 02 Galleria Pallavicini", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/3/36/Botticelli_02_Galleria_Pallavicini.jpg"},
+  {artist:"波提切利", title:"Botticelli Norton 115", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/6/6f/Botticelli_Norton_115.jpg"},
+  {artist:"波提切利", title:"Prudentia Temperantia Fortitudo Iustitia - Vitéz János studiolójában", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/c/c6/Prudentia_-Temperantia_-_Fortitudo_-_Iustitia_alakja_Vit%C3%A9z_J%C3%A1nos_studiol%C3%B3j%C3%A1ban_Esztergomban.jpg"},
+  {artist:"波提切利", title:"Sandro Botticelli 002", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/9/98/Sandro_Botticelli_002.jpg"},
+  {artist:"波提切利", title:"Botticelligranat bild", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/d/d2/Botticelligranat_bild.jpg"},
+  {artist:"波提切利", title:"Botticelli, pallade e il centauro", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/b/bd/Botticelli%2C_pallade_e_il_centauro_01.jpg"},
+  {artist:"波提切利", title:"Botticelli, annunciazione di cestello 03", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/3/35/Botticelli%2C_annunciazione_di_cestello_03.jpg"},
+  {artist:"波提切利", title:"Botticelli, annunciazione di cestello 04", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/7/7d/Botticelli%2C_annunciazione_di_cestello_04.jpg"},
+  {artist:"卡拉瓦喬", title:"Michelangelo Caravaggio 051", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/1/1d/Michelangelo_Caravaggio_051.jpg"},
+  {artist:"卡拉瓦喬", title:"Michelangelo Merisi da Caravaggio - Le Martyre de saint Matthieu", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/b/bf/Michelangelo_Merisi_da_Caravaggio_-_Le_Martyre_de_saint_Matthieu.jpg"},
+  {artist:"卡拉瓦喬", title:"BaptistBasle", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/8/89/BaptistBasle.jpg"},
+  {artist:"卡拉瓦喬", title:"Flagellazione - Santa Prassede", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/8/82/Flagellazione_-_Santa_Prassede.jpg"},
+  {artist:"卡拉瓦喬", title:"Caravaggio I bari (Mahon)", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/1/11/Caravaggio_I_bari_%28Mahon%29.jpg"},
+  {artist:"卡拉瓦喬", title:"Caravaggio Follower Cardsharps", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/3/30/Caravaggio_Follower_Cardsharps.jpg"},
+  {artist:"卡拉瓦喬", title:"Michelangelo Merisi - Portrait of a gentleman - Google Art Project", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/7/79/Michelangelo_Merisi_known_as_Caravaggio_-_Portrait_of_a_gentleman_%28Scipione_Borghese%3F%29_-_Google_Art_Project.jpg"},
+  {artist:"卡拉瓦喬", title:"Caravaggio - Cupid as Victor - Google Art Project", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/0/0c/Caravaggio_-_Cupid_as_Victor_-_Google_Art_Project.jpg"},
+  {artist:"卡拉瓦喬", title:"Michelangelo Caravaggio 002", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/7/73/Michelangelo_Caravaggio_002.jpg"},
+  {artist:"卡拉瓦喬", title:"Caravaggio-Sacrifice-I", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/5/54/Caravaggio-Sacrifice-I-deta.jpg"},
+  {artist:"卡拉瓦喬", title:"Caravaggio Ottavino", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/3/37/Caravaggio_Ottavino.jpg"},
+  {artist:"卡拉瓦喬", title:"Le Caravage - Judith et Holopherne", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/9/97/Le_Caravage_-_Judith_et_Holopherne.jpg"},
+  {artist:"卡拉瓦喬", title:"Caravaggio Cardsharps Kimbell", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/3/3a/Caravaggio_Cardsharps_Kimbell_detail.jpg"},
+  {artist:"卡拉瓦喬", title:"Caravaggio - Saint Catherine of Alexandria - Google Art Project", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/3/3f/Caravaggio_-_Saint_Catherine_of_Alexandria_-_Google_Art_Project.jpg"},
+  {artist:"卡拉瓦喬", title:"Caravaggio - Medusa - Google Art Project", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/1/15/Caravaggio_-_Medusa_-_Google_Art_Project.jpg"},
+  {artist:"卡拉瓦喬", title:"Caravaggio - Sacrificio di Isacco - Google Art Project", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/7/78/Caravaggio_-_Sacrificio_di_Isacco_-_Google_Art_Project.jpg"},
+  {artist:"卡拉瓦喬", title:"Caravaggio - Bacco adolescente - Google Art Project", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/b/b5/Caravaggio_-_Bacco_adolescente_-_Google_Art_Project.jpg"},
+  {artist:"卡拉瓦喬", title:"Caravaggio - Good Luck - Google Art Project", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/2/2e/Caravaggio_%28Michelangelo_Merisi%29_-_Good_Luck_-_Google_Art_Project.jpg"},
+  {artist:"卡拉瓦喬", title:"Caravaggio - Saint John the Baptist - Google Art Project", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/e/e0/Caravaggio_%28Michelangelo_Merisi%29_-_Saint_John_the_Baptist_-_Google_Art_Project.jpg"},
+  {artist:"卡拉瓦喬", title:"Caravaggio - The Cardsharps - Google Art Project", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/8/8e/Caravaggio_%28Michelangelo_Merisi%29_-_The_Cardsharps_-_Google_Art_Project.jpg"},
+  {artist:"卡拉瓦喬", title:"Caravaggio - Ecce Homo - Google Art Project", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/e/ed/Caravaggio_%28Michelangelo_Merisi%29_-_Ecce_Homo_-_Google_Art_Project.jpg"},
+  {artist:"卡拉瓦喬", title:"Caravaggio incredulity", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/c/cc/Caravaggio_incredulity.jpg"},
+  {artist:"卡拉瓦喬", title:"Caravaggio - Natura morta con frutta", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/3/32/Caravaggio_-_Natura_morta_con_frutta_%28collezione_dell%E2%80%99Ambrosiana%29.jpg"},
+  {artist:"卡拉瓦喬", title:"Caravaggio - The Seven Works of Mercy - Google Art Project", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/1/1d/Caravaggio_-_The_Seven_Works_of_Mercy_-_Google_Art_Project.jpg"},
+  {artist:"竇加", title:"Edgar Degas - Billiard Room at Ménil-Hubert - Google Art Project", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/f/f1/Edgar_Degas_-_Billiard_Room_at_M%C3%A9nil-Hubert_-_Google_Art_Project.jpg"},
+  {artist:"竇加", title:"Edgar Degas - David et Goliath", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/2/22/Edgar_Degas_-_David_et_Goliath.jpg"},
+  {artist:"竇加", title:"Edgar Degas - Erinnerung an Velázquez", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/6/6c/Edgar_Degas_-_Erinnerung_an_Vel%C3%A1zquez_-_12760_-_Bavarian_State_Painting_Collections.jpg"},
+  {artist:"竇加", title:"Degas - Cow", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/f/fe/Degas_-_Cow%2C_c._1876.jpg"},
+  {artist:"竇加", title:"Degas - Interior at Menil-Hubert", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/a/a4/Degas_-_Interior_at_Menil-Hubert%2C_1892.jpg"},
+  {artist:"竇加", title:"Degas - Saint-Anthony Resuscitating A Woman", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/5/5f/Degas_-_Saint-Anthony-Resuscitating-A-Woman-Killed-By-Her-Husband%2C-C.-1858.jpg"},
+  {artist:"竇加", title:"Degas - The Rape Of The Sabines", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/8/85/Degas_-_The-Rape-Of-The-Sabines.jpg"},
+  {artist:"竇加", title:"Degas - Les âmes du Purgatoire (copie d'après Bellini)", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/8/80/Degas_-_Les_%C3%A2mes_du_Purgatoire._Copie_d%27apr%C3%A8s_Giovanni_Bellini_du_mus%C3%A9e_du_Louvre%2C_Circa_1860.jpg"},
+  {artist:"竇加", title:"Degas - Saint Jean-Baptiste", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/3/32/Degas_-_Saint_Jean-Baptiste%2C_Circa_1856.jpg"},
+  {artist:"竇加", title:"Degas - Studio Corner", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/e/e4/Degas_-_Studio_Corner%2C_1855-1860.jpg"},
+  {artist:"竇加", title:"Degas - Study of Hand of a Woman", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/c/ca/Degas_-_Study_of_Hand_of_a_Woman%2C_Circa_1860.jpg"},
+  {artist:"竇加", title:"Degas - The Rape of the Sabines after Poussin", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/7/77/Degas_-_The_Rape_of_the_Sabines_after_Nicolas_Poussin%2C_Circa_1862.jpg"},
+  {artist:"竇加", title:"Edgar Degas - The Finding of Moses (copy after Veronese) - Fitzwilliam Museum", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/d/d4/Edgar_Degas_%281834-1917%29_-_The_Finding_of_Moses_%28copy_after_Paolo_Veronese%29_-_PD.10-1978_-_Fitzwilliam_Museum.jpg"},
+  {artist:"竇加", title:"Edgar Degas - Ceremony of Ordination in the Cathedral of Lyons - Fitzwilliam Museum", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/8/8e/Edgar_Degas_%281834-1917%29_-_Ceremony_of_Ordination_in_the_Cathedral_of_Lyons_-_PD.11-1978_-_Fitzwilliam_Museum.jpg"},
+  {artist:"竇加", title:"Edgar Degas - Lady with a Parasol - Courtauld Institute of Art", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/4/4f/Edgar_Degas_%281834-1917%29_-_Lady_with_a_Parasol_-_P.1978.PG.87_-_Courtauld_Institute_of_Art.jpg"},
+  {artist:"竇加", title:"Dante and Virgilio", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/f/fb/Dante_and_Virgilio_1861.jpg"},
+  {artist:"竇加", title:"Chateau du Ménil-Hubert", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/2/21/Chateau_du_M%C3%A9nil-Hubert_2650.jpg"},
+  {artist:"竇加", title:"Degas dead fox lying undergrowth", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/a/ae/Degas_dead_fox_lying_undergrowth_1865_%2822317388905%29.jpg"},
+  {artist:"竇加", title:"Edgar Degas - L'Entrée des croisés à Constantinople (d'après Delacroix)", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/a/ae/Edgar_Degas_-_L%27Entr%C3%A9e_des_crois%C3%A9s_%C3%A0_Constantinople_%28d%27apr%C3%A8s_Delacroix%29.jpg"},
+  {artist:"竇加", title:"Edgar Degas - Souvenir de Velázquez", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/6/68/Edgar_Degas_-_Souvenir_de_Vel%C3%A1zquez.jpg"},
+  {artist:"竇加", title:"Edgar Degas - The Abduction of the Sabine Women (after Poussin) - Norton Simon Museum", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/7/73/Edgar_Degas_-_The_Abduction_of_the_Sabine_Women_%28after_Nicolas_Poussin%29_%28Norton_Simon_Museum%29.png"},
+  {artist:"竇加", title:"Edgar Degas - Madame Camus au piano - Bührle Collection", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/0/08/Edgar_Degas_-_Madame_Camus_au_piano_-_32_-_Foundation_E.G._B%C3%BChrle_Collection.jpg"},
+  {artist:"竇加", title:"Edgar Degas - Danseuses au foyer - Bührle Collection", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/f/fa/Edgar_Degas_-_Danseuses_au_foyer_-_35_-_Foundation_E.G._B%C3%BChrle_Collection.jpg"},
+  {artist:"竇加", title:"Edgar Degas - Avant le départ - Bührle Collection", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/6/6c/Edgar_Degas_-_Avant_le_d%C3%A9part_-_34_-_Foundation_E.G._B%C3%BChrle_Collection.jpg"},
+  {artist:"竇加", title:"Edgar Degas Frau aus dem Bade steigend", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/c/cf/Edgar_Degas_Frau_aus_dem_Bade_steigend_um_1900.jpeg"},
+  {artist:"竇加", title:"Edgar Degas Danseuses", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/b/ba/Edgar_Degas_Danseuses_um_1896.jpeg"},
+  {artist:"竇加", title:"Edgar Degas - Joséphine Gaujelin", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/0/0c/Edgar_Degas_-_Jos%C3%A9phine_Gaujelin.jpg"},
+  {artist:"雷諾瓦", title:"L'habite de lumière", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/a/aa/L%27habite_de_lumi%C3%A8re_2000_NYE_08341_0005_000%28123830%29.jpg"},
+  {artist:"雷諾瓦", title:"Christian Tetzen-Lund devant trois tableaux de Picasso Renoir et Cézanne", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/f/f7/Christian_Tetzen-Lund_devant_trois_tableaux_de_Pablo_Picasso%2C_Pierre-August_Renoir_et_Paul_C%C3%A9zanne%2C_1920.jpg"},
+  {artist:"雷諾瓦", title:"Jeune femme en costume oriental devant une table à thé", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/1/13/Jeune_femme_en_costume_oriental_devant_une_table_%C3%A0_th%C3%A9.jpg"},
+  {artist:"雷諾瓦", title:"Femme à la rose", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/8/83/Femme_%C3%A0_la_rose.jpg"},
+  {artist:"雷諾瓦", title:"Nu s'essuyant", imageUrl:"https://upload.wikimedia.org/wikipedia/commons/c/cc/Nu_s%27essuyant.jpg"},
+];
+
+let marked = new Set(); // 存 index
+
+function uniqueArtists() {
+  return [...new Set(CARD_DECK.map(c => c.artist))];
+}
+
+function populateFilter() {
+  const sel = document.getElementById('filter-artist');
+  for (const a of uniqueArtists()) {
+    const opt = document.createElement('option');
+    opt.value = a; opt.textContent = a + '（' + CARD_DECK.filter(c => c.artist === a).length + '）';
+    sel.appendChild(opt);
+  }
+}
+
+function renderGrid() {
+  const artistFilter = document.getElementById('filter-artist').value;
+  const search = document.getElementById('filter-search').value.trim().toLowerCase();
+  const grid = document.getElementById('grid');
+  grid.innerHTML = '';
+  let shown = 0;
+
+  CARD_DECK.forEach((c, idx) => {
+    if (artistFilter && c.artist !== artistFilter) return;
+    if (search && !c.title.toLowerCase().includes(search) && !c.artist.toLowerCase().includes(search)) return;
+    shown++;
+
+    const card = document.createElement('div');
+    card.className = 'card' + (marked.has(idx) ? ' marked' : '');
+    card.onclick = () => {
+      if (marked.has(idx)) marked.delete(idx); else marked.add(idx);
+      renderGrid();
+    };
+
+    const img = document.createElement('img');
+    img.src = c.imageUrl;
+    img.loading = 'lazy';
+    img.onerror = () => {
+      const broken = document.createElement('div');
+      broken.className = 'broken';
+      broken.textContent = '打不開';
+      img.replaceWith(broken);
+    };
+    card.appendChild(img);
+
+    const idxTag = document.createElement('span');
+    idxTag.className = 'idx';
+    idxTag.textContent = '#' + idx;
+    card.appendChild(idxTag);
+
+    const markTag = document.createElement('span');
+    markTag.className = 'mark-tag';
+    markTag.textContent = '刪';
+    card.appendChild(markTag);
+
+    const artistEl = document.createElement('span');
+    artistEl.className = 'artist';
+    artistEl.textContent = c.artist;
+    card.appendChild(artistEl);
+
+    const titleEl = document.createElement('span');
+    titleEl.className = 'title';
+    titleEl.textContent = c.title;
+    card.appendChild(titleEl);
+
+    grid.appendChild(card);
+  });
+
+  document.getElementById('count-badge').textContent = `顯示 ${shown} / ${CARD_DECK.length} 張`;
+  document.getElementById('marked-badge').textContent = `已標記 ${marked.size} 張`;
+}
+
+document.getElementById('filter-artist').onchange = renderGrid;
+document.getElementById('filter-search').oninput = renderGrid;
+document.getElementById('btn-clear-marks').onclick = () => { marked.clear(); renderGrid(); };
+
+document.getElementById('btn-generate').onclick = () => {
+  const items = [...marked].sort((a, b) => a - b).map(idx => CARD_DECK[idx]);
+  const lines = items.map(c => `- [${c.artist}] ${c.title}`);
+  document.getElementById('output').value = lines.join('\n') || '（沒有標記任何要刪除的）';
+  document.getElementById('output-count').textContent = items.length;
+  document.getElementById('output-panel').style.display = 'block';
+  document.getElementById('output-panel').scrollIntoView({ behavior: 'smooth' });
+};
+
+document.getElementById('btn-copy').onclick = async () => {
+  const ta = document.getElementById('output');
+  ta.select();
+  try {
+    await navigator.clipboard.writeText(ta.value);
+    document.getElementById('btn-copy').textContent = '已複製 ✓';
+    setTimeout(() => { document.getElementById('btn-copy').textContent = '複製'; }, 1500);
+  } catch (e) { document.execCommand('copy'); }
+};
+
+populateFilter();
+renderGrid();
+</script>
+</body>
+</html>
