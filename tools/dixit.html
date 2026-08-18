@@ -134,6 +134,7 @@
       <div class="clue-box" id="clue-display"></div>
       <h3 id="submit-heading">挑一張跟這句提示最搭的牌</h3>
       <div class="card-grid" id="hand-follower"></div>
+      <button class="primary" id="btn-confirm-submit" style="display:none;" disabled>確認送出這張牌</button>
       <p class="muted" id="submit-wait-msg" style="display:none;">已送出，等待其他人…</p>
       <p class="muted" id="submit-wait-countdown"></p>
     </div>
@@ -141,8 +142,9 @@
     <!-- 投票階段 -->
     <div id="phase-vote" style="display:none;">
       <div class="clue-box" id="clue-display-vote"></div>
-      <h3>猜猜看哪張是說書人的牌</h3>
+      <h3 id="vote-heading">猜猜看哪張是說書人的牌</h3>
       <div class="card-grid" id="vote-grid"></div>
+      <button class="primary" id="btn-confirm-vote" style="display:none;" disabled>確認投這一票</button>
       <p class="muted" id="vote-wait-msg" style="display:none;">已投票，等待其他人…</p>
       <p class="muted" id="vote-wait-countdown"></p>
     </div>
@@ -153,7 +155,8 @@
       <h3>揭曉結果</h3>
       <div class="card-grid" id="reveal-grid"></div>
       <div id="reveal-summary" class="muted" style="margin-top:8px;"></div>
-      <button class="primary" id="btn-next-round" style="margin-top:10px;">下一輪</button>
+      <button class="primary" id="btn-next-round" style="margin-top:10px;">立刻下一輪</button>
+      <p class="muted" id="next-round-countdown"></p>
     </div>
 
     <h3 style="margin-top:18px;">計分板</h3>
@@ -296,6 +299,7 @@ function scoreRound(state) {
   for (const id of followers) next.scores[id] += (roundResult.followerPoints[id] || 0);
   next.roundResult = roundResult;
   next.phase = 'roundEnd';
+  next.phaseStartedAt = Date.now();
   return next;
 }
 function nextRound(state, rng = Math.random) {
@@ -711,6 +715,8 @@ let myName = null;
 let currentRoomId = null;
 let unsubscribe = null;
 let selectedCardIndex = null;
+let selectedSubmitCardIndex = null;
+let selectedVoteTarget = null;
 
 function uid() { return 'u' + Math.random().toString(36).slice(2, 10); }
 function roomCode() { return Math.random().toString(36).slice(2, 8); }
@@ -848,10 +854,12 @@ function renderRoom(room) {
     el('clue-display').textContent = '提示：' + game.clue;
     if (game.storytellerId === myId || myId in game.submitted) {
       el('hand-follower').style.display = 'none';
+      el('btn-confirm-submit').style.display = 'none';
       el('submit-wait-msg').style.display = 'block';
       el('submit-heading').style.display = 'none';
     } else {
       el('hand-follower').style.display = 'grid';
+      el('btn-confirm-submit').style.display = 'inline-block';
       el('submit-wait-msg').style.display = 'none';
       el('submit-heading').style.display = 'block';
       renderHandForSubmit(game);
@@ -859,20 +867,34 @@ function renderRoom(room) {
   } else if (game.phase === 'vote') {
     el('phase-vote').style.display = 'block';
     el('clue-display-vote').textContent = '提示：' + game.clue;
-    if (game.storytellerId === myId || myId in game.votes) {
-      el('vote-grid').style.display = 'none';
+    if (game.storytellerId === myId) {
+      // 說書人不能投票，但應該看得到桌上的牌（唯讀，不能點）
+      el('vote-grid').style.display = 'grid';
+      el('btn-confirm-vote').style.display = 'none';
       el('vote-wait-msg').style.display = 'block';
+      el('vote-wait-msg').textContent = '等待跟隨者投票中…';
+      el('vote-heading').textContent = '桌上的牌（你是說書人，看戲就好，不能投票）';
+      renderVoteGrid(game, { readonly: true });
+    } else if (myId in game.votes) {
+      el('vote-grid').style.display = 'none';
+      el('btn-confirm-vote').style.display = 'none';
+      el('vote-wait-msg').style.display = 'block';
+      el('vote-wait-msg').textContent = '已投票，等待其他人…';
     } else {
       el('vote-grid').style.display = 'grid';
+      el('btn-confirm-vote').style.display = 'inline-block';
       el('vote-wait-msg').style.display = 'none';
-      renderVoteGrid(game);
+      el('vote-heading').textContent = '猜猜看哪張是說書人的牌';
+      renderVoteGrid(game, { readonly: false });
     }
   } else if (game.phase === 'reveal' || game.phase === 'roundEnd') {
     el('phase-reveal').style.display = 'block';
     el('clue-display-reveal').textContent = '提示：' + game.clue;
     renderReveal(game, players);
+    // 換輪不用等房主，任何人都可以按「立刻下一輪」跳過等待；
+    // 就算沒有人按，也會在倒數結束後自動進入下一輪（見 checkAndAutoPlay）
     el('btn-next-round').style.display = game.phase === 'roundEnd' ? 'inline-block' : 'none';
-    el('btn-next-round').disabled = myId !== room.hostId;
+    el('btn-next-round').disabled = false;
   }
 }
 
@@ -922,27 +944,43 @@ function renderHandForClue(game) {
 function renderHandForSubmit(game) {
   const grid = el('hand-follower');
   grid.innerHTML = '';
+  selectedSubmitCardIndex = null;
+  el('btn-confirm-submit').disabled = true;
   for (const c of game.hands[myId]) {
     const div = document.createElement('div');
     div.className = 'card';
     div.innerHTML = cardImgHtml(c);
-    div.onclick = () => submitMyCard(c);
+    div.onclick = () => {
+      selectedSubmitCardIndex = c;
+      [...grid.children].forEach(ch => ch.classList.remove('selected'));
+      div.classList.add('selected');
+      el('btn-confirm-submit').disabled = false;
+    };
     grid.appendChild(div);
   }
 }
 
-function renderVoteGrid(game) {
+function renderVoteGrid(game, { readonly = false } = {}) {
   const grid = el('vote-grid');
   grid.innerHTML = '';
+  selectedVoteTarget = null;
+  el('btn-confirm-vote').disabled = true;
   // 隨機順序顯示所有已交出的牌（匿名，不顯示是誰的）
   const entries = Object.entries(game.submitted); // [pid, cardIndex]
   const shuffled = shuffle(entries, Math.random);
   for (const [pid, cardIndex] of shuffled) {
-    if (pid === myId) continue; // 不能投自己的牌
+    if (!readonly && pid === myId) continue; // 跟隨者不能投自己的牌；說書人唯讀模式看得到全部（含自己那張）
     const div = document.createElement('div');
     div.className = 'card';
     div.innerHTML = cardImgHtml(cardIndex);
-    div.onclick = () => submitMyVote(pid);
+    if (!readonly) {
+      div.onclick = () => {
+        selectedVoteTarget = pid;
+        [...grid.children].forEach(ch => ch.classList.remove('selected'));
+        div.classList.add('selected');
+        el('btn-confirm-vote').disabled = false;
+      };
+    }
     grid.appendChild(div);
   }
 }
@@ -1009,6 +1047,11 @@ async function submitMyCard(cardIndex) {
   } catch (e) { showToast(e.message); }
 }
 
+async function confirmSubmitCard() {
+  if (selectedSubmitCardIndex === null) return showToast('請先選一張牌');
+  await submitMyCard(selectedSubmitCardIndex);
+}
+
 async function submitMyVote(votedForPlayerId) {
   try {
     await backend.transactionGame(currentRoomId, (currentGame) => {
@@ -1017,6 +1060,11 @@ async function submitMyVote(votedForPlayerId) {
       return game;
     });
   } catch (e) { showToast(e.message); }
+}
+
+async function confirmVote() {
+  if (selectedVoteTarget === null) return showToast('請先選一張牌');
+  await submitMyVote(selectedVoteTarget);
 }
 
 async function goNextRound() {
@@ -1032,12 +1080,26 @@ async function goNextRound() {
 //     就算好幾台裝置同時想代打，也只有一次真的生效，不會出錯。
 // ============================================================
 const AUTO_PLAY_TIMEOUT_MS = 90 * 1000; // 90 秒沒動作就代打，可依需要調整
+const NEXT_ROUND_DELAY_MS = 8 * 1000; // 結果揭曉後看8秒，自動進下一輪，不用等房主按
 
 async function checkAndAutoPlay() {
   const room = latestRoom;
   if (!room || !room.game || !currentRoomId) return;
   const game = room.game;
   const elapsed = Date.now() - (game.phaseStartedAt || Date.now());
+
+  if (game.phase === 'roundEnd') {
+    if (elapsed < NEXT_ROUND_DELAY_MS) return;
+    try {
+      await backend.transactionGame(currentRoomId, (g) => {
+        const cur = normalizeGameState(g);
+        if (!cur || cur.phase !== 'roundEnd') return cur; // 已經有人先按過了
+        return nextRound(cur, Math.random);
+      });
+    } catch (e) { /* 已經有其他裝置換過輪了，忽略 */ }
+    return;
+  }
+
   if (elapsed < AUTO_PLAY_TIMEOUT_MS) return;
 
   if (game.phase === 'clue') {
@@ -1089,18 +1151,32 @@ async function checkAndAutoPlay() {
 
 setInterval(() => { checkAndAutoPlay().catch(() => {}); }, 5000);
 
-// 每秒更新等待畫面上的倒數文字，讓玩家知道還要多久會被系統代打
+// 每秒更新等待畫面上的倒數文字，讓玩家知道還要多久會被系統代打/自動換輪
 setInterval(() => {
   const room = latestRoom;
   if (!room || !room.game) return;
   const game = room.game;
-  const remain = Math.max(0, AUTO_PLAY_TIMEOUT_MS - (Date.now() - (game.phaseStartedAt || Date.now())));
-  const secs = Math.ceil(remain / 1000);
-  const text = secs > 0 ? `還有 ${secs} 秒沒動作會被系統自動代打` : '即將自動代打…';
-  const countdownIds = ['clue-wait-countdown', 'submit-wait-countdown', 'vote-wait-countdown'];
-  for (const id of countdownIds) {
+  const elapsedMs = Date.now() - (game.phaseStartedAt || Date.now());
+
+  const playTimerText = (() => {
+    const remain = Math.max(0, AUTO_PLAY_TIMEOUT_MS - elapsedMs);
+    const secs = Math.ceil(remain / 1000);
+    return secs > 0 ? `還有 ${secs} 秒沒動作會被系統自動代打` : '即將自動代打…';
+  })();
+  for (const id of ['clue-wait-countdown', 'submit-wait-countdown', 'vote-wait-countdown']) {
     const elm = document.getElementById(id);
-    if (elm) elm.textContent = text;
+    if (elm) elm.textContent = playTimerText;
+  }
+
+  const nextRoundElm = document.getElementById('next-round-countdown');
+  if (nextRoundElm) {
+    if (game.phase === 'roundEnd') {
+      const remain = Math.max(0, NEXT_ROUND_DELAY_MS - elapsedMs);
+      const secs = Math.ceil(remain / 1000);
+      nextRoundElm.textContent = secs > 0 ? `${secs} 秒後自動進入下一輪` : '即將自動進入下一輪…';
+    } else {
+      nextRoundElm.textContent = '';
+    }
   }
 }, 1000);
 
@@ -1116,6 +1192,8 @@ el('btn-join-room').onclick = () => joinRoom(false);
 el('btn-leave-room').onclick = leaveRoom;
 el('btn-start-game').onclick = startGame;
 el('btn-submit-clue').onclick = submitClueAction;
+el('btn-confirm-submit').onclick = confirmSubmitCard;
+el('btn-confirm-vote').onclick = confirmVote;
 el('btn-next-round').onclick = goNextRound;
 
 (async function init() {
