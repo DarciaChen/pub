@@ -246,7 +246,7 @@ function submitClue(state, storytellerId, cardIndex, clueText) {
   next.phaseStartedAt = Date.now();
   return next;
 }
-function submitFollowerCard(state, playerId, cardIndex) {
+function submitFollowerCard(state, playerId, cardIndex, rng = Math.random) {
   if (state.phase !== 'submit') throw new Error('現在不是跟牌階段');
   if (playerId === state.storytellerId) throw new Error('說書人不用跟牌');
   if (playerId in state.submitted) throw new Error('已經出過牌了');
@@ -255,7 +255,12 @@ function submitFollowerCard(state, playerId, cardIndex) {
   next.submitted[playerId] = cardIndex;
   next.hands[playerId] = next.hands[playerId].filter(c => c !== cardIndex);
   const followers = state.playerIds.filter(id => id !== state.storytellerId);
-  if (followers.every(id => id in next.submitted)) { next.phase = 'vote'; next.phaseStartedAt = Date.now(); }
+  if (followers.every(id => id in next.submitted)) {
+    next.phase = 'vote';
+    next.phaseStartedAt = Date.now();
+    // 投票牌序在這一刻固定一次，存進狀態，不然每次畫面重渲染都重洗，牌會一直跳動
+    next.voteOrder = shuffle(Object.keys(next.submitted), rng);
+  }
   return next;
 }
 function castVote(state, voterId, votedForPlayerId) {
@@ -322,7 +327,7 @@ function nextRound(state, rng = Math.random) {
   const idx = next.playerIds.indexOf(state.storytellerId);
   next.storytellerId = next.playerIds[(idx + 1) % next.playerIds.length];
   next.round += 1;
-  next.clue = null; next.submitted = {}; next.votes = {}; next.roundResult = null;
+  next.clue = null; next.submitted = {}; next.votes = {}; next.voteOrder = null; next.roundResult = null;
   next.phase = 'clue';
   next.phaseStartedAt = Date.now();
   return next;
@@ -732,40 +737,54 @@ function renderRoom(room) {
   } else if (game.phase === 'submit') {
     el('phase-submit').style.display = 'block';
     el('clue-display').textContent = '提示：' + game.clue;
+    const submitFollowers = game.playerIds.filter(id => id !== game.storytellerId);
+    const submittedCount = submitFollowers.filter(id => id in game.submitted).length;
+    const notSubmittedNames = submitFollowers.filter(id => !(id in game.submitted)).map(id => players[id]?.name || '?');
+    const submitProgressText = `出牌進度：${submittedCount}/${submitFollowers.length}` +
+      (notSubmittedNames.length ? `（尚未出牌：${notSubmittedNames.join('、')}）` : '');
     if (game.storytellerId === myId || myId in game.submitted) {
       el('hand-follower').style.display = 'none';
       el('btn-confirm-submit').style.display = 'none';
       el('submit-wait-msg').style.display = 'block';
+      el('submit-wait-msg').textContent = (game.storytellerId === myId ? '等待跟隨者出牌中…' : '已送出，等待其他人…') + submitProgressText;
       el('submit-heading').style.display = 'none';
     } else {
       el('hand-follower').style.display = 'grid';
       el('btn-confirm-submit').style.display = 'inline-block';
-      el('submit-wait-msg').style.display = 'none';
+      el('submit-wait-msg').style.display = 'block';
+      el('submit-wait-msg').textContent = submitProgressText;
       el('submit-heading').style.display = 'block';
       renderHandForSubmit(game);
     }
   } else if (game.phase === 'vote') {
     el('phase-vote').style.display = 'block';
     el('clue-display-vote').textContent = '提示：' + game.clue;
+    el('vote-grid').style.display = 'grid';
+
+    const followers = game.playerIds.filter(id => id !== game.storytellerId);
+    const votedCount = followers.filter(id => id in game.votes).length;
+    const notVotedNames = followers.filter(id => !(id in game.votes)).map(id => players[id]?.name || '?');
+    const progressText = `投票進度：${votedCount}/${followers.length}` +
+      (notVotedNames.length ? `（尚未投票：${notVotedNames.join('、')}）` : '');
+
     if (game.storytellerId === myId) {
-      // 說書人不能投票，但應該看得到桌上的牌（唯讀，不能點）
-      el('vote-grid').style.display = 'grid';
       el('btn-confirm-vote').style.display = 'none';
       el('vote-wait-msg').style.display = 'block';
-      el('vote-wait-msg').textContent = '等待跟隨者投票中…';
-      el('vote-heading').textContent = '桌上的牌（你是說書人，看戲就好，不能投票）';
-      renderVoteGrid(game, { readonly: true });
+      el('vote-wait-msg').textContent = '你是說書人，看戲就好，不能投票。' + progressText;
+      el('vote-heading').textContent = '桌上的牌（已固定順序，看看誰猜得中）';
+      renderVoteGrid(game, { interactive: false });
     } else if (myId in game.votes) {
-      el('vote-grid').style.display = 'none';
       el('btn-confirm-vote').style.display = 'none';
       el('vote-wait-msg').style.display = 'block';
-      el('vote-wait-msg').textContent = '已投票，等待其他人…';
+      el('vote-wait-msg').textContent = '已投票，等待其他人…' + progressText;
+      el('vote-heading').textContent = '桌上的牌（已固定順序）';
+      renderVoteGrid(game, { interactive: false });
     } else {
-      el('vote-grid').style.display = 'grid';
       el('btn-confirm-vote').style.display = 'inline-block';
-      el('vote-wait-msg').style.display = 'none';
-      el('vote-heading').textContent = '猜猜看哪張是說書人的牌';
-      renderVoteGrid(game, { readonly: false });
+      el('vote-wait-msg').style.display = 'block';
+      el('vote-wait-msg').textContent = progressText;
+      el('vote-heading').textContent = '猜猜看哪張是說書人的牌（含你自己那張，但不能投給自己）';
+      renderVoteGrid(game, { interactive: true });
     }
   } else if (game.phase === 'reveal' || game.phase === 'roundEnd') {
     el('phase-reveal').style.display = 'block';
@@ -840,20 +859,29 @@ function renderHandForSubmit(game) {
   }
 }
 
-function renderVoteGrid(game, { readonly = false } = {}) {
+let lastRenderedVoteRoundKey = null;
+
+function renderVoteGrid(game, { interactive = false } = {}) {
   const grid = el('vote-grid');
+  // 用固定好的 voteOrder，不要每次渲染都重新洗牌，不然畫面會一直跳動
+  const order = (game.voteOrder && game.voteOrder.length) ? game.voteOrder : Object.keys(game.submitted);
+  const roundKey = game.round + ':' + order.join(',');
+  // 只有換新的一輪（voteOrder 變了）才重置已選狀態；同一輪內因為別人動作觸發的重新渲染，
+  // 不該把使用者「已經選好但還沒按確認」的選擇洗掉
+  if (roundKey !== lastRenderedVoteRoundKey) {
+    selectedVoteTarget = null;
+    lastRenderedVoteRoundKey = roundKey;
+  }
   grid.innerHTML = '';
-  selectedVoteTarget = null;
-  el('btn-confirm-vote').disabled = true;
-  // 隨機順序顯示所有已交出的牌（匿名，不顯示是誰的）
-  const entries = Object.entries(game.submitted); // [pid, cardIndex]
-  const shuffled = shuffle(entries, Math.random);
-  for (const [pid, cardIndex] of shuffled) {
-    if (!readonly && pid === myId) continue; // 跟隨者不能投自己的牌；說書人唯讀模式看得到全部（含自己那張）
+  if (interactive) el('btn-confirm-vote').disabled = (selectedVoteTarget === null);
+
+  order.forEach((pid, i) => {
+    if (!(pid in game.submitted)) return;
+    const cardIndex = game.submitted[pid];
     const div = document.createElement('div');
-    div.className = 'card';
-    div.innerHTML = cardImgHtml(cardIndex);
-    if (!readonly) {
+    div.className = 'card' + (pid === selectedVoteTarget ? ' selected' : '');
+    div.innerHTML = cardImgHtml(cardIndex) + `<span class="owner-tag">#${i + 1}</span>`;
+    if (interactive) {
       div.onclick = () => {
         selectedVoteTarget = pid;
         [...grid.children].forEach(ch => ch.classList.remove('selected'));
@@ -862,7 +890,7 @@ function renderVoteGrid(game, { readonly = false } = {}) {
       };
     }
     grid.appendChild(div);
-  }
+  });
 }
 
 function renderReveal(game, players) {
@@ -944,6 +972,7 @@ async function submitMyVote(votedForPlayerId) {
 
 async function confirmVote() {
   if (selectedVoteTarget === null) return showToast('請先選一張牌');
+  if (selectedVoteTarget === myId) return showToast('不能投給自己的牌，請重新選擇');
   await submitMyVote(selectedVoteTarget);
 }
 
