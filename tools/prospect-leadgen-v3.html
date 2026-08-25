@@ -82,7 +82,7 @@
   <header class="panel px-6 py-5 mb-6 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
     <div>
       <div class="text-xs font-mono tracking-widest text-[var(--signal-cyan)] mb-1">MODEL&nbsp;&nbsp;IC-LEADGEN&nbsp;&nbsp;v3&nbsp;&nbsp;/&nbsp;&nbsp;工控儀表業務開發</div>
-      <div class="text-[10px] font-mono text-[var(--text-mid)] mb-1">部署版本：<span id="build-stamp">2026-08-07 13:41（台灣時間）</span>　·　若您看到的時間不是最新一次改版時間，代表快取還沒更新，請強制重新整理</div>
+      <div class="text-[10px] font-mono text-[var(--text-mid)] mb-1">部署版本：<span id="build-stamp">2026-08-25 15:12（台灣時間）</span>　·　若您看到的時間不是最新一次改版時間，代表快取還沒更新，請強制重新整理</div>
       <h1 class="font-display text-2xl md:text-3xl font-bold">工控客群開發自動化工具</h1>
       <div class="text-sm text-[var(--text-mid)] mt-1">自動分批檢索　·　Q1/Q2/Q3/X1 四層判斷　·　交叉驗證計次　·　零幻覺輸出</div>
     </div>
@@ -362,15 +362,7 @@ function saveKeywords(kw){ try{ localStorage.setItem(KEYWORD_STORAGE_KEY,JSON.st
 let currentKeywords=loadKeywords();
 renderRoutes();
 
-// 初始化 GitHub PAT
-(function initPat() {
-  const saved = localStorage.getItem(PAT_KEY);
-  if (saved) {
-    document.getElementById('github-pat-input').value = saved;
-    document.getElementById('clear-pat-btn').style.display = '';
-    refreshGistLists();
-  }
-})();
+// GitHub PAT 初始化已搬到檔案後段（PAT_KEY 常數宣告之後）執行，見 initPatOnLoad()
 
 function esc(s){ return (s==null?'':String(s)).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
@@ -981,6 +973,20 @@ function exportSelectedToExcel(){
 const PAT_KEY = 'prospect_github_pat';
 const GIST_ID_KEY = 'prospect_gist_id';
 
+// 頁面載入時還原已儲存的 GitHub PAT（必須在 PAT_KEY 宣告之後才能呼叫，
+// 原本用立即執行函式寫在檔案前段、卻在 PAT_KEY 宣告之前引用它，
+// 會拋出 ReferenceError 導致整支頁面腳本執行到那裡就中斷，
+// 後段所有初始化（含還原 API 金鑰、還原檢索結果）全部不會執行——
+// 這正是「PAT/API金鑰記憶重整就不見」與「啟動按鈕沒反應」的真正原因）
+function initPatOnLoad() {
+  const saved = localStorage.getItem(PAT_KEY);
+  if (saved) {
+    document.getElementById('github-pat-input').value = saved;
+    document.getElementById('clear-pat-btn').style.display = '';
+    refreshGistLists();
+  }
+}
+
 function getGithubPat() {
   return localStorage.getItem(PAT_KEY) || '';
 }
@@ -1265,6 +1271,7 @@ document.getElementById("ground-model-label").textContent = GROUND_MODELS.join('
 document.getElementById("format-model-label").textContent = FORMAT_MODEL;
 checkRestoreBanner();
 initApiKey();
+initPatOnLoad();
 </script>
 </body>
 </html>
