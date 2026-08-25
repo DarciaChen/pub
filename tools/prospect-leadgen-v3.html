@@ -1258,6 +1258,17 @@ function generateModeB(){
   document.getElementById('mode-b-output').classList.remove('hidden');
   setStatus('已產生指令，請點「一鍵複製」','var(--signal-mint)');
 }
+function extractGroundingSources(data){
+  const gm=data.candidates&&data.candidates[0]&&data.candidates[0].groundingMetadata;
+  const chunks=(gm&&gm.groundingChunks)||[];
+  const seen=new Set(), out=[];
+  chunks.forEach(c=>{
+    const uri=c.web&&c.web.uri, title=c.web&&c.web.title;
+    if(uri&&!seen.has(uri)){ seen.add(uri); out.push({uri:uri,title:title||''}); }
+  });
+  return out;
+}
+
 function copyInstruction(){
   const ta=document.getElementById('instruction-output');
   ta.select();
