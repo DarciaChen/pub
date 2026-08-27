@@ -82,7 +82,7 @@
   <header class="panel px-6 py-5 mb-6 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
     <div>
       <div class="text-xs font-mono tracking-widest text-[var(--signal-cyan)] mb-1">MODEL&nbsp;&nbsp;IC-LEADGEN&nbsp;&nbsp;v3&nbsp;&nbsp;/&nbsp;&nbsp;工控儀表業務開發</div>
-      <div class="text-[10px] font-mono text-[var(--text-mid)] mb-1">部署版本：<span id="build-stamp">2026-08-25 15:50（台灣時間）</span>　·　若您看到的時間不是最新一次改版時間，代表快取還沒更新，請強制重新整理</div>
+      <div class="text-[10px] font-mono text-[var(--text-mid)] mb-1">部署版本：<span id="build-stamp">2026-08-27 22:51（台灣時間）</span>　·　若您看到的時間不是最新一次改版時間，代表快取還沒更新，請強制重新整理</div>
       <h1 class="font-display text-2xl md:text-3xl font-bold">工控客群開發自動化工具</h1>
       <div class="text-sm text-[var(--text-mid)] mt-1">自動分批檢索　·　Q1/Q2/Q3/X1 四層判斷　·　交叉驗證計次　·　零幻覺輸出</div>
     </div>
@@ -152,6 +152,16 @@
             <div class="mt-1 flex gap-2">
               <button class="btn-ghost text-[11px]" onclick="saveGithubPat()">記住 PAT</button>
               <button class="btn-ghost text-[11px]" id="clear-pat-btn" onclick="clearGithubPat()" style="display:none">清除 PAT</button>
+            </div>
+          </div>
+
+          <!-- 拜訪系統通關語 -->
+          <div class="mt-3">
+            <label class="block text-xs font-mono text-[var(--text-mid)] mb-2">拜訪系統通關語（用於「標記客戶」寫入拜訪系統）</label>
+            <input type="password" id="visit-secret-input" placeholder="貼上 LEADGEN_API_SECRET">
+            <div class="mt-1 flex gap-2">
+              <button class="btn-ghost text-[11px]" onclick="saveVisitSecret()">記住通關語</button>
+              <button class="btn-ghost text-[11px]" id="clear-visit-secret-btn" onclick="clearVisitSecret()" style="display:none">清除通關語</button>
             </div>
           </div>
 
@@ -259,10 +269,10 @@
             <thead><tr>
               <th style="width:30px"><input type="checkbox" id="select-all-checkbox" onchange="toggleSelectAll(this.checked)"></th>
               <th>公司名稱</th><th>操作</th><th>判斷理由</th><th>地址／聚落</th><th>電話／聯絡人</th>
-              <th>Q1/Q2/Q3</th><th>R1</th><th>產業型態</th><th>統編</th><th>名單狀態</th><th>驗證</th><th>來源</th>
+              <th>Q1/Q2/Q3</th><th>R1</th><th>產業型態</th><th>統編</th><th>名單狀態</th><th>驗證</th><th>來源</th><th>拜訪系統</th>
             </tr></thead>
             <tbody id="candidates-body">
-              <tr><td colspan="13" class="text-[var(--text-mid)] font-mono text-xs py-6 text-center">尚無資料，請輸入區域並執行檢索</td></tr>
+              <tr><td colspan="14" class="text-[var(--text-mid)] font-mono text-xs py-6 text-center">尚無資料，請輸入區域並執行檢索</td></tr>
             </tbody>
           </table>
         </div>
@@ -435,7 +445,7 @@ function matchExistingCustomer(companyName,existingList){
 }
 
 /* ============ 狀態 ============ */
-let sessionApiKey='', currentMode='A', lastCandidates=[], selectedIdx=new Set();
+let sessionApiKey='', currentMode='A', lastCandidates=[], lastExcluded=[], selectedIdx=new Set();
 
 function toggleMode(){
   currentMode=currentMode==='A'?'B':'A';
@@ -756,11 +766,11 @@ async function runModeA(){
 function renderResults(json){
   const body=document.getElementById('candidates-body');
   const list=json.candidates||[];
-  lastCandidates=list; selectedIdx=new Set();
+  lastCandidates=list; lastExcluded=json.excluded||[]; selectedIdx=new Set();
   document.getElementById('select-all-checkbox').checked=false;
   document.getElementById('result-count').textContent=list.length?'（共 '+list.length+' 筆，Q3剛需優先排序）':'';
   if(!list.length){
-    body.innerHTML='<tr><td colspan="13" class="text-[var(--text-mid)] font-mono text-xs py-6 text-center">查無符合條件的候選廠商</td></tr>';
+    body.innerHTML='<tr><td colspan="14" class="text-[var(--text-mid)] font-mono text-xs py-6 text-center">查無符合條件的候選廠商</td></tr>';
   }else{
     body.innerHTML=list.map((c,i)=>{
       const statusCls=c.status==='已驗證'?'badge-mint':(c.status==='待查'?'badge-violet':'badge-amber');
@@ -785,6 +795,10 @@ function renderResults(json){
         +'<td><span class="badge '+listCls+'">'+esc(c.listStatus)+'</span></td>'
         +'<td><span class="badge '+statusCls+'">'+esc(c.status)+'</span></td>'
         +'<td>'+((c.source&&c.source!=='未查得'&&c.source!=='來源不明'&&/^https?:\/\//.test(c.source))?'<a href="'+esc(c.source)+'" target="_blank" class="text-[var(--signal-cyan)] underline">連結</a>':'<span class="text-[var(--text-mid)]">—</span>')+'</td>'
+        +'<td class="whitespace-nowrap" id="visit-action-'+i+'">'
+          +'<a href="#" onclick="sendToVisitSystem('+i+',\'valid\');return false;" class="btn-action btn-action-cyan">有效客戶</a>'
+          +'<a href="#" onclick="sendToVisitSystem('+i+',\'exclude\');return false;" class="btn-action btn-action-amber">非目標</a>'
+        +'</td>'
         +'</tr>';
     }).join('');
   }
@@ -972,12 +986,15 @@ function exportSelectedToExcel(){
 /* ============ GitHub PAT 管理 ============ */
 const PAT_KEY = 'prospect_github_pat';
 const GIST_ID_KEY = 'prospect_gist_id';
+const VISIT_SECRET_KEY = 'prospect_visit_secret';
+const VISIT_SYSTEM_URL = 'https://script.google.com/macros/s/AKfycbydqPmPdiwHUIiZjDL4yYxXl7YLuULCkZhTTjpKmH1h1uEbukAju548xSGExLKmM8A7/exec';
 
 // 頁面載入時還原已儲存的 GitHub PAT（必須在 PAT_KEY 宣告之後才能呼叫，
 // 原本用立即執行函式寫在檔案前段、卻在 PAT_KEY 宣告之前引用它，
 // 會拋出 ReferenceError 導致整支頁面腳本執行到那裡就中斷，
 // 後段所有初始化（含還原 API 金鑰、還原檢索結果）全部不會執行——
 // 這正是「PAT/API金鑰記憶重整就不見」與「啟動按鈕沒反應」的真正原因）
+// 拜訪系統通關語的還原也放在這個函式裡一併處理，避免同樣的順序問題再發生一次。
 function initPatOnLoad() {
   const saved = localStorage.getItem(PAT_KEY);
   if (saved) {
@@ -985,6 +1002,30 @@ function initPatOnLoad() {
     document.getElementById('clear-pat-btn').style.display = '';
     refreshGistLists();
   }
+  const savedSecret = localStorage.getItem(VISIT_SECRET_KEY);
+  if (savedSecret) {
+    document.getElementById('visit-secret-input').value = savedSecret;
+    document.getElementById('clear-visit-secret-btn').style.display = '';
+  }
+}
+
+function getVisitSecret() {
+  return localStorage.getItem(VISIT_SECRET_KEY) || document.getElementById('visit-secret-input').value.trim();
+}
+
+function saveVisitSecret() {
+  const v = document.getElementById('visit-secret-input').value.trim();
+  if (!v) { setStatus('請輸入拜訪系統通關語', 'var(--signal-amber)'); return; }
+  localStorage.setItem(VISIT_SECRET_KEY, v);
+  document.getElementById('clear-visit-secret-btn').style.display = '';
+  setStatus('拜訪系統通關語已儲存', 'var(--signal-mint)');
+}
+
+function clearVisitSecret() {
+  localStorage.removeItem(VISIT_SECRET_KEY);
+  document.getElementById('visit-secret-input').value = '';
+  document.getElementById('clear-visit-secret-btn').style.display = 'none';
+  setStatus('拜訪系統通關語已清除', 'var(--signal-amber)');
 }
 
 function getGithubPat() {
@@ -1015,7 +1056,62 @@ function onGithubPatChange() {
   document.getElementById('clear-pat-btn').style.display = val ? '' : 'none';
 }
 
-/* ============ Gist 名單管理 ============ */
+/* ============ 寫入拜訪系統（有效客戶 / 非目標客戶） ============ */
+async function sendToVisitSystem(idx, mode) {
+  const c = lastCandidates[idx];
+  if (!c) return;
+  const secret = getVisitSecret();
+  if (!secret) { setStatus('請先輸入並儲存拜訪系統通關語', 'var(--signal-amber)'); return; }
+
+  const cell = document.getElementById('visit-action-' + idx);
+  const originalHtml = cell.innerHTML;
+  cell.innerHTML = '<span class="text-[10px] text-[var(--text-mid)]">處理中…</span>';
+
+  const payload = {
+    secret: secret,
+    action: 'addCustomerFromLeadgen',
+    data: {
+      name: c.company || '',
+      address: (c.address && c.address !== '未查得') ? c.address : '',
+      phone: (c.phone && c.phone !== '未查得') ? c.phone : '',
+      contactPerson: (c.contactPerson && c.contactPerson !== '未查得') ? c.contactPerson : '',
+      website: (c.website && c.website !== '未查得') ? c.website : '',
+      industryType: c.industryType || '',
+      r1: c.r1 || '',
+      matchReason: c.matchReason || '',
+      source: (c.source && c.source !== '未查得' && c.source !== '來源不明') ? c.source : ''
+    }
+  };
+  // mode==='exclude' 才帶 status，'valid' 完全不帶這個欄位，
+  // 對應後端「hasOwnProperty 判斷是否傳了 status」的邏輯：不傳=有效客戶，不強制排除狀態。
+  if (mode === 'exclude') payload.data.status = '非目標客戶';
+
+  try {
+    const resp = await fetch(VISIT_SYSTEM_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' }, // 避免觸發CORS預檢，Apps Script對OPTIONS無處理
+      body: JSON.stringify(payload)
+    });
+    const data = await resp.json();
+    if (!data.ok) throw new Error(data.error || '未知錯誤');
+
+    setStatus((mode === 'exclude' ? '已標記非目標客戶：' : '已新增有效客戶：') + c.company + '（編號 ' + data.customerId + '）', 'var(--signal-mint)');
+
+    if (mode === 'valid') {
+      window.open(VISIT_SYSTEM_URL + '?openCustomer=' + encodeURIComponent(data.customerId), '_blank');
+    }
+
+    // 成功後從目前候選名單畫面移除，避免重複處理同一筆
+    lastCandidates.splice(idx, 1);
+    selectedIdx = new Set();
+    renderResults({ candidates: lastCandidates, excluded: lastExcluded });
+  } catch (e) {
+    cell.innerHTML = originalHtml;
+    setStatus('寫入拜訪系統失敗：' + e.message, 'var(--signal-red)');
+  }
+}
+
+
 async function getOrCreateGist(pat) {
   const gistId = localStorage.getItem(GIST_ID_KEY);
   if (gistId) {
