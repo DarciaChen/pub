@@ -82,7 +82,7 @@
   <header class="panel px-6 py-5 mb-6 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
     <div>
       <div class="text-xs font-mono tracking-widest text-[var(--signal-cyan)] mb-1">MODEL&nbsp;&nbsp;IC-LEADGEN&nbsp;&nbsp;v3&nbsp;&nbsp;/&nbsp;&nbsp;工控儀表業務開發</div>
-      <div class="text-[10px] font-mono text-[var(--text-mid)] mb-1">部署版本：<span id="build-stamp">2026-09-01 13:59（台灣時間）</span>　·　若您看到的時間不是最新一次改版時間，代表快取還沒更新，請強制重新整理</div>
+      <div class="text-[10px] font-mono text-[var(--text-mid)] mb-1">部署版本：<span id="build-stamp">2026-09-09 09:51（台灣時間）</span>　·　若您看到的時間不是最新一次改版時間，代表快取還沒更新，請強制重新整理</div>
       <h1 class="font-display text-2xl md:text-3xl font-bold">工控客群開發自動化工具</h1>
       <div class="text-sm text-[var(--text-mid)] mt-1">自動分批檢索　·　Q1/Q2/Q3/X1 四層判斷　·　交叉驗證計次　·　零幻覺輸出</div>
     </div>
@@ -166,6 +166,7 @@
           </div>
 
           <button class="btn-run w-full mt-4" id="run-btn" onclick="runModeA()">啟動檢索</button>
+          <button class="btn-ghost w-full mt-2 hidden" id="retry-failed-btn" onclick="retryFailedBatches()">重試失敗批次</button>
           <div id="batch-progress" class="mt-3 hidden">
             <div id="batch-dots"></div>
             <div id="batch-label" class="text-[11px] font-mono text-[var(--text-mid)] mt-2"></div>
@@ -679,6 +680,115 @@ function renderCoverage(stats){
 }
 
 /* ============ 主流程 ============ */
+let lastRunContext = null; // {region, existingList, batches, results, coverageStats, failedIndices(Set), failedNameByIndex(obj)}
+
+function updateRetryButton(){
+  const btn=document.getElementById('retry-failed-btn');
+  if(!lastRunContext || lastRunContext.failedIndices.size===0){
+    btn.classList.add('hidden');
+  }else{
+    btn.classList.remove('hidden');
+    btn.textContent='重試失敗批次（剩 '+lastRunContext.failedIndices.size+' 批，不重跑已成功的批次，省額度）';
+  }
+}
+
+// 收尾邏輯：合併去重、比對既有名單、排序、渲染。首次執行與重試失敗批次都呼叫這裡，
+// 確保兩條路徑的最終呈現邏輯完全一致，不會各寫一份導致以後改一邊忘了改另一邊。
+function finalizeRun(ctx){
+  const {region, existingList, batches, results, coverageStats, failedIndices, failedNameByIndex} = ctx;
+  const failedNames = Array.from(failedIndices).sort((a,b)=>a-b).map(i=>failedNameByIndex[i]);
+
+  if(!results.length){
+    setStatus('所有批次皆失敗：'+failedNames.join('；'),'var(--signal-red)');
+    resetLeds();
+    updateRetryButton();
+    return;
+  }
+
+  setLed(3,'on-cyan');
+  setStatus('合併去重與交叉驗證中…','var(--signal-cyan)');
+
+  let candidates=mergeCandidates(results);
+  const excluded=mergeExcluded(results);
+
+  if(existingList.length){
+    candidates.forEach(c=>{
+      const m=matchExistingCustomer(c.company,existingList);
+      if(m==='exact') c.listStatus='已知/既有';
+      else if(m==='suspect') c.listStatus='疑似既有(待確認)';
+      else if(!c.listStatus) c.listStatus='新名單';
+    });
+  } else {
+    candidates.forEach(c=>{ if(!c.listStatus) c.listStatus='新名單'; });
+  }
+
+  candidates.sort((a,b)=>{
+    const s=x=>(x.q3==='是'?0:1);
+    if(s(a)!==s(b)) return s(a)-s(b);
+    return (b.hitCount||1)-(a.hitCount||1);
+  });
+
+  renderVanished(computeVanished(region,candidates));
+  renderCoverage(coverageStats);
+  setLed(4,'on-mint');
+  const totalRequested=coverageStats.reduce((s,c)=>s+c.requested,0);
+  const totalActual=coverageStats.reduce((s,c)=>s+c.actual,0);
+  let msg='完成：'+candidates.length+' 筆候選、'+excluded.length+' 筆排除（'+results.length+'/'+batches.length+' 批成功，查詢覆蓋率 '+totalActual+'/'+totalRequested+'）';
+  if(failedIndices.size) msg+='　⚠ 尚有 '+failedIndices.size+' 批失敗：'+failedNames.join('；');
+  setStatus(msg, failedIndices.size?'var(--signal-amber)':'var(--signal-mint)');
+  renderResults({candidates:candidates,excluded:excluded});
+  saveResult(region,candidates,excluded);
+  updateRetryButton();
+}
+
+// 依指定的批次索引清單依序執行（首次執行傳入全部索引，重試則只傳入失敗的索引），
+// 成功的累加進 ctx.results／ctx.coverageStats，並把該索引從 failedIndices 移除；
+// 失敗的記錄錯誤訊息、保留在 failedIndices 裡，供下次重試。
+async function executeIndices(ctx, indices){
+  const {region, existingList, batches} = ctx;
+  for(let k=0;k<indices.length;k++){
+    const i=indices[k];
+    const dotStates=new Array(indices.length).fill('');
+    for(let z=0;z<k;z++) dotStates[z]='done';
+    dotStates[k]='active';
+    renderBatchDots(indices.length, dotStates);
+    document.getElementById('batch-label').textContent='第 '+(k+1)+'/'+indices.length+' 批：'+batches[i].name;
+    setStatus('執行中… 第 '+(k+1)+'/'+indices.length+' 批（'+batches[i].name+'）','var(--signal-cyan)');
+    try{
+      const ground=await groundBatch(region,batches[i],existingList,i);
+      const json=await formatBatch(region,ground.text,existingList,ground.sources);
+      ctx.results.push(json);
+      ctx.coverageStats.push({name:batches[i].name,requested:ground.requestedCount,actual:ground.actualCount,queries:ground.actualQueries});
+      ctx.failedIndices.delete(i);
+      delete ctx.failedNameByIndex[i];
+      dotStates[k]='done';
+    }catch(err){
+      ctx.failedIndices.add(i);
+      ctx.failedNameByIndex[i]=batches[i].name+'（'+err.message+'）'; // 不截斷：quotaId等關鍵資訊常出現在訊息後段
+      dotStates[k]='fail';
+    }
+    renderBatchDots(indices.length, dotStates);
+    if(k<indices.length-1) await sleep(1500);
+  }
+}
+
+async function retryFailedBatches(){
+  if(!lastRunContext || lastRunContext.failedIndices.size===0) return;
+  const btn=document.getElementById('run-btn');
+  const retryBtn=document.getElementById('retry-failed-btn');
+  btn.disabled=true; retryBtn.disabled=true;
+  resetLeds(); setLed(1,'on-mint'); setLed(2,'on-cyan');
+  try{
+    const indices=Array.from(lastRunContext.failedIndices).sort((a,b)=>a-b);
+    await executeIndices(lastRunContext, indices);
+    finalizeRun(lastRunContext);
+  }catch(err){
+    setStatus('重試失敗：'+err.message,'var(--signal-red)');
+  }finally{
+    btn.disabled=false; retryBtn.disabled=false;
+  }
+}
+
 async function runModeA(){
   const region=document.getElementById('region-input').value.trim();
   sessionApiKey=document.getElementById('api-key-input').value.trim();
@@ -693,67 +803,19 @@ async function runModeA(){
   const existingRaw=document.getElementById('existing-customers-input').value.trim();
   const existingList=existingRaw?existingRaw.split('\n').map(s=>s.trim()).filter(Boolean):[];
   const batches=buildBatches(region,depth);
-  const states=new Array(batches.length).fill('');
-  const results=[], failed=[], coverageStats=[];
+
+  lastRunContext = {
+    region, existingList, batches,
+    results:[], coverageStats:[],
+    failedIndices:new Set(), failedNameByIndex:{}
+  };
+  updateRetryButton();
 
   setLed(2,'on-cyan');
   try{
-    for(let i=0;i<batches.length;i++){
-      states[i]='active'; renderBatchDots(batches.length,states);
-      document.getElementById('batch-label').textContent='批次 '+(i+1)+'/'+batches.length+'：'+batches[i].name;
-      setStatus('自動分批執行中… 第 '+(i+1)+'/'+batches.length+' 批（'+batches[i].name+'）','var(--signal-cyan)');
-      try{
-        const ground=await groundBatch(region,batches[i],existingList,i);
-        const json=await formatBatch(region,ground.text,existingList,ground.sources);
-        results.push(json);
-        coverageStats.push({name:batches[i].name,requested:ground.requestedCount,actual:ground.actualCount,queries:ground.actualQueries});
-        document.getElementById('batch-label').textContent=
-          '批次 '+(i+1)+'/'+batches.length+'：'+batches[i].name+
-          '（要求'+ground.requestedCount+'條，模型實際執行'+ground.actualCount+'條）';
-        states[i]='done';
-      }catch(err){
-        states[i]='fail';
-        failed.push(batches[i].name+'（'+err.message+'）'); // 不截斷：quotaId等關鍵資訊常出現在訊息後段
-      }
-      renderBatchDots(batches.length,states);
-      if(i<batches.length-1) await sleep(1500);
-    }
-
-    if(!results.length) throw new Error('所有批次皆失敗：'+failed.join('；'));
-
-    setLed(3,'on-cyan');
-    setStatus('合併去重與交叉驗證中…','var(--signal-cyan)');
-
-    let candidates=mergeCandidates(results);
-    const excluded=mergeExcluded(results);
-
-    if(existingList.length){
-      candidates.forEach(c=>{
-        const m=matchExistingCustomer(c.company,existingList);
-        if(m==='exact') c.listStatus='已知/既有';
-        else if(m==='suspect') c.listStatus='疑似既有(待確認)';
-        else if(!c.listStatus) c.listStatus='新名單';
-      });
-    } else {
-      candidates.forEach(c=>{ if(!c.listStatus) c.listStatus='新名單'; });
-    }
-
-    candidates.sort((a,b)=>{
-      const s=x=>(x.q3==='是'?0:1);
-      if(s(a)!==s(b)) return s(a)-s(b);
-      return (b.hitCount||1)-(a.hitCount||1);
-    });
-
-    renderVanished(computeVanished(region,candidates));
-    renderCoverage(coverageStats);
-    setLed(4,'on-mint');
-    const totalRequested=coverageStats.reduce((s,c)=>s+c.requested,0);
-    const totalActual=coverageStats.reduce((s,c)=>s+c.actual,0);
-    let msg='完成：'+candidates.length+' 筆候選、'+excluded.length+' 筆排除（'+results.length+'/'+batches.length+' 批成功，查詢覆蓋率 '+totalActual+'/'+totalRequested+'）';
-    if(failed.length) msg+='　⚠ 失敗批次：'+failed.join('；');
-    setStatus(msg,failed.length?'var(--signal-amber)':'var(--signal-mint)');
-    renderResults({candidates:candidates,excluded:excluded});
-    saveResult(region,candidates,excluded);
+    const allIndices=batches.map((_,i)=>i);
+    await executeIndices(lastRunContext, allIndices);
+    finalizeRun(lastRunContext);
   }catch(err){
     setStatus('執行失敗：'+err.message,'var(--signal-red)');
     resetLeds();
