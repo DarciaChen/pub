@@ -102,3 +102,12 @@
 教訓：Gemini 2.5系列模型（含flash/flash-lite）預設啟用「思考」（thinking），且思考消耗的tokens會計入maxOutputTokens額度，不是額外的。若沿用業界常見的8192這個舊預設值（本身已是遠低於模型實際上限65,535的過時數字），思考可能吃掉大部分預算，導致視覺上「看起來輸出量不大」卻仍被截斷，容易誤判成別的原因。此為Google Gemini SDK生態圈的已知通病，多個第三方工具（含Google自家CLI）都踩過。
 修法：①不採用8192這種舊預設值，改用更寬裕的數值（本次採32768）；②對不需要深度推理、純格式整理的呼叫（如JSON格式化步驟），在 generationConfig 加入 thinkingConfig:{thinkingBudget:0} 明確關閉思考，把全部輸出預算留給實際內容，從根源解決而非只是加大緩衝空間。查證需要用到的模型時，應主動查證該模型「當前」的思考機制與輸出上限，不能沿用舊經驗或業界常見預設值。
 制度修改：tools/prospect-leadgen-v3.html 已修正（commit 8365e733）。
+
+## [2026-09-09] thinkingConfig 參數格式跨世代不同：2.5用thinkingBudget(數字)，3系列用thinkingLevel(字串)，混用直接400
+情境：上次為修正JSON截斷問題，替FORMAT_MODEL（gemini-3.5-flash-lite，屬Gemini 3系列）加上 thinkingConfig:{thinkingBudget:0} 想關閉思考。這個寫法是查證2.5系列文件得到的格式，套用到3系列模型上，導致「批次結構化」這一步100%必定失敗，錯誤為 HTTP 400 Request contains an invalid argument，且不管重試幾次都一樣（因為是參數格式錯誤，不是暫時性問題，重試邏輯救不了）。
+教訓：Gemini 2.5系列與Gemini 3系列的思考控制參數是兩套完全不同的欄位，不能互通：
+- Gemini 2.5系列：generationConfig.thinkingConfig.thinkingBudget（整數，0=關閉，-1=動態，正整數=固定預算）
+- Gemini 3系列（含3.1、3.5、3.6等）：generationConfig.thinkingConfig.thinkingLevel（字串，只能是 "low"/"medium"/"high"，因模型而異，部分3系列不支援medium或無法關閉思考）
+兩種參數不能混用在同一次請求，混用或用錯世代的參數格式，一律回400 INVALID_ARGUMENT，且此為請求格式錯誤而非暫時性問題，自動重試機制無法挽救。
+修正查證資料時要看清楚文件對應的是哪個模型世代，不能因為「都叫Gemini」就假設參數共通；尤其是查到的文件如果是先前對話搜尋到的（同一次對話裡查過2.5的規則），之後要用在不同世代模型上時，必須重新查證那個世代的實際格式，不能沿用舊查證結果套用到新模型。
+制度修改：tools/prospect-leadgen-v3.html 已修正為對應模型世代使用正確參數（commit 6fced2eb）。
