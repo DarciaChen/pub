@@ -1,0 +1,826 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<meta name="theme-color" content="#0d1520">
+<title>雙色滑梯齒輪 · 油水滴漏玩具</title>
+<style>
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%;margin:0}
+  body{
+    background:
+      radial-gradient(120% 80% at 50% -10%, #1d2b3d 0%, #101a26 45%, #080d14 100%);
+    color:#cfe0ef;
+    font-family:"Hiragino Sans","PingFang TC","Noto Sans TC","Segoe UI",system-ui,sans-serif;
+    display:flex;flex-direction:column;
+    overflow:hidden;
+    padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+  }
+  header{
+    flex:0 0 auto;display:flex;align-items:center;gap:8px;
+    padding:10px 12px 6px;flex-wrap:wrap;
+  }
+  h1{
+    font-size:14px;font-weight:600;letter-spacing:.14em;margin:0 auto 0 2px;
+    color:#7e94aa;white-space:nowrap;
+  }
+  button{
+    font:inherit;font-size:13px;color:#dcebf8;cursor:pointer;
+    border:1px solid rgba(150,190,225,.28);
+    background:linear-gradient(180deg,rgba(255,255,255,.10),rgba(255,255,255,.02));
+    border-radius:11px;padding:8px 13px;
+    transition:background .15s, border-color .15s, transform .08s;
+  }
+  button:hover{background:linear-gradient(180deg,rgba(255,255,255,.17),rgba(255,255,255,.05))}
+  button:active{transform:translateY(1px)}
+  button:focus-visible{outline:2px solid #56b7ff;outline-offset:2px}
+  button.primary{
+    border-color:rgba(90,200,255,.55);
+    background:linear-gradient(180deg,rgba(70,180,255,.32),rgba(40,120,200,.18));
+    color:#eaf7ff;
+  }
+  button.on{border-color:rgba(255,110,190,.6);background:linear-gradient(180deg,rgba(255,110,190,.28),rgba(180,50,130,.14))}
+  #stage{flex:1 1 auto;position:relative;min-height:0}
+  canvas{display:block;width:100%;height:100%;touch-action:none}
+  #hint{
+    position:absolute;left:50%;bottom:10px;transform:translateX(-50%);
+    font-size:12px;color:#6f8499;text-align:center;pointer-events:none;
+    background:rgba(8,14,22,.55);padding:5px 12px;border-radius:20px;
+    max-width:90%;line-height:1.5;
+  }
+  #panel{
+    flex:0 0 auto;padding:6px 14px 14px;display:none;
+    grid-template-columns:repeat(auto-fit,minmax(168px,1fr));gap:9px 18px;
+  }
+  #panel.open{display:grid}
+  label{display:block;font-size:11.5px;color:#7f96ab;letter-spacing:.04em}
+  label span{float:right;color:#b9d2e6;font-variant-numeric:tabular-nums}
+  input[type=range]{width:100%;margin:4px 0 0;accent-color:#4fb4ff;height:20px}
+  .row{display:flex;align-items:center;gap:8px;font-size:12.5px;color:#93a9bd}
+  .row input{accent-color:#ff5fb4;width:17px;height:17px}
+  @media (max-width:430px){ h1{display:none} button{padding:8px 11px;font-size:12.5px} }
+  @media (prefers-reduced-motion:reduce){ button{transition:none} }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>油水滴漏</h1>
+  <button id="btnSensor" class="primary">啟用重力感應</button>
+  <button id="btnFlip">翻轉</button>
+  <button id="btnReset">清空</button>
+  <button id="btnPanel">設定</button>
+</header>
+
+<div id="stage">
+  <canvas id="cv"></canvas>
+  <div id="hint">用滑鼠或手指拖曳畫面可改變傾斜方向</div>
+</div>
+
+<div id="panel">
+  <label>左右傾斜 <span id="vGamma">0°</span>
+    <input id="sGamma" type="range" min="-90" max="90" step="1" value="0"></label>
+  <label>前後傾斜 <span id="vBeta">90°</span>
+    <input id="sBeta" type="range" min="0" max="180" step="1" value="90"></label>
+  <label>重力強度 <span id="vG">1.00</span>
+    <input id="sG" type="range" min="0.2" max="2" step="0.05" value="1"></label>
+  <label>滴落間隔 <span id="vDrip">700 ms</span>
+    <input id="sDrip" type="range" min="180" max="1600" step="20" value="700"></label>
+  <label>水滴上限 <span id="vMax">170</span>
+    <input id="sMax" type="range" min="40" max="280" step="10" value="170"></label>
+  <div class="row"><input type="checkbox" id="cBlob" checked><label for="cBlob" style="margin:0">水滴融合</label></div>
+  <div class="row"><input type="checkbox" id="cDebug"><label for="cDebug" style="margin:0">顯示效能</label></div>
+</div>
+
+<script>
+'use strict';
+/* =========================================================
+   雙色滑梯齒輪油水滴漏玩具
+   - 純 Canvas 2D + 原生 JS，無外部相依
+   - 物理全部在「瓶身座標系」中計算；翻轉 = 旋轉重力向量，
+     瓶內結構保持靜止，等同於現實中內容物被瓶子帶著轉。
+   ========================================================= */
+
+const TAU = Math.PI * 2;
+const clamp = (v,a,b)=> v<a?a:(v>b?b:v);
+
+/* ---------- 瓶身尺寸（local 座標，原點在正中心） ---------- */
+const HW = 170, HH = 290, CR = 48;          // 半寬 / 半高 / 圓角
+
+/* ---------- 物理常數 ---------- */
+const G_BASE = 820;        // px/s^2
+const DRAG   = 3.2;        // 礦物油黏滯阻力 → 終端速度約 250px/s
+const VMAX   = 1200;
+const SUB    = 3;          // 每幀子步數
+const WALL_REST = .26, WALL_MU = .34;
+const SLIDE_REST = .22, SLIDE_MU = .22, SLIDE_T = 6.5;
+const GEAR_REST = .32, GEAR_MU = .45, BLADE_T = 5;
+const GEAR_I = 26000, GEAR_DAMP = .9965, GEAR_WMAX = 7;
+const DROP_REST = .12;
+
+/* ---------- 幾何：上半部定義，下半部用點對稱自動生成 ---------- */
+const SLIDES_HALF = [
+  { a:{x:-152,y:-248}, b:{x:112,y:-128} },   // 長滑梯：左上 → 右下（24.4°）
+  { a:{x: 154,y: -30}, b:{x: 60,y:  24} },   // 短滑梯：右 → 左下（29.9°）
+];
+const GEARS_HALF = [
+  { x:132, y:-70, r:36, n:6 },
+  { x: 36, y: 84, r:34, n:5 },
+];
+const NOZZLES = [                     // [常態上方, 翻轉後上方]
+  { pair:[{x:-118,y:-262},{x: 118,y: 262}], type:0 },  // 藍：走長滑梯
+  { pair:[{x: 126,y:-262},{x:-126,y: 262}], type:1 },  // 粉：直落砸齒輪
+];
+
+const slides = [];
+SLIDES_HALF.forEach(s=>{
+  slides.push({a:{...s.a}, b:{...s.b}});
+  slides.push({a:{x:-s.a.x,y:-s.a.y}, b:{x:-s.b.x,y:-s.b.y}});
+});
+const gears = [];
+GEARS_HALF.forEach(g=>{
+  gears.push({x:g.x, y:g.y, r:g.r, n:g.n, hub:13, a:Math.random()*TAU, w:0});
+  gears.push({x:-g.x, y:-g.y, r:g.r, n:g.n, hub:13, a:Math.random()*TAU, w:0});
+});
+
+/* ---------- 顏色 ---------- */
+const COL_A = [64,178,255];    // 亮藍
+const COL_B = [255,72,168];    // 螢光粉
+const MIXN = 8;                // 混色量化階數
+const mixCol = t => [
+  Math.round(COL_A[0]+(COL_B[0]-COL_A[0])*t),
+  Math.round(COL_A[1]+(COL_B[1]-COL_A[1])*t),
+  Math.round(COL_A[2]+(COL_B[2]-COL_A[2])*t)
+];
+
+/* ---------- 設定 ---------- */
+const CFG = { gScale:1, dripMs:700, maxDrops:170, blob:true, debug:false };
+
+/* ---------- 畫布 ---------- */
+const cvs = document.getElementById('cv');
+const ctx = cvs.getContext('2d');
+const stage = document.getElementById('stage');
+const blob = document.createElement('canvas');
+const bctx = blob.getContext('2d');
+const BS = .42;                 // 融合層解析度比例
+let DPR = 1, view = {s:1, ox:0, oy:0};
+
+function resize(){
+  const r = stage.getBoundingClientRect();
+  DPR = Math.min(window.devicePixelRatio || 1, 2);
+  cvs.width  = Math.max(1, Math.round(r.width  * DPR));
+  cvs.height = Math.max(1, Math.round(r.height * DPR));
+  const pad = 22;
+  view.s  = Math.min((r.width - pad*2)/(HW*2), (r.height - pad*2)/(HH*2));
+  view.ox = r.width/2;  view.oy = r.height/2;
+  blob.width  = Math.max(1, Math.round(cvs.width  * BS));
+  blob.height = Math.max(1, Math.round(cvs.height * BS));
+}
+window.addEventListener('resize', resize);
+window.addEventListener('orientationchange', ()=> setTimeout(resize,250));
+
+/* =========================================================
+   重力來源：感應器 / 手動
+   device-frame 重力方向 = (sinγ·cosβ, -sinβ, -cosγ·cosβ)
+   轉成畫面座標（y 向下）：gx = sinγ·cosβ, gy = sinβ
+   ========================================================= */
+let sensorOn = false, sensorSeen = false;
+let manual = { beta:90, gamma:0 };
+let gWorld = {x:0, y:1};            // 單位化方向 × 大小(0~1.x)
+
+function tiltToVec(beta, gamma){
+  const b = beta*Math.PI/180, g = gamma*Math.PI/180;
+  return { x: Math.sin(g)*Math.cos(b), y: Math.sin(b) };
+}
+function screenAngle(){
+  const a = (screen.orientation && screen.orientation.angle) || window.orientation || 0;
+  return a*Math.PI/180;
+}
+function updateGravity(){
+  let v;
+  if (sensorOn && sensorSeen){
+    v = tiltToVec(sensorTilt.beta, sensorTilt.gamma);
+    const a = screenAngle();
+    if (a){ const c=Math.cos(-a), s=Math.sin(-a); v = {x:v.x*c - v.y*s, y:v.x*s + v.y*c}; }
+  } else {
+    v = tiltToVec(manual.beta, manual.gamma);
+  }
+  let m = Math.hypot(v.x, v.y);
+  if (m < .1){                      // 幾乎水平放置時保留微弱方向，避免完全靜止
+    if (m < 1e-4) v = {x:gWorld.x, y:gWorld.y}, m = Math.hypot(v.x,v.y)||1;
+    const k = .1/m; v = {x:v.x*k, y:v.y*k};
+  }
+  gWorld = v;
+}
+let sensorTilt = { beta:90, gamma:0 };
+function onOrient(e){
+  if (e.beta === null && e.gamma === null) return;
+  sensorSeen = true;
+  sensorTilt.beta  = e.beta  || 0;
+  sensorTilt.gamma = e.gamma || 0;
+}
+
+const btnSensor = document.getElementById('btnSensor');
+const hint = document.getElementById('hint');
+btnSensor.addEventListener('click', async ()=>{
+  if (sensorOn){                    // 關閉
+    window.removeEventListener('deviceorientation', onOrient);
+    sensorOn = false; sensorSeen = false;
+    btnSensor.classList.remove('on'); btnSensor.classList.add('primary');
+    btnSensor.textContent = '啟用重力感應';
+    hint.textContent = '已切回手動模式，拖曳畫面或用設定滑桿控制傾斜';
+    return;
+  }
+  try{
+    const D = window.DeviceOrientationEvent;
+    if (D && typeof D.requestPermission === 'function'){
+      const res = await D.requestPermission();
+      if (res !== 'granted'){ hint.textContent = '未取得感應器權限，維持手動模式'; return; }
+    }
+  }catch(err){
+    hint.textContent = '感應器權限請求失敗，維持手動模式';
+    return;
+  }
+  window.addEventListener('deviceorientation', onOrient);
+  sensorOn = true;
+  btnSensor.classList.remove('primary'); btnSensor.classList.add('on');
+  btnSensor.textContent = '關閉重力感應';
+  hint.textContent = '傾斜手機，液體會跟著流';
+  setTimeout(()=>{
+    if (sensorOn && !sensorSeen) hint.textContent = '沒有收到感應器資料，這台裝置可能不支援；請用拖曳或滑桿';
+  }, 1600);
+});
+
+/* ---------- 手動：拖曳畫面 ---------- */
+let dragging = false;
+function pointerTilt(ev){
+  const r = cvs.getBoundingClientRect();
+  const px = (ev.clientX - r.left - view.ox), py = (ev.clientY - r.top - view.oy);
+  const d = Math.hypot(px, py);
+  if (d < 6) return;
+  const m = clamp(d/ (Math.min(r.width,r.height)*.42), .12, 1);
+  const gx = px/d*m, gy = py/d*m;
+  const beta = Math.asin(clamp(gy,-1,1));
+  const cb = Math.cos(beta);
+  const gamma = Math.asin(clamp(Math.abs(cb)<1e-3 ? 0 : gx/cb, -1, 1));
+  manual.beta = beta*180/Math.PI; manual.gamma = gamma*180/Math.PI;
+  syncSliders();
+}
+cvs.addEventListener('pointerdown', e=>{ dragging = true; cvs.setPointerCapture(e.pointerId); pointerTilt(e); });
+cvs.addEventListener('pointermove', e=>{ if (dragging) pointerTilt(e); });
+cvs.addEventListener('pointerup',   ()=> dragging = false);
+cvs.addEventListener('pointercancel',()=> dragging = false);
+
+/* ---------- 翻轉 ---------- */
+let rot = 0, flipFrom = 0, flipTo = 0, flipT = 1, FLIP_DUR = 1.05;
+document.getElementById('btnFlip').addEventListener('click', ()=>{
+  if (flipT < 1) return;
+  flipFrom = rot; flipTo = rot + Math.PI; flipT = 0;
+});
+const easeInOut = t => t<.5 ? 4*t*t*t : 1 - Math.pow(-2*t+2,3)/2;
+
+/* =========================================================
+   水滴
+   ========================================================= */
+const RADII = [6,7,8,9];
+const drops = [];
+function spawnDrop(x, y, type, gl){
+  const r = RADII[(Math.random()*RADII.length)|0];
+  const base = type ? 1 : 0;
+  return { x, y, vx: gl.x*22 + (Math.random()-.5)*12, vy: gl.y*22 + (Math.random()-.5)*12,
+           r, base, mix: base };
+}
+
+/* ---------- sprite 快取（混色階 × 半徑） ---------- */
+const SS = 3;
+const spriteCache = new Map();
+function getSprite(mi, ri){
+  const key = mi*10 + ri;
+  let s = spriteCache.get(key);
+  if (s) return s;
+  const r = RADII[ri], c = mixCol(mi/MIXN);
+  const pad = 3, size = Math.ceil((r+pad)*2*SS);
+  const cv = document.createElement('canvas');
+  cv.width = cv.height = size;
+  const g = cv.getContext('2d');
+  g.translate(size/2, size/2); g.scale(SS,SS);
+  // 陰影
+  g.beginPath(); g.arc(.6, 1.2, r*1.02, 0, TAU);
+  g.fillStyle = 'rgba(6,20,34,.30)'; g.fill();
+  // 本體
+  const gr = g.createRadialGradient(-r*.34,-r*.42, r*.08, 0,0, r);
+  gr.addColorStop(0,   `rgba(${Math.min(255,c[0]+90)},${Math.min(255,c[1]+80)},${Math.min(255,c[2]+70)},.98)`);
+  gr.addColorStop(.42, `rgba(${c[0]},${c[1]},${c[2]},.96)`);
+  gr.addColorStop(1,   `rgba(${(c[0]*.42)|0},${(c[1]*.40)|0},${(c[2]*.58)|0},.94)`);
+  g.beginPath(); g.arc(0,0,r,0,TAU); g.fillStyle = gr; g.fill();
+  // 底部透光
+  const gb = g.createRadialGradient(r*.28, r*.4, 0, r*.28, r*.4, r*.78);
+  gb.addColorStop(0, `rgba(${Math.min(255,c[0]+60)},${Math.min(255,c[1]+50)},${Math.min(255,c[2]+60)},.42)`);
+  gb.addColorStop(1, 'rgba(0,0,0,0)');
+  g.beginPath(); g.arc(0,0,r,0,TAU); g.fillStyle = gb; g.fill();
+  // 高光
+  g.beginPath(); g.ellipse(-r*.36,-r*.42, r*.30, r*.20, -.7, 0, TAU);
+  g.fillStyle = 'rgba(255,255,255,.85)'; g.fill();
+  g.beginPath(); g.arc(r*.34, r*.30, r*.11, 0, TAU);
+  g.fillStyle = 'rgba(255,255,255,.35)'; g.fill();
+  // 邊緣折射
+  g.beginPath(); g.arc(0,0,r*.97,0,TAU);
+  g.lineWidth = r*.10; g.strokeStyle = 'rgba(255,255,255,.18)'; g.stroke();
+  s = {cv, half:(r+pad)};
+  spriteCache.set(key, s);
+  return s;
+}
+const softCache = new Map();
+function getSoft(mi, ri){
+  const key = mi*10 + ri;
+  let s = softCache.get(key);
+  if (s) return s;
+  const r = RADII[ri]*1.55, c = mixCol(mi/MIXN);
+  const size = Math.ceil(r*2*2);
+  const cv = document.createElement('canvas'); cv.width = cv.height = size;
+  const g = cv.getContext('2d'); g.translate(size/2,size/2); g.scale(2,2);
+  const gr = g.createRadialGradient(0,0,r*.18, 0,0,r);
+  gr.addColorStop(0,  `rgba(${c[0]},${c[1]},${c[2]},.85)`);
+  gr.addColorStop(.55,`rgba(${c[0]},${c[1]},${c[2]},.34)`);
+  gr.addColorStop(1,  `rgba(${c[0]},${c[1]},${c[2]},0)`);
+  g.beginPath(); g.arc(0,0,r,0,TAU); g.fillStyle = gr; g.fill();
+  s = {cv, half:r};
+  softCache.set(key, s);
+  return s;
+}
+
+/* ---------- 氣泡（純裝飾） ---------- */
+const bubbles = [];
+for (let i=0;i<16;i++) bubbles.push({
+  x:(Math.random()*2-1)*(HW-30), y:(Math.random()*2-1)*(HH-30),
+  r: 1.4 + Math.random()*3, ph: Math.random()*TAU, sp: .18 + Math.random()*.35
+});
+
+/* =========================================================
+   碰撞
+   ========================================================= */
+function constrainContainer(d){
+  const A = HW-d.r, B = HH-d.r, R = Math.max(CR-d.r, 0);
+  const sx = d.x<0?-1:1, sy = d.y<0?-1:1;
+  let ax = Math.abs(d.x), ay = Math.abs(d.y);
+  const cx0 = A-R, cy0 = B-R;
+  let nx = 0, ny = 0, hit = false;
+  if (ax>cx0 && ay>cy0){
+    const dx = ax-cx0, dy = ay-cy0, L = Math.hypot(dx,dy);
+    if (L > R){ const k = R/L; ax = cx0+dx*k; ay = cy0+dy*k; nx = -dx/L*sx; ny = -dy/L*sy; hit = true; }
+  } else {
+    if (ax > A){ ax = A; nx = -sx; hit = true; }
+    if (ay > B){ ay = B; ny = -sy; hit = true; }
+  }
+  if (!hit) return;
+  const L = Math.hypot(nx,ny) || 1; nx/=L; ny/=L;
+  d.x = ax*sx; d.y = ay*sy;
+  const vn = d.vx*nx + d.vy*ny;
+  if (vn < 0){
+    const jn = -(1+WALL_REST)*vn;
+    const tx = -ny, ty = nx, vt = d.vx*tx + d.vy*ty;
+    const jt = clamp(-vt, -WALL_MU*jn, WALL_MU*jn);
+    d.vx += jn*nx + jt*tx;
+    d.vy += jn*ny + jt*ty;
+  }
+}
+
+// 圓 vs 線段（線段可帶接觸點速度），回傳法向衝量大小
+function hitSegment(d, ax, ay, bx, by, thick, rest, mu, pvx, pvy){
+  const abx = bx-ax, aby = by-ay;
+  const L2 = abx*abx + aby*aby;
+  let t = L2 > 0 ? ((d.x-ax)*abx + (d.y-ay)*aby)/L2 : 0;
+  t = clamp(t,0,1);
+  const cx = ax+abx*t, cy = ay+aby*t;
+  let dx = d.x-cx, dy = d.y-cy;
+  let dist = Math.hypot(dx,dy);
+  const minD = d.r + thick;
+  if (dist >= minD) return 0;
+  if (dist < 1e-6){ dx = 0; dy = -1; dist = 1e-6; }
+  const nx = dx/dist, ny = dy/dist;
+  d.x += nx*(minD-dist); d.y += ny*(minD-dist);
+  const rvx = d.vx-(pvx||0), rvy = d.vy-(pvy||0);
+  const vn = rvx*nx + rvy*ny;
+  if (vn >= 0) return 0;
+  const jn = -(1+rest)*vn;
+  const tx = -ny, ty = nx, vt = rvx*tx + rvy*ty;
+  const jt = clamp(-vt, -mu*jn, mu*jn);       // 庫倫摩擦：上限正比於法向衝量
+  d.vx += jn*nx + jt*tx;
+  d.vy += jn*ny + jt*ty;
+  return jn;
+}
+
+function hitCircle(d, cx, cy, cr, rest, mu){
+  let dx = d.x-cx, dy = d.y-cy;
+  let dist = Math.hypot(dx,dy);
+  const minD = d.r + cr;
+  if (dist >= minD) return;
+  if (dist < 1e-6){ dx = 1; dy = 0; dist = 1e-6; }
+  const nx = dx/dist, ny = dy/dist;
+  d.x += nx*(minD-dist); d.y += ny*(minD-dist);
+  const vn = d.vx*nx + d.vy*ny;
+  if (vn >= 0) return;
+  const jn = -(1+rest)*vn;
+  const tx = -ny, ty = nx, vt = d.vx*tx + d.vy*ty;
+  const jt = clamp(-vt, -mu*jn, mu*jn);
+  d.vx += jn*nx + jt*tx;
+  d.vy += jn*ny + jt*ty;
+}
+
+/* ---------- 水滴互相碰撞（空間雜湊） ---------- */
+const CELL = 22;
+const cellMap = new Map();
+function dropPairs(){
+  cellMap.clear();
+  for (let i=0;i<drops.length;i++){
+    const d = drops[i];
+    const key = (Math.floor(d.x/CELL)+512)*1024 + (Math.floor(d.y/CELL)+512);
+    let arr = cellMap.get(key);
+    if (!arr){ arr = []; cellMap.set(key, arr); }
+    arr.push(i);
+  }
+  for (let i=0;i<drops.length;i++){
+    const d = drops[i];
+    const gx = Math.floor(d.x/CELL), gy = Math.floor(d.y/CELL);
+    for (let ox=-1; ox<=1; ox++) for (let oy=-1; oy<=1; oy++){
+      const arr = cellMap.get((gx+ox+512)*1024 + (gy+oy+512));
+      if (!arr) continue;
+      for (let k=0;k<arr.length;k++){
+        const j = arr[k];
+        if (j <= i) continue;
+        const e = drops[j];
+        let dx = e.x-d.x, dy = e.y-d.y;
+        let dist = Math.hypot(dx,dy);
+        const minD = d.r + e.r;
+        if (dist >= minD) continue;
+        if (dist < 1e-6){ dx = (Math.random()-.5); dy = (Math.random()-.5); dist = Math.hypot(dx,dy)||1e-6; }
+        const nx = dx/dist, ny = dy/dist, pen = (minD-dist)*.5;
+        d.x -= nx*pen; d.y -= ny*pen;
+        e.x += nx*pen; e.y += ny*pen;
+        const rvn = (e.vx-d.vx)*nx + (e.vy-d.vy)*ny;
+        if (rvn < 0){
+          const j2 = -(1+DROP_REST)*rvn*.5;
+          d.vx -= j2*nx; d.vy -= j2*ny;
+          e.vx += j2*nx; e.vy += j2*ny;
+        }
+        // 低速貼合時緩慢互染（限制在離原色 0.3 以內）
+        if (Math.abs(rvn) < 26 && d.base !== e.base){
+          const dm = (e.mix-d.mix)*.012, em = (d.mix-e.mix)*.012;
+          d.mix = clamp(d.mix+dm, d.base?0.7:0, d.base?1:0.3);
+          e.mix = clamp(e.mix+em, e.base?0.7:0, e.base?1:0.3);
+        }
+      }
+    }
+  }
+}
+
+/* =========================================================
+   模擬步進
+   ========================================================= */
+const emitters = NOZZLES.map(n=>({ ...n, t: n.type*350 }));
+let gLocal = {x:0, y:1}, gDir = {x:0, y:1};
+
+function activeNozzle(em){
+  const p0 = em.pair[0], p1 = em.pair[1];
+  return (p0.x*gDir.x + p0.y*gDir.y) <= (p1.x*gDir.x + p1.y*gDir.y) ? p0 : p1;
+}
+
+function recycleOrSpawn(pos, type){
+  if (drops.length < CFG.maxDrops){
+    drops.push(spawnDrop(pos.x, pos.y, type, gDir));
+    return;
+  }
+  // 已滿：把最深處、最慢的同色水滴送回頂端重新循環
+  let best = -1, bestScore = -1e9;
+  for (let i=0;i<drops.length;i++){
+    const d = drops[i];
+    if (d.base !== type) continue;
+    const depth = d.x*gDir.x + d.y*gDir.y;
+    const sc = depth - Math.hypot(d.vx,d.vy)*.12;
+    if (sc > bestScore){ bestScore = sc; best = i; }
+  }
+  if (best < 0) return;
+  const d = drops[best];
+  d.x = pos.x; d.y = pos.y;
+  d.vx = gDir.x*22; d.vy = gDir.y*22;
+  d.mix = d.base;
+}
+
+function step(dt){
+  // 翻轉插值
+  if (flipT < 1){
+    flipT = Math.min(1, flipT + dt/FLIP_DUR);
+    rot = flipFrom + (flipTo-flipFrom)*easeInOut(flipT);
+    if (flipT >= 1) rot = ((flipTo % TAU) + TAU) % TAU;
+  }
+  updateGravity();
+  // 世界重力 → 瓶身座標（等效於瓶子轉、內容物被帶著轉）
+  const c = Math.cos(-rot), s = Math.sin(-rot);
+  gLocal = { x: gWorld.x*c - gWorld.y*s, y: gWorld.x*s + gWorld.y*c };
+  const gm = Math.hypot(gLocal.x, gLocal.y) || 1;
+  gDir = { x: gLocal.x/gm, y: gLocal.y/gm };
+
+  const gx = gLocal.x * G_BASE * CFG.gScale;
+  const gy = gLocal.y * G_BASE * CFG.gScale;
+  const h = dt/SUB;
+
+  for (let s2=0; s2<SUB; s2++){
+    for (let i=0;i<drops.length;i++){
+      const d = drops[i];
+      d.vx += gx*h; d.vy += gy*h;
+      const k = Math.max(0, 1 - DRAG*h);
+      d.vx *= k; d.vy *= k;
+      const sp = Math.hypot(d.vx,d.vy);
+      if (sp > VMAX){ d.vx = d.vx/sp*VMAX; d.vy = d.vy/sp*VMAX; }
+      d.x += d.vx*h; d.y += d.vy*h;
+    }
+    // 滑梯
+    for (let i=0;i<drops.length;i++){
+      const d = drops[i];
+      for (let j=0;j<slides.length;j++){
+        const sl = slides[j];
+        hitSegment(d, sl.a.x, sl.a.y, sl.b.x, sl.b.y, SLIDE_T, SLIDE_REST, SLIDE_MU, 0, 0);
+      }
+    }
+    // 齒輪
+    for (let gi=0; gi<gears.length; gi++){
+      const G = gears[gi];
+      G.a += G.w*h;
+      G.w *= Math.pow(GEAR_DAMP, h*60);
+      G.w = clamp(G.w, -GEAR_WMAX, GEAR_WMAX);
+      for (let i=0;i<drops.length;i++){
+        const d = drops[i];
+        const ddx = d.x-G.x, ddy = d.y-G.y;
+        if (ddx*ddx + ddy*ddy > (G.r + d.r + 4)*(G.r + d.r + 4)) continue;
+        hitCircle(d, G.x, G.y, G.hub, GEAR_REST, GEAR_MU);
+        for (let b=0;b<G.n;b++){
+          const ang = G.a + b*TAU/G.n;
+          const ca = Math.cos(ang), sa = Math.sin(ang);
+          const ax = G.x + ca*G.hub, ay = G.y + sa*G.hub;
+          const bx = G.x + ca*G.r,   by = G.y + sa*G.r;
+          // 接觸點速度先用水滴投影位置估算
+          const rx = d.x-G.x, ry = d.y-G.y;
+          const pvx = -G.w*ry, pvy = G.w*rx;
+          const jn = hitSegment(d, ax, ay, bx, by, BLADE_T, GEAR_REST, GEAR_MU, pvx, pvy);
+          if (jn > 0){
+            // 反作用力矩：τ = r × J
+            const nx = (d.x - (ax+bx)/2), ny = (d.y - (ay+by)/2);
+            const nl = Math.hypot(nx,ny) || 1;
+            const Jx = -jn*nx/nl, Jy = -jn*ny/nl;
+            G.w += (rx*Jy - ry*Jx) / GEAR_I;
+          }
+        }
+      }
+    }
+    dropPairs();
+    for (let i=0;i<drops.length;i++) constrainContainer(drops[i]);
+  }
+
+  // 滴落
+  for (const em of emitters){
+    em.t += dt*1000;
+    if (em.t >= CFG.dripMs){
+      em.t -= CFG.dripMs;
+      recycleOrSpawn(activeNozzle(em), em.type);
+    }
+  }
+  // 氣泡
+  for (const b of bubbles){
+    b.ph += dt*.7;
+    const drift = b.sp*dt*20;                     // 氣泡逆重力上浮
+    b.x += -gDir.x*drift + (-gDir.y)*Math.sin(b.ph)*dt*6;
+    b.y += -gDir.y*drift + ( gDir.x)*Math.sin(b.ph)*dt*6;
+    if (Math.abs(b.x) > HW-14 || Math.abs(b.y) > HH-14){   // 到頂就從底部重生
+      b.x = clamp(gDir.x*(HH-46) + (Math.random()-.5)*130, -HW+22, HW-22);
+      b.y = clamp(gDir.y*(HH-46) + (Math.random()-.5)*130, -HH+22, HH-22);
+    }
+  }
+}
+
+/* =========================================================
+   繪製
+   ========================================================= */
+function pathTank(g, w, h, r){
+  g.beginPath();
+  g.moveTo(-w+r, -h);
+  g.lineTo(w-r, -h); g.quadraticCurveTo(w,-h, w,-h+r);
+  g.lineTo(w, h-r);  g.quadraticCurveTo(w, h, w-r, h);
+  g.lineTo(-w+r, h); g.quadraticCurveTo(-w, h, -w, h-r);
+  g.lineTo(-w, -h+r);g.quadraticCurveTo(-w,-h, -w+r,-h);
+  g.closePath();
+}
+
+function drawSlide(g, sl){
+  g.lineCap = 'round';
+  g.lineWidth = SLIDE_T*2 + 3;
+  g.strokeStyle = 'rgba(10,28,46,.35)';
+  g.beginPath(); g.moveTo(sl.a.x, sl.a.y+2); g.lineTo(sl.b.x, sl.b.y+2); g.stroke();
+
+  const grd = g.createLinearGradient(sl.a.x, sl.a.y-8, sl.a.x, sl.a.y+8);
+  grd.addColorStop(0, 'rgba(228,244,255,.88)');
+  grd.addColorStop(.5,'rgba(150,196,228,.72)');
+  grd.addColorStop(1, 'rgba(84,126,164,.72)');
+  g.lineWidth = SLIDE_T*2;
+  g.strokeStyle = grd;
+  g.beginPath(); g.moveTo(sl.a.x, sl.a.y); g.lineTo(sl.b.x, sl.b.y); g.stroke();
+
+  g.lineWidth = 2;
+  g.strokeStyle = 'rgba(255,255,255,.65)';
+  g.beginPath(); g.moveTo(sl.a.x, sl.a.y-SLIDE_T*.45); g.lineTo(sl.b.x, sl.b.y-SLIDE_T*.45); g.stroke();
+}
+
+function drawGear(g, G){
+  g.save(); g.translate(G.x, G.y); g.rotate(G.a);
+  for (let b=0;b<G.n;b++){
+    g.save(); g.rotate(b*TAU/G.n);
+    const grd = g.createLinearGradient(G.hub, 0, G.r, 0);
+    grd.addColorStop(0, 'rgba(196,228,252,.92)');
+    grd.addColorStop(1, 'rgba(112,162,204,.86)');
+    g.beginPath();
+    g.moveTo(G.hub*.85, -BLADE_T-1.5);
+    g.lineTo(G.r-2,     -BLADE_T+.5);
+    g.quadraticCurveTo(G.r+2.5, 0, G.r-2, BLADE_T-.5);
+    g.lineTo(G.hub*.85,  BLADE_T+1.5);
+    g.closePath();
+    g.fillStyle = grd; g.fill();
+    g.lineWidth = 1; g.strokeStyle = 'rgba(255,255,255,.45)'; g.stroke();
+    g.restore();
+  }
+  const hg = g.createRadialGradient(-G.hub*.4, -G.hub*.5, 1, 0, 0, G.hub*1.25);
+  hg.addColorStop(0, 'rgba(255,255,255,.95)');
+  hg.addColorStop(1, 'rgba(126,172,212,.95)');
+  g.beginPath(); g.arc(0,0,G.hub*1.18,0,TAU); g.fillStyle = hg; g.fill();
+  g.beginPath(); g.arc(0,0,G.hub*.42,0,TAU); g.fillStyle = 'rgba(46,78,110,.85)'; g.fill();
+  g.beginPath(); g.moveTo(-G.hub*.95,0); g.lineTo(G.hub*.95,0);
+  g.lineWidth = 1.6; g.strokeStyle = 'rgba(70,110,150,.5)'; g.stroke();
+  g.restore();
+}
+
+function drawNozzle(g, p, type, fill){
+  const col = type ? COL_B : COL_A;
+  const up = { x:-gDir.x, y:-gDir.y };
+  g.save(); g.translate(p.x, p.y);
+  g.beginPath();
+  g.ellipse(up.x*7, up.y*7, 11, 8, Math.atan2(gDir.y, gDir.x)+Math.PI/2, 0, TAU);
+  g.fillStyle = 'rgba(206,232,252,.72)'; g.fill();
+  g.strokeStyle = 'rgba(255,255,255,.5)'; g.lineWidth = 1.2; g.stroke();
+  if (fill > .12){
+    const rr = 2 + fill*5.5;
+    g.beginPath(); g.arc(gDir.x*2, gDir.y*2, rr, 0, TAU);
+    g.fillStyle = `rgba(${col[0]},${col[1]},${col[2]},${.35+fill*.55})`;
+    g.fill();
+  }
+  g.restore();
+}
+
+function drawDrops(){
+  if (CFG.blob){
+    bctx.setTransform(1,0,0,1,0,0);
+    bctx.clearRect(0,0,blob.width,blob.height);
+    bctx.setTransform(DPR*BS,0,0,DPR*BS,0,0);
+    bctx.translate(view.ox, view.oy); bctx.scale(view.s, view.s); bctx.rotate(rot);
+    for (let i=0;i<drops.length;i++){
+      const d = drops[i];
+      const mi = Math.round(d.mix*MIXN), ri = RADII.indexOf(d.r);
+      const s = getSoft(mi, ri<0?1:ri);
+      bctx.drawImage(s.cv, d.x-s.half, d.y-s.half, s.half*2, s.half*2);
+    }
+    ctx.save();
+    ctx.setTransform(1,0,0,1,0,0);
+    ctx.globalAlpha = .82;
+    ctx.drawImage(blob, 0, 0, cvs.width, cvs.height);
+    ctx.restore();
+  }
+  for (let i=0;i<drops.length;i++){
+    const d = drops[i];
+    const mi = Math.round(d.mix*MIXN), ri = RADII.indexOf(d.r);
+    const s = getSprite(mi, ri<0?1:ri);
+    ctx.drawImage(s.cv, d.x-s.half, d.y-s.half, s.half*2, s.half*2);
+  }
+}
+
+let fps = 60, fpsAcc = 0, fpsN = 0, degraded = false;
+
+function render(){
+  ctx.setTransform(1,0,0,1,0,0);
+  ctx.clearRect(0,0,cvs.width,cvs.height);
+  ctx.setTransform(DPR,0,0,DPR,0,0);
+  ctx.save();
+  ctx.translate(view.ox, view.oy); ctx.scale(view.s, view.s); ctx.rotate(rot);
+
+  // 外框（壓克力殼）
+  ctx.save();
+  pathTank(ctx, HW+13, HH+13, CR+11);
+  const shell = ctx.createLinearGradient(-HW, -HH, HW, HH);
+  shell.addColorStop(0, 'rgba(224,238,250,.30)');
+  shell.addColorStop(.5,'rgba(150,180,206,.16)');
+  shell.addColorStop(1, 'rgba(224,238,250,.26)');
+  ctx.fillStyle = shell; ctx.fill();
+  ctx.lineWidth = 2.2; ctx.strokeStyle = 'rgba(214,236,255,.45)'; ctx.stroke();
+  ctx.restore();
+
+  // 內腔：礦物油
+  ctx.save();
+  pathTank(ctx, HW, HH, CR);
+  ctx.clip();
+  const oil = ctx.createLinearGradient(0,-HH,0,HH);
+  oil.addColorStop(0, 'rgba(146,196,226,.20)');
+  oil.addColorStop(.45,'rgba(96,150,186,.14)');
+  oil.addColorStop(1, 'rgba(60,104,142,.22)');
+  ctx.fillStyle = oil; ctx.fillRect(-HW,-HH,HW*2,HH*2);
+
+  // 氣泡
+  for (const b of bubbles){
+    ctx.beginPath(); ctx.arc(b.x, b.y, b.r, 0, TAU);
+    ctx.fillStyle = 'rgba(230,246,255,.14)'; ctx.fill();
+  }
+
+  for (const sl of slides) drawSlide(ctx, sl);
+  for (const G of gears) drawGear(ctx, G);
+  for (const em of emitters) drawNozzle(ctx, activeNozzle(em), em.type, em.t/CFG.dripMs);
+
+  drawDrops();
+
+  // 玻璃反光
+  ctx.save();
+  ctx.globalCompositeOperation = 'screen';
+  const gl = ctx.createLinearGradient(-HW*.9, -HH, -HW*.1, HH);
+  gl.addColorStop(0,  'rgba(255,255,255,0)');
+  gl.addColorStop(.42,'rgba(255,255,255,.13)');
+  gl.addColorStop(.5, 'rgba(255,255,255,.05)');
+  gl.addColorStop(1,  'rgba(255,255,255,0)');
+  ctx.fillStyle = gl; ctx.fillRect(-HW,-HH,HW*2,HH*2);
+  ctx.restore();
+  ctx.restore();
+
+  // 內緣描邊
+  pathTank(ctx, HW, HH, CR);
+  ctx.lineWidth = 1.4; ctx.strokeStyle = 'rgba(180,214,240,.42)'; ctx.stroke();
+
+  // 四角螺絲
+  for (const p of [[-1,-1],[1,-1],[-1,1],[1,1]]){
+    ctx.beginPath();
+    ctx.arc(p[0]*(HW+5), p[1]*(HH+5), 4.2, 0, TAU);
+    ctx.fillStyle = 'rgba(226,240,252,.5)'; ctx.fill();
+  }
+  ctx.restore();
+
+  if (CFG.debug){
+    ctx.setTransform(DPR,0,0,DPR,0,0);
+    ctx.font = '12px ui-monospace,monospace';
+    ctx.fillStyle = 'rgba(190,216,238,.9)';
+    ctx.fillText(`${fps.toFixed(0)} fps · ${drops.length} 滴 · g(${gLocal.x.toFixed(2)}, ${gLocal.y.toFixed(2)})`, 10, 16);
+  }
+}
+
+/* =========================================================
+   主迴圈
+   ========================================================= */
+let last = performance.now(), acc = 0;
+const FIXED = 1/60;
+function frame(now){
+  const raw = (now-last)/1000; last = now;
+  const dt = Math.min(raw, .05);
+  acc += dt;
+  let guard = 0;
+  while (acc >= FIXED && guard++ < 4){ step(FIXED); acc -= FIXED; }
+  render();
+
+  fpsAcc += raw; fpsN++;
+  if (fpsAcc > .5){
+    fps = fpsN/fpsAcc; fpsAcc = 0; fpsN = 0;
+    if (!degraded && CFG.blob && fps < 34){
+      degraded = true; CFG.blob = false;
+      document.getElementById('cBlob').checked = false;
+      hint.textContent = '效能不足，已自動關閉水滴融合';
+    }
+  }
+  requestAnimationFrame(frame);
+}
+
+/* =========================================================
+   控制列
+   ========================================================= */
+const $ = id => document.getElementById(id);
+function syncSliders(){
+  $('sGamma').value = manual.gamma.toFixed(0); $('vGamma').textContent = manual.gamma.toFixed(0)+'°';
+  $('sBeta').value  = manual.beta.toFixed(0);  $('vBeta').textContent  = manual.beta.toFixed(0)+'°';
+}
+$('sGamma').addEventListener('input', e=>{ manual.gamma = +e.target.value; $('vGamma').textContent = e.target.value+'°'; });
+$('sBeta').addEventListener('input',  e=>{ manual.beta  = +e.target.value; $('vBeta').textContent  = e.target.value+'°'; });
+$('sG').addEventListener('input', e=>{ CFG.gScale = +e.target.value; $('vG').textContent = (+e.target.value).toFixed(2); });
+$('sDrip').addEventListener('input', e=>{ CFG.dripMs = +e.target.value; $('vDrip').textContent = e.target.value+' ms'; });
+$('sMax').addEventListener('input', e=>{ CFG.maxDrops = +e.target.value; $('vMax').textContent = e.target.value;
+  while (drops.length > CFG.maxDrops) drops.pop(); });
+$('cBlob').addEventListener('change', e=>{ CFG.blob = e.target.checked; degraded = false; });
+$('cDebug').addEventListener('change', e=>{ CFG.debug = e.target.checked; });
+$('btnPanel').addEventListener('click', ()=>{ $('panel').classList.toggle('open'); resize(); });
+$('btnReset').addEventListener('click', ()=>{ drops.length = 0; gears.forEach(g=> g.w = 0); });
+
+resize();
+syncSliders();
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
