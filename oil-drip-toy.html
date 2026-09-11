@@ -49,6 +49,14 @@
     background:rgba(8,14,22,.55);padding:5px 12px;border-radius:20px;
     max-width:90%;line-height:1.5;
   }
+  #status{
+    position:absolute;left:50%;top:10px;transform:translateX(-50%);
+    font-size:12.5px;color:#9fb8cf;pointer-events:none;
+    background:rgba(8,14,22,.55);padding:5px 14px;border-radius:20px;
+    font-variant-numeric:tabular-nums;letter-spacing:.02em;
+    transition:background .3s,color .3s;
+  }
+  #status.done{ color:#eaf7ff;background:rgba(70,180,255,.32); }
   #panel{
     flex:0 0 auto;padding:6px 14px 14px;display:none;
     grid-template-columns:repeat(auto-fit,minmax(168px,1fr));gap:9px 18px;
@@ -75,6 +83,7 @@
 
 <div id="stage">
   <canvas id="cv"></canvas>
+  <div id="status">計時中 0:00</div>
   <div id="hint">用滑鼠或手指拖曳畫面可改變傾斜方向</div>
 </div>
 
@@ -85,8 +94,8 @@
     <input id="sBeta" type="range" min="0" max="180" step="1" value="90"></label>
   <label>重力強度 <span id="vG">1.00</span>
     <input id="sG" type="range" min="0.2" max="2" step="0.05" value="1"></label>
-  <label>滴落間隔 <span id="vDrip">700 ms</span>
-    <input id="sDrip" type="range" min="180" max="1600" step="20" value="700"></label>
+  <label>滴落間隔 <span id="vDrip">800 ms</span>
+    <input id="sDrip" type="range" min="180" max="1600" step="20" value="800"></label>
   <label>水滴上限 <span id="vMax">170</span>
     <input id="sMax" type="range" min="40" max="280" step="10" value="170"></label>
   <div class="row"><input type="checkbox" id="cBlob" checked><label for="cBlob" style="margin:0">水滴融合</label></div>
@@ -121,46 +130,53 @@ const DROP_REST = .12;
 const SQUEEZE_MIN = .5;     // 最多壓扁到原尺寸的一半，不會再更扁（避免消失）
 const SQUEEZE_IN  = 16;     // 進窄縫時逼近目標擠壓值的速度（每秒倍率）
 const SQUEEZE_OUT = 5;      // 離開窄縫後回彈原狀的速度，比 IN 慢 → 有黏滯回彈感
+const IDLE_THRESH = 5;      // 淨位移持續小於 IDLE_DIST 超過這麼多秒 → 判定「卡住」給一次喚醒推力
+const IDLE_DIST   = 22;     // 判定「困在原地」的範圍（px）：故意設得比單次小彈跳大，
+                             // 避免在小範圍內來回擺盪卻一直觸發重置、永遠到不了喚醒門檻
+const WAKE_PUSH   = 170;    // 喚醒推力大小（沿重力方向 + 小幅隨機橫向分量，避免推回原處再卡住）
 
-/* ---------- 樓梯狀滑梯：把一段長斜坡拆成 N 階「踏板＋落差」 ----------
-   踏板（tread）幾乎水平、只帶一點點下傾角度讓水滴不會停在上面；
-   踏板之間的落差（riser）不做碰撞、純視覺——水滴會在此短暫騰空，
-   落到下一階踏板上，形成「走樓梯」的一階一階彈跳感，而非一條滑順斜槓。
-   TREAD_FRAC 越小，階梯感越明顯（踏板越短、落差越大）。 */
-function buildStair(x0, y0, x1, y1, steps, treadFrac=0.62, treadSlope=0.16){
-  const treads = [], risers = [];
-  const dx = (x1-x0)/steps, dy = (y1-y0)/steps;
-  let cx = x0, cy = y0;
-  for (let i=0;i<steps;i++){
-    const nx = cx+dx, ny = cy+dy;
-    const tx = cx+dx*treadFrac, ty = cy+dy*treadSlope;
-    treads.push({ a:{x:cx,y:cy}, b:{x:tx,y:ty} });
-    risers.push({ a:{x:tx,y:ty}, b:{x:nx,y:ny} });
-    cx = nx; cy = ny;
+/* ---------- 交錯短棒（zigzag）：一排斷開的小短棒，左右交錯、中間留間隙 ----------
+   水滴會沿短棒滑下、在短棒尾端騰空墜落、跳到下一根對側的短棒上，
+   而不是走一條連續滑順的斜坡——參考「下樓梯滴漏」玩具的螺旋短棒造型。
+   amp：短棒相對於整體行進中心線的左右擺盪幅度（越大，Z字越明顯）
+   gapFrac：每一階距離中，短棒本身只佔 (1-gapFrac)，其餘是純自由落體的間隙 */
+function buildZigzag(x0, y0, x1, y1, n, amp, gapFrac=0.26){
+  const rungs = [];
+  const dx = (x1-x0)/n, dy = (y1-y0)/n;
+  const len = Math.hypot(dx,dy) || 1;
+  const px = -dy/len, py = dx/len;   // 垂直於整體行進方向的單位向量
+  for (let i=0;i<n;i++){
+    const t0=i/n, t1=(i+1)/n;
+    const cx0=x0+(x1-x0)*t0, cy0=y0+(y1-y0)*t0;
+    const cx1=x0+(x1-x0)*t1, cy1=y0+(y1-y0)*t1;
+    const side = (i%2===0) ? 1 : -1;
+    const ex = cx0+(cx1-cx0)*(1-gapFrac), ey = cy0+(cy1-cy0)*(1-gapFrac);
+    rungs.push({
+      a:{ x:cx0+px*amp*side, y:cy0+py*amp*side },
+      b:{ x:ex -px*amp*side, y:ey -py*amp*side }
+    });
   }
-  return { treads, risers };
+  return rungs;
 }
 
 /* ---------- 幾何：上半部定義，下半部用點對稱自動生成 ---------- */
 const STAIRS_HALF = [
-  { a:{x:-125,y:-230}, b:{x:118,y:-112}, steps:6 },   // 長樓梯：左上 → 右下
-  { a:{x: 150,y: -26}, b:{x: 58,y:  30}, steps:4 },   // 短樓梯：起點刻意貼近牆，靠擠壓通過
+  { a:{x:-125,y:-230}, b:{x:118,y:-112}, steps:7, amp:34 },   // 長段：左上 → 右下
+  { a:{x: 150,y: -10}, b:{x: 58,y:  38}, steps:5, amp:22 },   // 短段：起點刻意貼近牆，靠擠壓通過
 ];
 const GEARS_HALF = [
   { x:130, y:-65, r:30, n:6 },   // 刻意貼近牆：走廊只有 10px，靠擠壓機制通過
   { x: 40, y: 72, r:28, n:5 },
 ];
 const NOZZLES = [                     // [常態上方, 翻轉後上方]
-  { pair:[{x:-118,y:-262},{x: 118,y: 262}], type:0 },  // 藍：走長樓梯
+  { pair:[{x:-118,y:-262},{x: 118,y: 262}], type:0 },  // 藍：走長段
   { pair:[{x: 126,y:-262},{x:-126,y: 262}], type:1 },  // 粉：直落砸齒輪
 ];
 
-const slides = [];     // 物理碰撞只用踏板
-const risers = [];     // 純視覺：連接踏板的落差面
+const slides = [];     // 物理碰撞只用短棒本身，間隙處不放碰撞（水滴會真的騰空落下）
 STAIRS_HALF.forEach(s=>{
-  const { treads, risers:rs } = buildStair(s.a.x, s.a.y, s.b.x, s.b.y, s.steps);
-  treads.forEach(t=>{ slides.push({...t}); slides.push({a:{x:-t.a.x,y:-t.a.y}, b:{x:-t.b.x,y:-t.b.y}}); });
-  rs.forEach(r=>{ risers.push({...r}); risers.push({a:{x:-r.a.x,y:-r.a.y}, b:{x:-r.b.x,y:-r.b.y}}); });
+  const rungs = buildZigzag(s.a.x, s.a.y, s.b.x, s.b.y, s.steps, s.amp);
+  rungs.forEach(t=>{ slides.push({...t}); slides.push({a:{x:-t.a.x,y:-t.a.y}, b:{x:-t.b.x,y:-t.b.y}}); });
 });
 const gears = [];
 GEARS_HALF.forEach(g=>{
@@ -169,10 +185,11 @@ GEARS_HALF.forEach(g=>{
 });
 
 /* ---------- 刻意收窄的夾縫：水滴要靠「擠壓變形」才能通過，而不是直接被卡住 ----------
-   ox,oy,or：造成夾縫的障礙物（齒輪或樓梯踏板端點）圓心與半徑
+   ox,oy,or：造成夾縫的障礙物（齒輪或牆邊固定窄點）圓心與半徑；用固定座標，
+   不依賴樓梯短棒的實際端點，避免樓梯造型調整時意外牽動夾縫位置。
    wallX：夾縫另一側的牆面 x 座標（含正負號） ---------- */
 const gearPocket = GEARS_HALF[0];
-const stairPocket = STAIRS_HALF[1].a;
+const stairPocket = {x:150, y:-10};
 const SQUEEZE_POCKETS = [
   { ox: gearPocket.x,  oy: gearPocket.y,  or: gearPocket.r, wallX:  HW },
   { ox:-gearPocket.x,  oy:-gearPocket.y,  or: gearPocket.r, wallX: -HW },
@@ -186,7 +203,7 @@ const COL_B = [255,72,168];    // 螢光粉
 const COLORS = [COL_A, COL_B]; // 依 base(0/1) 直接取色：水滴顏色終生不變
 
 /* ---------- 設定 ---------- */
-const CFG = { gScale:1, dripMs:700, maxDrops:170, blob:true, debug:false };
+const CFG = { gScale:1, dripMs:800, maxDrops:170, blob:true, debug:false };
 
 /* ---------- 畫布 ---------- */
 const cvs = document.getElementById('cv');
@@ -305,9 +322,11 @@ cvs.addEventListener('pointercancel',()=> dragging = false);
 
 /* ---------- 翻轉 ---------- */
 let rot = 0, flipFrom = 0, flipTo = 0, flipT = 1, FLIP_DUR = 1.05;
+let cycleTime = 0, settleTime = null;   // 本輪計時 / 完成時間（null = 尚未完成）
 document.getElementById('btnFlip').addEventListener('click', ()=>{
   if (flipT < 1) return;
   flipFrom = rot; flipTo = rot + Math.PI; flipT = 0;
+  cycleTime = 0; settleTime = null;
 });
 const easeInOut = t => t<.5 ? 4*t*t*t : 1 - Math.pow(-2*t+2,3)/2;
 
@@ -320,7 +339,7 @@ function spawnDrop(x, y, type, gl){
   const r = RADII[(Math.random()*RADII.length)|0];
   const base = type ? 1 : 0;
   return { x, y, vx: gl.x*22 + (Math.random()-.5)*12, vy: gl.y*22 + (Math.random()-.5)*12,
-           r, base, squeeze:1 };
+           r, base, squeeze:1, idleT:0, idleX:x, idleY:y };
 }
 
 /* ---------- sprite 快取（固定雙色 × 半徑，共 2×4=8 張） ---------- */
@@ -535,28 +554,15 @@ function activeNozzle(em){
   return (p0.x*gDir.x + p0.y*gDir.y) <= (p1.x*gDir.x + p1.y*gDir.y) ? p0 : p1;
 }
 
-function recycleOrSpawn(pos, type){
-  if (drops.length < CFG.maxDrops){
-    drops.push(spawnDrop(pos.x, pos.y, type, gDir));
-    return;
-  }
-  // 已滿：把最深處、最慢的同色水滴送回頂端重新循環
-  let best = -1, bestScore = -1e9;
-  for (let i=0;i<drops.length;i++){
-    const d = drops[i];
-    if (d.base !== type) continue;
-    const depth = d.x*gDir.x + d.y*gDir.y;
-    const sc = depth - Math.hypot(d.vx,d.vy)*.12;
-    if (sc > bestScore){ bestScore = sc; best = i; }
-  }
-  if (best < 0) return;
-  const d = drops[best];
-  d.x = pos.x; d.y = pos.y;
-  d.vx = gDir.x*22; d.vy = gDir.y*22;
-  d.squeeze = 1;
+function trySpawn(pos, type){
+  // 真沙漏邏輯：水滴總量固定，滴滿 maxDrops 後噴嘴不再新增，也不回收——
+  // 全部液體落到底部安定下來後就真的靜止，直到使用者翻轉才重新流動。
+  if (drops.length >= CFG.maxDrops) return;
+  drops.push(spawnDrop(pos.x, pos.y, type, gDir));
 }
 
 function step(dt){
+  cycleTime += dt;
   // 翻轉插值
   if (flipT < 1){
     flipT = Math.min(1, flipT + dt/FLIP_DUR);
@@ -630,14 +636,67 @@ function step(dt){
     }
   }
 
+  // 喚醒安全網：任何水滴若長時間（超過正常擠壓醞釀時間）幾乎沒有淨位移，
+  // 判定為被簡化碰撞模型意外釘住，給一次沿重力方向的推力＋小幅隨機橫向分量。
+  // 這不影響正常的擠壓穿縫效果（該效果通常在數秒內自行釋放，遠短於 IDLE_THRESH）。
+  // 若連續好幾次喚醒後仍困在同一小範圍（代表是兩個結構間真正的幾何凹槽，
+  // 光給速度會一直被彈回來），就升級成直接把水滴沿重力方向傳送出這個區域。
+  for (let i=0;i<drops.length;i++){
+    const d = drops[i];
+    if (d.x*gDir.x + d.y*gDir.y > HH*0.65){
+      // 已經沉澱在池底深處：這裡的「靜止不動」是正常堆積，不是卡住，不喚醒
+      d.idleX = d.x; d.idleY = d.y; d.idleT = 0;
+      continue;
+    }
+    if (Math.hypot(d.x-d.idleX, d.y-d.idleY) > IDLE_DIST){
+      d.idleX = d.x; d.idleY = d.y; d.idleT = 0;
+      if (Math.hypot(d.x-(d.wakeX??d.x), d.y-(d.wakeY??d.y)) > IDLE_DIST*2.2) d.wakeCount = 0;
+    } else {
+      d.idleT += dt;
+      if (d.idleT > IDLE_THRESH){
+        const stillTrapped = d.wakeX!==undefined &&
+          Math.hypot(d.x-d.wakeX, d.y-d.wakeY) < IDLE_DIST*2.2;
+        d.wakeCount = stillTrapped ? (d.wakeCount||0)+1 : 1;
+        if (d.wakeCount >= 3){
+          // 救援傳送：沿重力方向直接跳出這個凹槽，並給一個乾淨的墜落速度
+          d.x += gDir.x*70 + (Math.random()-.5)*24;
+          d.y += gDir.y*70 + (Math.random()-.5)*24;
+          d.vx = gDir.x*80; d.vy = gDir.y*80;
+          d.squeeze = 1;
+          d.wakeCount = 0;
+        } else {
+          d.vx += gDir.x*WAKE_PUSH + (Math.random()-.5)*40;
+          d.vy += gDir.y*WAKE_PUSH + (Math.random()-.5)*40;
+        }
+        d.wakeX = d.x; d.wakeY = d.y;
+        d.idleX = d.x; d.idleY = d.y; d.idleT = 0;
+      }
+    }
+  }
+
   // 滴落
   for (const em of emitters){
     em.t += dt*1000;
     if (em.t >= CFG.dripMs){
       em.t -= CFG.dripMs;
-      recycleOrSpawn(activeNozzle(em), em.type);
+      trySpawn(activeNozzle(em), em.type);
     }
   }
+
+  // 完成偵測：真沙漏——水滴滴完、且全部「抵達底部區域」後就算完成，
+  // 不要求完全靜止（池面本來就會有輕微晃動是正常的）。
+  // flipT<1 代表翻轉動畫還在進行、重力方向還沒真的轉到位，此時不判定，
+  // 否則翻轉瞬間會用「還沒反轉的重力方向」把舊的堆積誤判成已完成。
+  if (settleTime === null && flipT >= 1 && drops.length >= CFG.maxDrops){
+    let allArrived = true;
+    for (let i=0;i<drops.length;i++){
+      const d = drops[i];
+      const depth = d.x*gDir.x + d.y*gDir.y;
+      if (depth < HH*0.55){ allArrived = false; break; }
+    }
+    if (allArrived) settleTime = cycleTime;
+  }
+
   // 氣泡
   for (const b of bubbles){
     b.ph += dt*.7;
@@ -681,21 +740,6 @@ function drawSlide(g, sl){
   g.lineWidth = 2;
   g.strokeStyle = 'rgba(255,255,255,.65)';
   g.beginPath(); g.moveTo(sl.a.x, sl.a.y-SLIDE_T*.45); g.lineTo(sl.b.x, sl.b.y-SLIDE_T*.45); g.stroke();
-}
-
-function drawRiser(g, r){
-  // 階梯落差面：純視覺，讓踏板之間看起來是「一階一階」而非連續斜坡
-  g.lineCap = 'round';
-  g.lineWidth = SLIDE_T*1.5 + 2;
-  g.strokeStyle = 'rgba(8,22,38,.30)';
-  g.beginPath(); g.moveTo(r.a.x, r.a.y+1.5); g.lineTo(r.b.x, r.b.y+1.5); g.stroke();
-
-  const grd = g.createLinearGradient(r.a.x, r.a.y, r.b.x, r.b.y);
-  grd.addColorStop(0, 'rgba(120,164,198,.68)');
-  grd.addColorStop(1, 'rgba(180,214,240,.80)');
-  g.lineWidth = SLIDE_T*1.5;
-  g.strokeStyle = grd;
-  g.beginPath(); g.moveTo(r.a.x, r.a.y); g.lineTo(r.b.x, r.b.y); g.stroke();
 }
 
 function drawGear(g, G){
@@ -794,7 +838,23 @@ function drawDrops(){
 
 let fps = 60, fpsAcc = 0, fpsN = 0, degraded = false;
 
+const statusEl = document.getElementById('status');
+function fmtTime(t){
+  const s = Math.floor(t), m = Math.floor(s/60), r = s%60;
+  return m+':'+String(r).padStart(2,'0');
+}
+function updateStatus(){
+  if (settleTime !== null){
+    statusEl.textContent = '完成，用時 ' + fmtTime(settleTime);
+    statusEl.classList.add('done');
+  } else {
+    statusEl.textContent = '計時中 ' + fmtTime(cycleTime);
+    statusEl.classList.remove('done');
+  }
+}
+
 function render(){
+  updateStatus();
   ctx.setTransform(1,0,0,1,0,0);
   ctx.clearRect(0,0,cvs.width,cvs.height);
   ctx.setTransform(DPR,0,0,DPR,0,0);
@@ -828,7 +888,6 @@ function render(){
     ctx.fillStyle = 'rgba(230,246,255,.14)'; ctx.fill();
   }
 
-  for (const r of risers) drawRiser(ctx, r);
   for (const sl of slides) drawSlide(ctx, sl);
   for (const G of gears) drawGear(ctx, G);
   for (const em of emitters){
@@ -912,7 +971,7 @@ $('sMax').addEventListener('input', e=>{ CFG.maxDrops = +e.target.value; $('vMax
 $('cBlob').addEventListener('change', e=>{ CFG.blob = e.target.checked; degraded = false; });
 $('cDebug').addEventListener('change', e=>{ CFG.debug = e.target.checked; });
 $('btnPanel').addEventListener('click', ()=>{ $('panel').classList.toggle('open'); resize(); });
-$('btnReset').addEventListener('click', ()=>{ drops.length = 0; gears.forEach(g=> g.w = 0); });
+$('btnReset').addEventListener('click', ()=>{ drops.length = 0; gears.forEach(g=> g.w = 0); cycleTime = 0; settleTime = null; });
 
 resize();
 syncSliders();
