@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>月薪框架試算 v3</title>
+<style>
+  :root{
+    --bg:#EEF2F4; --paper:#FFFFFF; --ink:#1D2B3A; --sub:#5B6B7A;
+    --save:#1F7A6C; --live:#C9A227; --flex:#A9B4BF; --goal:#5A4A8C; --warn:#B4442E;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font-family:"Noto Sans TC","PingFang TC","Microsoft JhengHei",system-ui,sans-serif;
+    line-height:1.6;font-variant-numeric:tabular-nums}
+  main{max-width:760px;margin:0 auto;padding:24px 16px 48px}
+  h1{font-size:1.6rem;margin:0 0 4px;letter-spacing:.02em}
+  .lead{color:var(--sub);margin:0 0 20px;font-size:.95rem}
+  section{background:var(--paper);border-radius:14px;padding:18px 18px 20px;margin-bottom:16px;border:1px solid #DCE3E8}
+  h2{font-size:1.05rem;margin:0 0 12px}
+  h3{font-size:.9rem;color:var(--sub);font-weight:500;margin:16px 0 8px}
+  .inputs{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px}
+  label{display:flex;flex-direction:column;font-size:.85rem;color:var(--sub);gap:4px}
+  input[type=number]{font:inherit;font-size:1.05rem;color:var(--ink);padding:8px 10px;border:1px solid #C5CFD8;
+    border-radius:8px;background:#FAFBFC;width:100%}
+  input:focus{outline:2px solid var(--save);outline-offset:1px;border-color:transparent}
+  .toggle{flex-direction:row;align-items:center;gap:8px;font-size:.9rem;color:var(--ink);margin-bottom:8px}
+  .toggle input{width:18px;height:18px;accent-color:var(--save)}
+  .split{display:flex;height:56px;border-radius:10px;overflow:hidden;margin:4px 0 10px}
+  .split div{display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;
+    font-size:.95rem;transition:flex-basis .3s;min-width:0;white-space:nowrap;overflow:hidden}
+  .s-save{background:var(--save)} .s-live{background:var(--live);color:var(--ink)!important}
+  .s-flex{background:var(--flex);color:var(--ink)!important}
+  .legend{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px}
+  .legend p{margin:0;font-size:.9rem}
+  .legend b{display:block;font-size:1.15rem}
+  .dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:6px}
+  .tablewrap{overflow-x:auto}
+  table{width:100%;border-collapse:collapse;font-size:.92rem;min-width:420px}
+  th,td{text-align:left;padding:9px 6px;border-bottom:1px solid #E5EAEE;vertical-align:top}
+  th{color:var(--sub);font-weight:500;font-size:.8rem}
+  td.num,th.num{text-align:right}
+  td.num{font-weight:700;white-space:nowrap}
+  td small{display:block;color:var(--sub);font-weight:400}
+  .warn{color:var(--warn);font-size:.88rem;margin:8px 0 0}
+  .note{font-size:.85rem;color:var(--sub);margin:10px 0 0}
+  svg{width:100%;height:auto;display:block}
+  @media (prefers-reduced-motion:reduce){.split div{transition:none}}
+</style>
+</head>
+<body>
+<main>
+  <h1>月薪框架試算</h1>
+  <p class="lead">以月薪為 1：30% 儲蓄投資、60% 生活開銷上限，推算預備金、5 年生活費與退休金目標。目標隨薪資成長調整，並可換算成今日購買力。</p>
+
+  <section>
+    <h2>輸入</h2>
+    <div class="inputs">
+      <label>月薪（元）<input id="salary" type="number" min="0" step="1000" value="50000"></label>
+      <label>年終（月數）<input id="bonus" type="number" min="0" step="0.5" value="0"></label>
+      <label>儲蓄投資比例 %<input id="saveRate" type="number" min="0" max="100" step="1" value="30"></label>
+      <label>生活開銷上限 %<input id="liveRate" type="number" min="0" max="100" step="1" value="60"></label>
+      <label>年化報酬率 %<input id="ret" type="number" min="0" max="30" step="0.5" value="6"></label>
+      <label>目前已累積資產（元）<input id="assets" type="number" min="0" step="10000" value="0"></label>
+    </div>
+    <h3>長期假設</h3>
+    <div class="inputs">
+      <label>薪資年成長率 %<input id="growth" type="number" min="-10" max="20" step="0.5" value="2"></label>
+      <label>通膨率 %<input id="infl" type="number" min="0" max="15" step="0.5" value="2"></label>
+    </div>
+    <p class="warn" id="warn" hidden></p>
+  </section>
+
+  <section>
+    <h2>本月薪資怎麼切</h2>
+    <div class="split" aria-hidden="true">
+      <div class="s-save" id="barSave"></div><div class="s-live" id="barLive"></div><div class="s-flex" id="barFlex"></div>
+    </div>
+    <div class="legend">
+      <p><span class="dot" style="background:var(--save)"></span>儲蓄投資<b id="mSave"></b></p>
+      <p><span class="dot" style="background:var(--live)"></span>生活開銷上限（可支配）<b id="mLive"></b></p>
+      <p><span class="dot" style="background:var(--flex)"></span>未分配彈性<b id="mFlex"></b></p>
+    </div>
+  </section>
+
+  <section>
+    <h2>目標</h2>
+    <div class="tablewrap">
+    <table>
+      <thead><tr><th>目標</th><th class="num">今日金額</th><th class="num">預估達成</th></tr></thead>
+      <tbody id="goals"></tbody>
+    </table>
+    </div>
+    <p class="note" id="passive"></p>
+  </section>
+
+  <section>
+    <h2>資產累積路徑</h2>
+    <label class="toggle"><input type="checkbox" id="realView" checked>以今日購買力顯示</label>
+    <svg id="chart" viewBox="0 0 700 300" role="img" aria-label="資產累積曲線與目標曲線"></svg>
+    <p class="note">每年薪資依成長率調升一次，儲蓄與生活開銷維持相同比例，所以目標也跟著上升。報酬按月複利。緊急預備金實務上應放現金，此處與投資資產合併計算，僅供估算。</p>
+  </section>
+</main>
+
+<script>
+const $ = id => document.getElementById(id);
+const fmt = n => isFinite(n) ? Math.round(n).toLocaleString('zh-TW') : '—';
+const fmtWan = n => !isFinite(n) ? '—' : n >= 1e4 ? (n/1e4).toLocaleString('zh-TW',{maximumFractionDigits:1})+' 萬' : fmt(n);
+const fmtTime = m => m === 0 ? '已達成' : !isFinite(m) ? '100 年內無法達成'
+  : (m < 12 ? `${m} 個月` : `${Math.floor(m/12)} 年 ${m%12} 個月`);
+const MAX_M = 1200;
+
+function readInputs(){
+  const num = (id, d=0) => { const v = parseFloat($(id).value); return isFinite(v) ? v : d; };
+  return {
+    S: Math.max(0, num('salary')), bonus: Math.max(0, num('bonus')),
+    sr: num('saveRate')/100, lr: num('liveRate')/100, r: num('ret')/100,
+    A0: Math.max(0, num('assets')), g: num('growth')/100, pi: num('infl')/100,
+  };
+}
+
+// 各目標在「第 k 年薪資」下的金額；rule 依框架定義
+function goalDefs(p){
+  const rr = (1+p.r)/(1+p.pi) - 1; // 實質報酬率
+  return [
+    {name:'緊急預備金', rule:'生活開銷上限 × 3', f:Sk => p.lr*Sk*3},
+    {name:'5 年生活開銷', rule:'生活開銷上限 × 12 × 5', f:Sk => p.lr*Sk*60},
+    {name:'退休金（框架）', rule:`年收 ÷ ${(p.r*100).toFixed(1)}%`, f:Sk => p.r>0 ? Sk*(12+p.bonus)/p.r : Infinity, main:true},
+    {name:'退休金（扣通膨）', rule:`年收 ÷ 實質報酬 ${(rr*100).toFixed(2)}%`, f:Sk => rr>0 ? Sk*(12+p.bonus)/rr : Infinity},
+  ];
+}
+
+// 逐月模擬：回傳每月名目資產、薪資，以及各目標達成月份
+function simulate(p, goals){
+  const i = p.r/12;
+  const assets = [p.A0], salary = [p.S];
+  const hit = goals.map(gd => p.A0 >= gd.f(p.S) ? 0 : Infinity);
+  let v = p.A0;
+  for (let n = 1; n <= MAX_M; n++){
+    const Sk = p.S * Math.pow(1+p.g, Math.floor((n-1)/12)); // 第 n 個月所在年度的月薪
+    v = v*(1+i) + p.sr*Sk;
+    assets.push(v); salary.push(Sk);
+    goals.forEach((gd,k) => { if (hit[k]===Infinity && v >= gd.f(Sk)) hit[k] = n; });
+  }
+  return {assets, salary, hit};
+}
+
+function calc(){
+  const p = readInputs();
+  const save = p.S*p.sr, live = p.S*p.lr, flex = p.S*(1-p.sr-p.lr);
+  const goals = goalDefs(p);
+  const rr = (1+p.r)/(1+p.pi) - 1;
+  const deflate = n => Math.pow(1+p.pi, n/12);
+
+  const msgs = [];
+  if (p.sr+p.lr > 1) msgs.push(`儲蓄 + 生活開銷 = ${Math.round((p.sr+p.lr)*100)}%，超過月薪。`);
+  if (p.r <= 0) msgs.push('報酬率為 0 時無法用「年收 ÷ 報酬率」計算退休金。');
+  if (p.r > 0 && rr <= 0) msgs.push('通膨率 ≥ 報酬率，實質報酬為負，扣通膨版退休金無法計算。');
+  if (p.g >= p.r && p.r > 0) msgs.push('薪資成長率 ≥ 報酬率時，退休目標成長得比資產複利快，可能永遠追不上。');
+  const w = $('warn'); w.hidden = !msgs.length; w.textContent = msgs.join(' ');
+
+  [['barSave',p.sr,'儲蓄'],['barLive',p.lr,'生活'],['barFlex',Math.max(0,1-p.sr-p.lr),'彈性']].forEach(([id,v,t])=>{
+    const el=$(id); el.style.flexBasis = Math.max(0,v*100)+'%'; el.textContent = v>=0.08 ? `${t} ${Math.round(v*100)}%` : '';
+  });
+  $('mSave').textContent = fmt(save)+' 元';
+  $('mLive').textContent = fmt(live)+' 元';
+  $('mFlex').textContent = flex < 0 ? '超支 '+fmt(-flex)+' 元' : fmt(flex)+' 元';
+
+  const sim = simulate(p, goals);
+  $('goals').innerHTML = goals.map((gd,k)=>{
+    const today = gd.f(p.S), m = sim.hit[k];
+    const times = p.S>0 && isFinite(today) ? `約 ${(today/p.S).toFixed(1)} 個月薪` : '';
+    let then = '';
+    if (isFinite(m) && m > 0){
+      const nom = gd.f(sim.salary[m]);
+      then = `<small>屆時名目 ${fmtWan(nom)}<br>今日購買力 ${fmtWan(nom/deflate(m))}</small>`;
+    }
+    return `<tr><td>${gd.name}<small>${gd.rule}</small></td>
+      <td class="num">${fmtWan(today)}<small>${times}</small></td>
+      <td class="num">${isFinite(today)?fmtTime(m):'—'}${then}</td></tr>`;
+  }).join('');
+
+  // 被動收入說明：框架版若全額提領，本金不成長，購買力逐年被通膨侵蝕
+  if (p.r > 0){
+    const gP = p.sr*p.r;                       // 退休後本金年成長 = 再投入比例 × 報酬率
+    const real = (1+gP)/(1+p.pi) - 1;          // 實質年變動
+    const keep20 = Math.pow(1+gP,20)/Math.pow(1+p.pi,20);
+    const need = p.pi/p.r;                     // 完全追上通膨所需再投入比例
+    $('passive').textContent =
+      `框架版達標後，被動收入 = 當時年收 ÷ 12，仍照 ${Math.round(p.sr*100)}/${Math.round(p.lr*100)}/${Math.round((1-p.sr-p.lr)*100)} 分配，儲蓄部分繼續再投入，本金每年約成長 ${(gP*100).toFixed(2)}%（= 儲蓄比例 × 報酬率）。` +
+      `對照 ${(p.pi*100).toFixed(1)}% 通膨，購買力每年約${real>=0?'增加':'減少'} ${Math.abs(real*100).toFixed(2)}%，20 年後約為今日的 ${Math.round(keep20*100)}%。` +
+      (need>p.sr ? `要完全追上通膨，再投入比例需 ≥ ${(need*100).toFixed(1)}%（= 通膨 ÷ 報酬率）。` : '再投入比例已足以追上通膨。') +
+      `若把儲蓄那份也花掉，購買力才會明顯流失。`;
+  } else $('passive').textContent = '';
+
+
+  drawChart(p, goals, sim, $('realView').checked ? deflate : () => 1);
+}
+
+function drawChart(p, goals, sim, deflate){
+  const svg = $('chart'), W=700, H=300, L=86, R=16, T=16, B=34;
+  const mainIdx = goals.findIndex(g=>g.main);
+  let mEnd = sim.hit[mainIdx];
+  mEnd = isFinite(mEnd) ? Math.max(24, Math.ceil(mEnd*1.1)) : 480;
+  mEnd = Math.min(mEnd, MAX_M);
+  const series = [{vals: sim.assets.slice(0,mEnd+1).map((v,n)=>v/deflate(n)), color:'#1D2B3A', w:2.5, dash:''}];
+  const colors = ['#C9A227','#1F7A6C','#5A4A8C','#8C7FB8'];
+  const labels = ['預備金','5 年生活費','退休（框架）','退休（扣通膨）'];
+  goals.forEach((gd,k)=>{
+    const vals = sim.salary.slice(0,mEnd+1).map((Sk,n)=>gd.f(Sk)/deflate(n));
+    if (vals.every(isFinite)) series.push({vals, color:colors[k], w:1.5, dash:'5 4', label:labels[k]});
+  });
+  const yMax = Math.max(...series.map(s=>Math.max(...s.vals)))*1.05 || 1;
+  const x = n => L + (W-L-R)*n/mEnd, y = v => H-B - (H-T-B)*Math.min(v,yMax)/yMax;
+  let s = `<line x1="${L}" y1="${H-B}" x2="${W-R}" y2="${H-B}" stroke="#C5CFD8"/>`;
+  const years = mEnd/12, step = years>40?10:years>15?5:years>6?2:1;
+  for (let yr=0; yr<=years; yr+=step)
+    s += `<text x="${x(yr*12)}" y="${H-12}" font-size="12" fill="#5B6B7A" text-anchor="middle">${yr} 年</text>`;
+  // 目標標籤放左側（取起點值），避免重疊時下移
+  let lastY = -99;
+  series.slice(1).sort((a,b)=>b.vals[0]-a.vals[0]).forEach(sr=>{
+    let ly = y(sr.vals[0])+4; if (ly - lastY < 13) ly = lastY + 13; lastY = ly;
+    s += `<text x="${L-6}" y="${ly}" font-size="11" fill="${sr.color}" text-anchor="end">${sr.label}</text>`;
+  });
+  series.forEach(sr=>{
+    const d = sr.vals.map((v,n)=>`${n?'L':'M'}${x(n).toFixed(1)},${y(v).toFixed(1)}`).join('');
+    s += `<path d="${d}" fill="none" stroke="${sr.color}" stroke-width="${sr.w}" ${sr.dash?`stroke-dasharray="${sr.dash}"`:''}/>`;
+  });
+  svg.innerHTML = s;
+}
+
+document.querySelectorAll('input').forEach(el=>el.addEventListener('input',calc));
+calc();
+</script>
+</body>
+</html>
