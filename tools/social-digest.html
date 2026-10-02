@@ -101,6 +101,33 @@ summary{cursor:pointer;font-weight:600;font-size:.92rem}
           <button class="btn" id="btnPaste">貼上剪貼簿</button></div>
         <div id="parseOut"></div>
       </div>
+      <div class="card" id="videoBox">
+        <strong>讀懂影片內容（Gemini，免費額度）</strong>
+        <p class="muted" style="margin:4px 0 0">一次拿到逐字稿加畫面上的文字與數字。YouTube 直接讀網址；IG、FB 先用手機螢幕錄影存成影片檔，再選檔案。</p>
+        <div class="row"><button class="btn primary" id="btnVidYt" disabled>讀這支 YouTube 影片</button></div>
+        <label for="vidFile" style="margin-top:12px">或選擇影片檔（螢幕錄影、已下載的影片）</label>
+        <input type="file" id="vidFile" accept="video/*">
+        <div class="row"><button class="btn primary" id="btnVidFile" disabled>讀影片檔</button></div>
+        <div id="vidStatus" class="note hidden" role="status"></div>
+        <details>
+          <summary>Gemini 金鑰設定（只存在這台裝置）</summary>
+          <label for="gKey" style="margin-top:10px">API 金鑰</label>
+          <input type="password" id="gKey" autocomplete="off" placeholder="在 Google AI Studio 免費建立">
+          <label for="gModel" style="margin-top:10px">模型名稱</label>
+          <input type="text" id="gModel" autocomplete="off">
+          <div class="row">
+            <button class="btn" id="btnGSave">儲存</button>
+            <button class="btn" id="btnGKey">取得免費金鑰</button>
+            <button class="btn" id="btnGClear">清除</button>
+          </div>
+          <p class="muted">免費版送出的影片與回覆，Google 可能用來改進產品，請不要送私人或機密影片。免費額度有每日次數上限，用完要等隔天。模型名稱若失效，到 AI Studio 查最新的 Flash 模型代碼換上。</p>
+        </details>
+        <details>
+          <summary>不想填金鑰：手動交給 AI Studio</summary>
+          <p class="muted">複製下面的指令，開啟 AI Studio，上傳影片（或貼 YouTube 網址）後貼上指令。把結果整份複製回第 2 步。</p>
+          <div class="row"><button class="btn small" id="btnVidPrompt">複製指令</button><button class="btn small" id="btnAiStudio">開啟 AI Studio</button></div>
+        </details>
+      </div>
     </section>
 
     <section class="step" id="s2">
@@ -256,8 +283,8 @@ function parseSource(input){
     const path=u.pathname.endsWith('/')?u.pathname:u.pathname+'/';
     return { platform:'instagram', clean:'https://www.instagram.com'+path,
       readers:[
-        {tag:'最穩', label:'手動複製說明文字', url:'',
-          note:'開啟貼文或 Reel，長按說明文字複製，貼到第 2 步。影片裡口述的內容不會包含在內，需要的話請另外補上。'},
+        {tag:'備案', label:'手動複製說明文字', url:'',
+          note:'只有貼文文字，沒有影片裡說的內容。要讀影片請用上方「讀懂影片內容」。'},
         {tag:'需付費', label:'AnyPost 轉換頁', url:'https://anypost.md/instagram'+path,
           note:'實測結果：Instagram 需要 Pro 以上方案與 API 金鑰，沒有方案會看到升級提示。'}
       ],
@@ -279,12 +306,10 @@ function yt(id,t){
   const clean='https://www.youtube.com/watch?v='+encodeURIComponent(id)+(t?'&t='+encodeURIComponent(t):'');
   return { platform:'youtube', clean,
     readers:[
-      {tag:'最穩', label:'手動複製轉錄稿', url:'',
-        note:'開啟影片，點說明欄的「顯示轉錄稿」，全選複製後貼到第 2 步。這是目前唯一確定能拿到口述內容的方式。'},
+      {tag:'備案', label:'手動複製轉錄稿', url:'',
+        note:'開啟影片，點說明欄的「顯示轉錄稿」，全選複製後貼到第 2 步。上方「讀懂影片內容」失敗時用。'},
       {tag:'待實測', label:'defuddle.md 轉換頁', url:'https://defuddle.md/'+clean,
-        note:'據稱可擷取字幕，穩定度未驗證。打不開就改用手動複製。'},
-      {tag:'僅說明欄', label:'Jina Reader', url:'https://r.jina.ai/'+clean,
-        note:'只會得到標題、說明欄與留言，沒有口述內容，不能當作完整原文。'}
+        note:'據稱可擷取字幕，穩定度未驗證。打不開就改用手動複製。'}
     ], warn:'' };
 }
 const PLAT = {youtube:'YouTube', instagram:'Instagram', facebook:'Facebook'};
@@ -292,7 +317,7 @@ const PLAT = {youtube:'YouTube', instagram:'Instagram', facebook:'Facebook'};
 function doParse(){
   const out=$('#parseOut'); out.textContent='';
   const r=parseSource($('#url').value);
-  if(r.error){ out.appendChild(el('div',{class:'note err',text:r.error})); st.platform=''; st.clean=''; setStep(1,'active'); refresh(); return; }
+  if(r.error){ out.appendChild(el('div',{class:'note err',text:r.error})); st.platform=''; st.clean=''; setStep(1,'active'); refresh(); syncVidButtons(); return; }
   st.platform=r.platform; st.clean=r.clean;
   out.appendChild(el('div',{class:'note'},[el('span',{class:'tag',text:PLAT[r.platform]}), '已清掉追蹤參數：', el('div',{class:'mono',text:r.clean})]));
   const cp=el('div',{class:'row'}); const b=el('button',{class:'btn small',text:'複製乾淨網址'}); b.onclick=()=>{ copy(r.clean); toast('已複製'); }; cp.appendChild(b); out.appendChild(cp);
@@ -300,7 +325,7 @@ function doParse(){
   const box=el('div',{style:'margin-top:12px'});
   r.readers.forEach(rd=>{
     const d=el('div',{class:'reader'});
-    d.appendChild(el('div',{},[el('span',{class:'tag'+(rd.tag==='最穩'?'':' warn'),text:rd.tag}), el('strong',{text:rd.label})]));
+    d.appendChild(el('div',{},[el('span',{class:'tag'+(rd.tag==='備案'?'':' warn'),text:rd.tag}), el('strong',{text:rd.label})]));
     d.appendChild(el('p',{class:'muted',text:rd.note}));
     if(rd.url){
       const row=el('div',{class:'row'});
@@ -311,7 +336,7 @@ function doParse(){
     box.appendChild(d);
   });
   out.appendChild(box);
-  setStep(1,'done'); setStep(2,'active'); refresh();
+  setStep(1,'done'); setStep(2,'active'); refresh(); syncVidButtons();
 }
 
 /* ---------- MD 組裝 ---------- */
@@ -499,6 +524,91 @@ function renderLib(){
   });
 }
 
+/* ---------- 影片讀取（Gemini） ---------- */
+const GK='sd_gemini_v1', GBASE='https://generativelanguage.googleapis.com';
+const VIDEO_PROMPT=`請把這支影片的內容完整轉成文字，用 Markdown 輸出：
+
+## 逐字稿
+照影片實際說的話逐句寫出，保留影片原本的語言，中文用繁體中文。每段開頭標示大約時間，例如 [00:35]。聽不清楚的地方寫 [聽不清楚]，不要猜。
+
+## 畫面中的文字與數據
+列出畫面上出現的重要文字、數字、圖表標題與數值，並標示出現時間。
+
+## 影片資訊
+說話者（看得出來才寫）、影片長度、語言。
+
+規則：只寫影片裡真的有的內容。不要摘要、不要評論、不要補充影片沒說的資訊。`;
+function gcfg(){ return lsGet(GK,{key:'',model:'gemini-3.8-flash'}); }
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+function vidStatus(msg,kind){ const n=$('#vidStatus'); n.className='note'+(kind?' '+kind:''); n.textContent=msg; }
+function fileToB64(file){ return new Promise((res,rej)=>{ const r=new FileReader(); r.onload=()=>res(String(r.result).split(',')[1]); r.onerror=()=>rej(new Error('讀取檔案失敗')); r.readAsDataURL(file); }); }
+async function gUpload(file,key){
+  const start=await fetch(`${GBASE}/upload/v1beta/files?key=${encodeURIComponent(key)}`,{method:'POST',
+    headers:{'X-Goog-Upload-Protocol':'resumable','X-Goog-Upload-Command':'start','X-Goog-Upload-Header-Content-Length':String(file.size),
+      'X-Goog-Upload-Header-Content-Type':file.type||'video/mp4','Content-Type':'application/json'},
+    body:JSON.stringify({file:{display_name:'sd-'+Date.now()}})});
+  const url=start.headers.get('x-goog-upload-url');
+  if(!url) throw new Error('瀏覽器拿不到上傳位址（可能被跨網域限制擋住）。請改用較短的錄影（約 1 分鐘內），或用下方手動交給 AI Studio。');
+  const up=await fetch(url,{method:'POST',headers:{'X-Goog-Upload-Offset':'0','X-Goog-Upload-Command':'upload, finalize'},body:file});
+  const info=await up.json(); let f=info.file; if(!f) throw new Error((info.error&&info.error.message)||'上傳失敗');
+  for(let i=0;i<40 && f.state==='PROCESSING';i++){
+    vidStatus('Google 正在處理影片…（'+(i+1)*3+' 秒）');
+    await sleep(3000);
+    const r=await fetch(`${GBASE}/v1beta/${f.name}?key=${encodeURIComponent(key)}`); f=await r.json();
+  }
+  if(f.state!=='ACTIVE') throw new Error('影片處理沒有完成（狀態：'+f.state+'）');
+  return f;
+}
+async function gGenerate(parts,cfg){
+  const r=await fetch(`${GBASE}/v1beta/models/${encodeURIComponent(cfg.model)}:generateContent?key=${encodeURIComponent(cfg.key)}`,
+    {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({contents:[{parts}]})});
+  const d=await r.json();
+  if(d.error) throw new Error(d.error.message||('錯誤 '+d.error.code));
+  const c=d.candidates&&d.candidates[0];
+  const text=c&&c.content&&c.content.parts?c.content.parts.map(p=>p.text||'').join(''):'';
+  if(!text.trim()) throw new Error('沒有收到文字內容'+(c&&c.finishReason?'（'+c.finishReason+'）':''));
+  return text.trim();
+}
+async function runVideo(kind){
+  const cfg=gcfg();
+  if(!cfg.key){ vidStatus('請先在下方「Gemini 金鑰設定」填入免費金鑰。','warn'); $('#videoBox').querySelector('details').open=true; return; }
+  const bY=$('#btnVidYt'), bF=$('#btnVidFile'); bY.disabled=true; bF.disabled=true;
+  try{
+    let parts;
+    if(kind==='yt'){
+      vidStatus('Gemini 正在讀 YouTube 影片…（長影片可能要一兩分鐘）');
+      parts=[{file_data:{file_uri:st.clean}},{text:VIDEO_PROMPT}];
+    } else {
+      const file=$('#vidFile').files[0]; if(!file) throw new Error('請先選擇影片檔');
+      if(file.size>2*1024*1024*1024) throw new Error('檔案超過 2GB');
+      if(file.size<=14*1024*1024){
+        vidStatus('正在送出影片（'+(file.size/1048576).toFixed(1)+' MB）…');
+        parts=[{inline_data:{mime_type:file.type||'video/mp4',data:await fileToB64(file)}},{text:VIDEO_PROMPT}];
+      } else {
+        vidStatus('正在上傳影片（'+(file.size/1048576).toFixed(1)+' MB）…');
+        const f=await gUpload(file,cfg.key);
+        parts=[{file_data:{mime_type:f.mimeType||file.type||'video/mp4',file_uri:f.uri}},{text:VIDEO_PROMPT}];
+      }
+      vidStatus('Gemini 正在讀影片內容…');
+    }
+    const text=await gGenerate(parts,cfg);
+    const ta=$('#body');
+    if(ta.value.trim() && !confirm('第 2 步已有內容，要用影片結果取代嗎？')){ vidStatus('已取消，原內容保留。'); }
+    else{
+      ta.value=text; refresh();
+      vidStatus('完成，共 '+text.length.toLocaleString()+' 字，已填入第 2 步。逐字稿是 AI 轉寫，數字與人名請交給 Claude 查證。');
+      toast('影片內容已填入第 2 步'); $('#s2').scrollIntoView({behavior:'smooth',block:'start'});
+    }
+  }catch(e){
+    vidStatus('失敗：'+e.message+'。可改用下方手動交給 AI Studio。','err');
+  }
+  syncVidButtons();
+}
+function syncVidButtons(){
+  $('#btnVidYt').disabled = st.platform!=='youtube';
+  $('#btnVidFile').disabled = !$('#vidFile').files.length;
+}
+
 /* ---------- 事件 ---------- */
 function showTab(w){
   const lib=w==='lib';
@@ -507,6 +617,15 @@ function showTab(w){
   if(lib) renderLib();
 }
 $('#tab-work').onclick=()=>showTab('work'); $('#tab-lib').onclick=()=>showTab('lib');
+$('#btnVidYt').onclick=()=>runVideo('yt');
+$('#btnVidFile').onclick=()=>runVideo('file');
+$('#vidFile').addEventListener('change',syncVidButtons);
+(function(){ const c=gcfg(); $('#gKey').value=c.key||''; $('#gModel').value=c.model||'gemini-3.8-flash'; })();
+$('#btnGSave').onclick=()=>{ lsSet(GK,{key:$('#gKey').value.trim(),model:$('#gModel').value.trim()||'gemini-3.8-flash'}); toast('金鑰已儲存在這台裝置'); };
+$('#btnGClear').onclick=()=>{ try{localStorage.removeItem(GK);}catch(e){} $('#gKey').value=''; $('#gModel').value='gemini-3.8-flash'; toast('金鑰已清除'); };
+$('#btnGKey').onclick=()=>openTab('https://aistudio.google.com/apikey');
+$('#btnVidPrompt').onclick=()=>{ copy(VIDEO_PROMPT); toast('指令已複製'); };
+$('#btnAiStudio').onclick=()=>openTab('https://aistudio.google.com/');
 $('#btnParse').onclick=doParse;
 $('#url').addEventListener('keydown',e=>{ if(e.key==='Enter') doParse(); });
 $('#btnPaste').onclick=async()=>{ try{ $('#url').value=await navigator.clipboard.readText(); doParse(); }catch(e){ toast('無法讀取剪貼簿，請長按貼上'); } };
@@ -531,7 +650,7 @@ $('#btnPing').onclick=async()=>{
 $('#btnReset').onclick=()=>{
   if(!confirm('清空目前這一筆的輸入？已存檔的內容不受影響。')) return;
   Object.assign(st,{platform:'',clean:'',id:'',srcPath:'',srcLink:'',srcSha:'',repPath:'',repLink:'',repSha:'',sent:false});
-  ['url','title','body','focus','report'].forEach(i=>$('#'+i).value='');
+  ['url','title','body','focus','report'].forEach(i=>$('#'+i).value=''); $('#vidFile').value=''; $('#vidStatus').className='note hidden'; syncVidButtons();
   ['parseOut','srcOut','repOut'].forEach(i=>$('#'+i).textContent='');
   [1,2,3,4].forEach(n=>setStep(n,null)); setStep(1,'active'); refresh(); window.scrollTo({top:0,behavior:'smooth'});
 };
