@@ -1,0 +1,17 @@
+{
+  "books": [
+    {"slug":"yingxiangli","title":"影響力","author":"羅伯特‧席爾迪尼","category":"談判‧說服‧行銷","tagline":"六大心理捷徑,學會認出自己何時正被說服","file":"tools/read-good-books/data/yingxiangli.md"},
+    {"slug":"harvard-negotiation","title":"哈佛這樣教談判力","author":"羅傑‧費雪、威廉‧尤瑞","category":"談判‧說服‧行銷","tagline":"原則式談判:聚焦利益而非立場,用 BATNA 守住底氣","file":"tools/read-good-books/data/harvard-negotiation.md"},
+    {"slug":"never-split-the-difference","title":"FBI談判協商術","author":"克里斯‧佛斯","category":"談判‧說服‧行銷","tagline":"戰術同理心與校準式問句,讓對方自己說服自己","file":"tools/read-good-books/data/never-split-the-difference.md"},
+    {"slug":"getting-more","title":"為什麼談判在哈佛總是最後才教","author":"史都華‧戴蒙","category":"談判‧說服‧行銷","tagline":"談判是心理遊戲,用對方自己的標準說服對方","file":"tools/read-good-books/data/getting-more.md"},
+    {"slug":"thinking-fast-and-slow","title":"快思慢想","author":"丹尼爾‧康納曼","category":"談判‧說服‧行銷","tagline":"系統一與系統二,解釋所有說服技巧為何有效","file":"tools/read-good-books/data/thinking-fast-and-slow.md"},
+    {"slug":"nudge","title":"推力","author":"理查‧塞勒、卡斯‧桑思坦","category":"談判‧說服‧行銷","tagline":"預設選項的力量,不強迫卻能引導決定","file":"tools/read-good-books/data/nudge.md"},
+    {"slug":"pre-suasion","title":"鋪陳力","author":"羅伯特‧席爾迪尼","category":"談判‧說服‧行銷","tagline":"說服發生在開口之前,先鋪陳對方的注意力","file":"tools/read-good-books/data/pre-suasion.md"},
+    {"slug":"predictably-irrational","title":"誰說人是理性的!","author":"丹‧艾瑞利","category":"談判‧說服‧行銷","tagline":"人的不理性是系統性且可預測的","file":"tools/read-good-books/data/predictably-irrational.md"},
+    {"slug":"purple-cow-tribes","title":"紫牛／部落","author":"塞斯‧高汀","category":"談判‧說服‧行銷","tagline":"安全等於無趣,凝聚一小群死忠部落比討好大眾有效","file":"tools/read-good-books/data/purple-cow-tribes.md"},
+    {"slug":"hooked","title":"鉤癮效應","author":"尼爾‧艾歐","category":"談判‧說服‧行銷","tagline":"觸發‧行動‧變動獎勵‧投入,打造讓人回訪的產品","file":"tools/read-good-books/data/hooked.md"},
+    {"slug":"almanack-of-naval-ravikant","title":"納瓦爾寶典","author":"納瓦爾‧拉維肯(埃里克‧喬根森彙編)","category":"財富‧人生哲學","tagline":"用特定知識與槓桿致富,用減少慾望獲得快樂","file":"tools/read-good-books/data/almanack-of-naval-ravikant.md"},
+    {"slug":"e-myth-revisited","title":"創業這條路","author":"麥克‧葛伯","category":"創業經營","tagline":"多數老闆是技術者發作創業衝動,要在事業之上工作","file":"tools/read-good-books/data/e-myth-revisited.md"},
+    {"slug":"rockefeller-38-letters","title":"洛克菲勒寫給兒子的38封信","author":"約翰‧D‧洛克菲勒","category":"財富‧人生哲學","tagline":"38封家書,用具體商戰故事教財富觀","file":"tools/read-good-books/data/rockefeller-38-letters.md"}
+  ]
+}
