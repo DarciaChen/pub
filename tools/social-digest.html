@@ -255,8 +255,12 @@ function parseSource(input){
   if(host==='instagram.com'){
     const path=u.pathname.endsWith('/')?u.pathname:u.pathname+'/';
     return { platform:'instagram', clean:'https://www.instagram.com'+path,
-      readers:[{tag:'IG 讀取', label:'AnyPost 轉換頁', url:'https://anypost.md/instagram'+path,
-        note:'開啟後會得到 Markdown，整份複製貼到第 2 步。Reels 的口述內容不一定包含在內，缺的部分請手動補上。'}],
+      readers:[
+        {tag:'最穩', label:'手動複製說明文字', url:'',
+          note:'開啟貼文或 Reel，長按說明文字複製，貼到第 2 步。影片裡口述的內容不會包含在內，需要的話請另外補上。'},
+        {tag:'需付費', label:'AnyPost 轉換頁', url:'https://anypost.md/instagram'+path,
+          note:'實測結果：Instagram 需要 Pro 以上方案與 API 金鑰，沒有方案會看到升級提示。'}
+      ],
       warn:'' };
   }
   if(host==='facebook.com' || host==='fb.com' || host==='fb.watch'){
